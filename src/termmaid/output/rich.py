@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ..graph.model import Graph
+from ..renderer.canvas import Canvas
 from ..renderer.draw import render_graph_canvas
 from ..renderer.themes import get_theme
 
@@ -146,5 +147,56 @@ def render_rich(
             if ch != " " and style_key in style_map and style_map[style_key]:
                 text.stylize(style_map[style_key], pos + col_idx, pos + col_idx + 1)
         pos += len(line) + 1  # +1 for newline
+
+    return text
+
+
+def render_sequence_rich(
+    canvas: Canvas,
+    theme: str = "default",
+) -> Text:
+    """Render a pre-built Canvas (e.g. from a sequence diagram) as Rich Text with colors."""
+    try:
+        from rich.text import Text
+    except ImportError:
+        raise ImportError(
+            "The 'rich' package is required for colored output. "
+            "Install it with: pip install termmaid[rich]"
+        )
+
+    th = get_theme(theme)
+
+    style_map = {
+        "node": th.node,
+        "edge": th.edge,
+        "arrow": th.arrow,
+        "label": th.label,
+        "edge_label": th.edge_label,
+        "default": th.default,
+    }
+
+    styled_pairs = canvas.to_styled_pairs()
+
+    lines: list[str] = []
+    for row in styled_pairs:
+        lines.append("".join(ch for ch, _ in row).rstrip())
+
+    while lines and not lines[-1]:
+        lines.pop()
+
+    plain = "\n".join(lines)
+    text = Text(plain)
+
+    pos = 0
+    for row_idx, row in enumerate(styled_pairs):
+        if row_idx >= len(lines):
+            break
+        line = lines[row_idx]
+        for col_idx, (ch, style_key) in enumerate(row):
+            if col_idx >= len(line):
+                break
+            if ch != " " and style_key in style_map and style_map[style_key]:
+                text.stylize(style_map[style_key], pos + col_idx, pos + col_idx + 1)
+        pos += len(line) + 1
 
     return text

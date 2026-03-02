@@ -6,9 +6,15 @@ Initial release.
 
 ### Features
 
-- Parse and render Mermaid flowcharts (`graph`/`flowchart` with `LR`, `RL`, `TD`, `BT`)
-- Parse and render Mermaid state diagrams (`stateDiagram-v2`)
-- 14 node shapes: rectangle, rounded, stadium, subroutine, diamond, hexagon, circle, double circle, asymmetric, cylinder, parallelogram, parallelogram alt, trapezoid, trapezoid alt
+- **7 diagram types:** flowcharts, sequence, class, ER, state, block, and git graphs
+- **Flowcharts** (`graph`/`flowchart`) with all 5 directions (`LR`, `RL`, `TD`/`TB`, `BT`)
+- **Sequence diagrams** with participants, actors, solid/dashed messages
+- **Class diagrams** with attributes, methods, visibility, and 6 relationship types
+- **ER diagrams** with cardinality, attributes, keys, and relationship labels
+- **State diagrams** (`stateDiagram-v2`) with transitions, composite states, stereotypes
+- **Block diagrams** (`block-beta`) with column layout and spanning
+- **Git graphs** (`gitGraph`) with branches, merges, cherry-picks, tags, and 3 orientations
+- 14 flowchart node shapes: rectangle, rounded, stadium, subroutine, diamond, hexagon, circle, double circle, asymmetric, cylinder, parallelogram, parallelogram alt, trapezoid, trapezoid alt
 - 3 edge styles: solid, dotted, thick
 - Bidirectional edges (`<-->`, `<-.->`, `<==>`)
 - Edge labels (`-->|label|`)
@@ -18,6 +24,7 @@ Initial release.
 - Link length control (`--->`, `---->`)
 - Markdown labels (`**bold**`, `*italic*`)
 - ASCII mode (`--ascii`) for terminals without Unicode support
-- Colored output via Rich (`--color`) with 7 built-in themes
+- Colored output via Rich (`--color`) with 6 built-in themes
 - Textual widget for TUI applications
 - CLI tool with stdin/file input
+- Pure Python, zero runtime dependencies

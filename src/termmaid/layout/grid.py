@@ -20,6 +20,11 @@ from ..graph.model import Direction, Graph, Subgraph
 
 STRIDE = 4  # Grid distance between node centers
 
+# Node sizing constants
+MAX_LABEL_WIDTH = 20       # Characters before wrapping
+MAX_NORMALIZED_WIDTH = 25  # Cap for per-layer column normalization
+MAX_NORMALIZED_HEIGHT = 7  # Cap for per-layer row normalization
+
 # Subgraph layout constants
 SG_BORDER_PAD = 2    # Padding between content and subgraph border
 SG_LABEL_HEIGHT = 2  # Space for subgraph label + border line
@@ -117,8 +122,11 @@ def compute_layout(graph: Graph, padding_x: int = 4, padding_y: int = 2) -> Grid
     # Step 3: Place nodes on the grid
     _place_nodes(graph, layout, layer_order, direction)
 
-    # Step 4: Compute column widths and row heights
+    # Step 4: Compute column widths and row heights (with word wrapping)
     _compute_sizes(graph, layout, padding_x, padding_y)
+
+    # Step 4b: Normalize sizes (per-layer, capped)
+    _normalize_sizes(graph, layout)
 
     # Step 5: Expand gaps for subgraph borders and labels
     _expand_gaps_for_subgraphs(graph, layout, direction)
@@ -374,6 +382,63 @@ def _can_place(layout: GridLayout, gc: GridCoord) -> bool:
     return True
 
 
+def _word_wrap(text: str, max_width: int) -> list[str]:
+    """Split text at word boundaries, keeping lines under max_width."""
+    words = text.split()
+    if not words:
+        return [text]
+
+    lines: list[str] = []
+    current_line = words[0]
+
+    for word in words[1:]:
+        if len(current_line) + 1 + len(word) <= max_width:
+            current_line += " " + word
+        else:
+            lines.append(current_line)
+            current_line = word
+
+    lines.append(current_line)
+    return lines
+
+
+def _normalize_sizes(graph: Graph, layout: GridLayout) -> None:
+    """Normalize node dimensions within the same layer, capped at a maximum.
+
+    Nodes at the same flow level (same layer) are normalized to the same
+    perpendicular dimension so side-by-side nodes look consistent.
+    """
+    direction = graph.direction.normalized()
+
+    # Group placements by layer
+    layer_groups: dict[int, list[NodePlacement]] = {}
+    for p in layout.placements.values():
+        if direction.is_vertical:
+            layer_key = p.grid.row  # same row = same layer in TD
+        else:
+            layer_key = p.grid.col  # same col = same layer in LR
+        layer_groups.setdefault(layer_key, []).append(p)
+
+    for placements in layer_groups.values():
+        if len(placements) < 2:
+            continue  # single node in layer, nothing to normalize
+
+        if direction.is_vertical:
+            # TD: normalize column widths within same layer
+            cols = {p.grid.col for p in placements}
+            max_w = max(layout.col_widths.get(c, 1) for c in cols)
+            target = min(max_w, MAX_NORMALIZED_WIDTH)
+            for c in cols:
+                layout.col_widths[c] = max(layout.col_widths.get(c, 1), target)
+        else:
+            # LR: normalize row heights within same layer
+            rows = {p.grid.row for p in placements}
+            max_h = max(layout.row_heights.get(r, 1) for r in rows)
+            target = min(max_h, MAX_NORMALIZED_HEIGHT)
+            for r in rows:
+                layout.row_heights[r] = max(layout.row_heights.get(r, 1), target)
+
+
 def _compute_sizes(
     graph: Graph,
     layout: GridLayout,
@@ -385,8 +450,21 @@ def _compute_sizes(
         node = graph.nodes[nid]
         label = node.label
         lines = label.split("\\n") if "\\n" in label else [label]
-        text_width = max(len(line) for line in lines) if lines else 0
-        text_height = len(lines)
+
+        # Word-wrap lines that exceed max width
+        wrapped_lines: list[str] = []
+        for line in lines:
+            if len(line) <= MAX_LABEL_WIDTH:
+                wrapped_lines.append(line)
+            else:
+                wrapped_lines.extend(_word_wrap(line, MAX_LABEL_WIDTH))
+
+        # Update the node's label with wrapped text
+        if len(wrapped_lines) > 1 and wrapped_lines != lines:
+            node.label = "\\n".join(wrapped_lines)
+
+        text_width = max(len(l) for l in wrapped_lines) if wrapped_lines else 0
+        text_height = len(wrapped_lines)
 
         content_width = text_width + padding_x  # padding on each side
         content_height = text_height + padding_y  # padding top/bottom

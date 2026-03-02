@@ -3,19 +3,19 @@
 Render [Mermaid](https://mermaid.js.org/) diagrams as Unicode art in the terminal. Pure Python, zero dependencies.
 
 ```
-┌─────────┐    ┌──────◇─────┐    ┌────────┐
-│         │    │            │Yes │        │
-│  Start  ├───►│  Decision  ├──╮►│   OK   │
-│         │    │            │  │ │        │
-└─────────┘    └──────◇─────┘  │ └────────┘
+┌───────────┐    ┌─────◇────┐    ┌───────────┐    ╭────────╮
+│           │    │          │Yes │           │    (        )
+│  Request  ├───►│  Valid?  ├──╮►│  Process  ├───►(  Done  )
+│           │    │          │  │ │           │    (        )
+└───────────┘    └─────◇────┘  │ └───────────┘    ╰────────╯
                                │
                                │No
                                │
-                               │ ┌────────┐
-                               │ │        │
-                               ╰►│  Fail  │
-                                 │        │
-                                 └────────┘
+                               │ ┌───────────┐
+                               │ │           │
+                               ╰►│  Reject   │
+                                 │           │
+                                 └───────────┘
 ```
 
 ## Why?
@@ -32,14 +32,14 @@ neither offered a native Python library I could import and call directly.
 pip install termmaid
 ```
 
-## Usage
+## Quick start
 
 ### CLI
 
 ```bash
 termmaid diagram.mmd
 echo "graph LR; A-->B-->C" | termmaid
-termmaid diagram.mmd --color --theme terra
+termmaid diagram.mmd --color --theme neon
 termmaid diagram.mmd --ascii
 ```
 
@@ -59,11 +59,18 @@ from rich import print as rprint
 rprint(render_rich("graph LR\n  A --> B", theme="terra"))
 ```
 
+```python
+# Textual TUI widget (requires: pip install termmaid[textual])
+from termmaid import MermaidWidget
+
+widget = MermaidWidget("graph LR\n  A --> B")
+```
+
 ## Supported diagram types
 
 ### Flowcharts
 
-All four directions: `LR`, `RL`, `TD`/`TB`, `BT`
+All five directions: `LR`, `RL`, `TD`/`TB`, `BT`
 
 ```mermaid
 graph TD
@@ -103,11 +110,120 @@ graph TD
 ╰─────────────╯
 ```
 
-**Node shapes:** rectangle `[text]`, rounded `(text)`, diamond `{text}`, stadium `([text])`, subroutine `[[text]]`, circle `((text))`, hexagon `{{text}}`, cylinder `[(text)]`, and more.
+**Node shapes:** rectangle `[text]`, rounded `(text)`, diamond `{text}`, stadium `([text])`, subroutine `[[text]]`, circle `((text))`, double circle `(((text)))`, hexagon `{{text}}`, cylinder `[(text)]`, asymmetric `>text]`, parallelogram `[/text/]`, trapezoid `[/text\]`, and `@{shape}` syntax
 
-**Edge styles:** solid `-->`, dotted `-.->`, thick `==>`, bidirectional `<-->`, labeled `-->|text|`
+**Edge styles:** solid `-->`, dotted `-.->`, thick `==>`, bidirectional `<-->`, labeled `-->|text|`, variable length `--->`, `---->`
 
-**Subgraphs:** Nesting, cross-boundary edges, labels
+**Styling:** `classDef`, `style`, `linkStyle` directives, `:::className` suffix
+
+**Subgraphs:** nesting, cross-boundary edges, per-subgraph `direction` override
+
+**Other:** `%%` comments, `;` line separators, Markdown labels `` "`**bold** *italic*`" ``, `&` operator (`A & B --> C`)
+
+### Sequence diagrams
+
+```mermaid
+sequenceDiagram
+    Alice->>Bob: Hello Bob
+    Bob-->>Alice: Hi Alice
+    Alice->>Bob: How are you?
+    Bob-->>Alice: Great!
+```
+
+```
+ ┌──────────┐      ┌──────────┐
+ │  Alice   │      │   Bob    │
+ └──────────┘      └──────────┘
+       ┆ Hello Bob       ┆
+       ──────────────────►
+       ┆ Hi Alice        ┆
+       ◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+       ┆ How are you?    ┆
+       ──────────────────►
+       ┆ Great!          ┆
+       ◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+       ┆                 ┆
+```
+
+**Message types:** solid arrow `->>`, dashed arrow `-->>`, solid line `->`, dashed line `-->`
+
+**Participants:** `participant`, `actor`, aliases
+
+### Class diagrams
+
+```mermaid
+classDiagram
+    class Animal {
+        +String name
+        +int age
+        +makeSound()
+    }
+    class Dog {
+        +String breed
+        +fetch()
+    }
+    Animal <|-- Dog
+```
+
+```
+  ┌──────────────┐
+  │    Animal    │
+  ├──────────────┤
+  │ +String name │
+  │ +int age     │
+  ├──────────────┤
+  │ +makeSound() │
+  └──────────────┘
+          △
+          │
+          │
+          │
+  ┌───────────────┐
+  │      Dog      │
+  ├───────────────┤
+  │ +String breed │
+  ├───────────────┤
+  │ +fetch()      │
+  └───────────────┘
+```
+
+**Relationships:** inheritance `<|--`, composition `*--`, aggregation `o--`, association `--`, dependency `..>`, realization `..|>`
+
+**Members:** attributes and methods with visibility (`+` public, `-` private, `#` protected, `~` package)
+
+### ER diagrams
+
+```mermaid
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+```
+
+```
+  ┌──────────────┐
+  │   CUSTOMER   │
+  └──────────────┘
+          │1
+          └─places──┐
+                    │
+                    │0..*
+            ┌──────────────┐
+            │    ORDER     │
+            └──────────────┘
+                    │1
+                    └─contains──┐
+                                │
+                                │1..*
+                        ┌──────────────┐
+                        │  LINE-ITEM   │
+                        └──────────────┘
+```
+
+**Cardinality:** `||` (exactly one), `o|` (zero or one), `}|` (one or more), `o{` (zero or more)
+
+**Line styles:** solid `--`, dashed `..`
+
+**Attributes:** type, name, keys (`PK`, `FK`, `UK`), comments
 
 ### State diagrams
 
@@ -119,16 +235,137 @@ stateDiagram-v2
     Done --> [*]
 ```
 
+```
+╭───────◯──────╮
+│              │
+│      ●       │
+│              │
+╰───────◯──────╯
+        │
+        ▼
+╭──────────────╮
+│              │
+│     Idle     │
+│              │
+╰───────┬──────╯
+        │start
+        ▼
+╭──────────────╮
+│              │
+│  Processing  │
+│              │
+╰───────┬──────╯
+        │complete
+        ▼
+╭──────────────╮
+│              │
+│     Done     │
+│              │
+╰───────┬──────╯
+        │
+        ▼
+╭───────◯──────╮
+│              │
+│      ◉       │
+│              │
+╰───────◯──────╯
+```
+
+**Features:** `[*]` start/end states, transition labels, `state "name" as alias`, composite states (`state Parent { }`), stereotypes (`<<choice>>`, `<<fork>>`, `<<join>>`)
+
+### Block diagrams
+
+```mermaid
+block-beta
+    columns 3
+    A["Frontend"] B["API"] C["Database"]
+```
+
+```
+  ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │          │    │          │    │          │
+  │ Frontend │    │   API    │    │ Database │
+  │          │    │          │    │          │
+  └──────────┘    └──────────┘    └──────────┘
+```
+
+**Features:** `columns N`, column spanning (`blockname:N`), links between blocks, nested blocks
+
+### Git graphs
+
+```mermaid
+gitGraph
+   commit id: "init"
+   commit id: "feat"
+   branch develop
+   commit id: "dev-1"
+   commit id: "dev-2"
+   checkout main
+   commit id: "fix"
+   merge develop id: "merge"
+```
+
+```
+  main    ───●─────●──────┼──────────────●──────●─
+           init  feat     │             fix   merge
+                          │                     │
+  develop                 ●───────●─────────────┼
+                        dev-1   dev-2
+```
+
+**Directions:** `LR` (default), `TB`, `BT`
+
+**Commands:** `commit` (with `id:`, `type:`, `tag:`), `branch` (with `order:`), `checkout`/`switch`, `merge`, `cherry-pick`
+
+**Commit types:** `NORMAL` (●), `REVERSE` (✖), `HIGHLIGHT` (■)
+
+**Config:** `%%{init: {"gitGraph": {"mainBranchName": "master"}}}%%`
+
 ## CLI options
 
 | Flag | Description |
 |------|-------------|
 | `--ascii` | ASCII-only output (no Unicode box-drawing) |
 | `--color` | Colored output (requires `pip install termmaid[rich]`) |
-| `--theme NAME` | Color theme: default, terra, neon, mono, amber, phosphor |
+| `--theme NAME` | Color theme: `default`, `terra`, `neon`, `mono`, `amber`, `phosphor` |
 | `--padding-x N` | Horizontal padding inside boxes (default: 4) |
 | `--padding-y N` | Vertical padding inside boxes (default: 2) |
 | `--sharp-edges` | Sharp corners on edge turns instead of rounded |
+
+## Python API
+
+### `render(source, *, use_ascii=False, padding_x=4, padding_y=2, rounded_edges=True) -> str`
+
+Render a Mermaid diagram as a plain text string. Auto-detects diagram type.
+
+### `render_rich(source, *, use_ascii=False, padding_x=4, padding_y=2, rounded_edges=True, theme="default") -> rich.text.Text`
+
+Render as a [Rich](https://rich.readthedocs.io/) `Text` object with colors. Requires `pip install termmaid[rich]`.
+
+### `MermaidWidget`
+
+A [Textual](https://textual.textualize.io/) widget with a reactive `source` attribute. Requires `pip install termmaid[textual]`.
+
+```python
+from termmaid import MermaidWidget
+
+class MyApp(App):
+    def compose(self):
+        yield MermaidWidget("graph LR\n  A --> B")
+```
+
+## Themes
+
+Six built-in color themes for `--color` / `render_rich()`:
+
+| Theme | Description |
+|-------|-------------|
+| `default` | Cyan nodes, yellow arrows, white labels |
+| `terra` | Warm earth tones (browns, oranges) |
+| `neon` | Magenta nodes, green arrows, cyan edges |
+| `mono` | White/gray monochrome |
+| `amber` | Amber/gold CRT-style |
+| `phosphor` | Green phosphor terminal-style |
 
 ## Optional extras
 
@@ -139,12 +376,9 @@ pip install termmaid[textual]   # Textual TUI widget
 
 ## Limitations
 
-I tried to make it work with the majority of graphs but it's a lot of work, here are the biggest limitations of this project:
-
- - **Node positioning can be improved vastly.** The layout engine uses a fixed-stride grid where each node occupies a 3x3 block with 1-cell gaps (stride of 4). Nodes are placed layer-by-layer using a barycenter heuristic (3 passes) to reduce edge crossings, but this is an approximation of an NP-hard problem, so graphs with many cross-layer edges will still produce crossings. Collision resolution is naive: when a cell is occupied, the node shifts perpendicular by one full stride until it finds free space, with no attempt to pack nodes more densely or minimize wasted canvas area.
- - **Edge routing is Manhattan-only.** Edges are routed via A* pathfinding on a character grid, restricted to 4-directional movement (no diagonals). Previously routed edges are treated as soft obstacles (+2 cost) rather than hard walls, so later edges can overlap earlier ones in dense areas. The search is capped at 5,000 iterations, so very large or heavily constrained graphs may fail to find a path and fall back to a straight line.
- - **Sequence diagrams don't work.** Only flowcharts and state diagrams are supported.
- - **Sometimes labels after decisions are not well positioned.** Edge labels are placed by expanding gap cells between nodes on a first-come-first-served basis. When multiple labeled edges share the same gap, later labels may not get enough space.
+- **Layout engine is approximate.** Node positioning uses a fixed-stride grid with a barycenter heuristic (3 passes). Graphs with many cross-layer edges may still produce crossings.
+- **Manhattan-only edge routing.** Edges use A* pathfinding (4-directional, capped at 5,000 iterations). Dense graphs may have overlapping edges.
+- **Edge labels can overlap** when multiple labeled edges share the same gap between nodes.
 
 ## Acknowledgements
 

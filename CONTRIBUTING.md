@@ -24,17 +24,38 @@ uv run pytest tests/ --update-snapshots
 
 ```
 src/termmaid/
-  __init__.py          # Public API: parse(), render(), render_rich()
-  cli.py               # CLI entry point
-  graph/               # Data models (Graph, Node, Edge, NodeShape)
-  parser/              # Mermaid syntax parsing (flowchart, statediagram)
-  layout/              # Grid-based layout computation
-  routing/             # A* edge routing
-  renderer/            # Canvas rendering, shapes, charsets
+  __init__.py          # Public API: render(), render_rich(), parse()
+  cli.py               # CLI entry point (argparse)
+  graph/               # Graph data model (Node, Edge, Subgraph, NodeShape)
+  model/               # Diagram-specific models (sequence, class, ER, block, gitgraph)
+  parser/              # Mermaid syntax parsers (one per diagram type)
+  layout/              # Grid-based layout computation (flowcharts)
+  routing/             # A* edge routing (flowcharts)
+  renderer/            # Canvas rendering, shapes, charsets, themes
   output/              # Output formats (text, rich, textual widget)
 tests/
   fixtures/flowcharts/ # .mmd input fixtures + expected .txt outputs
 ```
+
+### Architecture
+
+There are two rendering paths:
+
+**Path A — Flowcharts and state diagrams** use the shared `Graph` model with the grid layout engine and A* edge routing (`layout/` + `routing/` + `renderer/draw.py`).
+
+**Path B — All other diagram types** (sequence, class, ER, block, git graph) have their own model (`model/`), parser (`parser/`), and renderer (`renderer/`) that draw directly onto a `Canvas`.
+
+### Diagram dispatch
+
+Both `render()` and `render_rich()` auto-detect the diagram type from the source text prefix (e.g. `sequenceDiagram`, `classDiagram`, `gitGraph`) and dispatch to the appropriate parser + renderer.
+
+## Adding a new diagram type
+
+1. Create the model in `src/termmaid/model/yourdiagram.py` (dataclasses)
+2. Create the parser in `src/termmaid/parser/yourdiagram.py`
+3. Create the renderer in `src/termmaid/renderer/yourdiagram.py` (returns a `Canvas`)
+4. Add dispatch in `src/termmaid/__init__.py` (both `render()` and `render_rich()`)
+5. Add tests
 
 ## Adding a new node shape
 

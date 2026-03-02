@@ -68,9 +68,21 @@ def assert_no_edge_node_overlap(output: str, nodes: list[str]) -> None:
 
 
 def assert_all_nodes_rendered(output: str, node_labels: list[str]) -> None:
-    """Verify all node labels appear in the output."""
+    """Verify all node labels appear in the output.
+
+    Labels may be word-wrapped across multiple lines, so if the full label
+    isn't found as a contiguous substring, check that every word appears.
+    """
     for label in node_labels:
-        assert label in output, f"Node label '{label}' not found in output"
+        if label in output:
+            continue
+        # Label may be word-wrapped: check all words are present
+        words = label.split()
+        missing = [w for w in words if w not in output]
+        assert not missing, (
+            f"Node label '{label}' not found in output "
+            f"(missing words: {missing})"
+        )
 
 
 def assert_valid_unicode(output: str) -> None:
