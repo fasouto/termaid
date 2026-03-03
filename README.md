@@ -368,9 +368,8 @@ pip install termmaid[textual]   # Textual TUI widget
 
 ## Limitations
 
-- **Layout engine is approximate.** Node positioning uses a fixed-stride grid with a barycenter heuristic (3 passes). Graphs with many cross-layer edges may still produce crossings.
+- **Layout engine is approximate.** Node positioning uses a fixed-stride grid with a barycenter heuristic (up to 8 passes with improvement tracking). Graphs with many cross-layer edges may still produce crossings.
 - **Manhattan-only edge routing.** Edges use A* pathfinding (4-directional, capped at 5,000 iterations). Dense graphs may have overlapping edges.
-- **Edge labels can overlap** when multiple labeled edges share the same gap between nodes.
 
 ## Acknowledgements
 
