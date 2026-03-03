@@ -22,6 +22,12 @@ class LabelSegment:
     italic: bool = False
 
 
+class ArrowType(Enum):
+    ARROW = auto()    # --> (filled triangle ►▼◄▲)
+    CIRCLE = auto()   # --o (○)
+    CROSS = auto()    # --x (×)
+
+
 class EdgeStyle(Enum):
     SOLID = auto()       # -->
     DOTTED = auto()      # -.->
@@ -84,6 +90,8 @@ class Edge:
     style: EdgeStyle = EdgeStyle.SOLID
     has_arrow_start: bool = False
     has_arrow_end: bool = True
+    arrow_type_start: ArrowType = ArrowType.ARROW
+    arrow_type_end: ArrowType = ArrowType.ARROW
     min_length: int = 1
     source_is_subgraph: bool = False
     target_is_subgraph: bool = False

@@ -56,6 +56,10 @@ class CharSet:
     diamond_left: str
     diamond_right: str
 
+    # Endpoint types
+    circle_endpoint: str
+    cross_endpoint: str
+
     # Subgraph corners (double-line or dashed)
     sg_top_left: str
     sg_top_right: str
@@ -87,6 +91,8 @@ UNICODE = CharSet(
     cross="┼",
     # Diamond
     diamond_top="◇", diamond_bottom="◇", diamond_left="◇", diamond_right="◇",
+    # Endpoints
+    circle_endpoint="○", cross_endpoint="×",
     # Subgraph
     sg_top_left="┌", sg_top_right="┐",
     sg_bottom_left="└", sg_bottom_right="┘",
@@ -115,6 +121,8 @@ ASCII = CharSet(
     cross="+",
     # Diamond
     diamond_top="/", diamond_bottom="\\", diamond_left="/", diamond_right="\\",
+    # Endpoints
+    circle_endpoint="o", cross_endpoint="x",
     # Subgraph
     sg_top_left="+", sg_top_right="+",
     sg_bottom_left="+", sg_bottom_right="+",

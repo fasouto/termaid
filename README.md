@@ -4,9 +4,9 @@ Terminal-native Mermaid rendering for Python.
 
 ```
 ┌─────────┐    ┌───────────┐    ┌───◇───┐    ╭────────╮
-│         │    │           │    │       │Yes (        )
-│  Start  ├───►│  Process  ├───►│  OK?  ├───►(  Done  )
-│         │    │           │    │       │    (        )
+│         │    │           │    │       │Yes │        │
+│  Start  ├───►│  Process  ├───►│  OK?  ├───►│  Done  │
+│         │    │           │    │       │    │        │
 └─────────┘    └───────────┘    └───◇───┘    ╰────────╯
 ```
 
@@ -115,7 +115,7 @@ graph TD
 
 **Node shapes:** rectangle `[text]`, rounded `(text)`, diamond `{text}`, stadium `([text])`, subroutine `[[text]]`, circle `((text))`, double circle `(((text)))`, hexagon `{{text}}`, cylinder `[(text)]`, asymmetric `>text]`, parallelogram `[/text/]`, trapezoid `[/text\]`, and `@{shape}` syntax
 
-**Edge styles:** solid `-->`, dotted `-.->`, thick `==>`, bidirectional `<-->`, labeled `-->|text|`, variable length `--->`, `---->`
+**Edge styles:** solid `-->`, dotted `-.->`, thick `==>`, bidirectional `<-->`, circle endpoint `--o`, cross endpoint `--x`, labeled `-->|text|`, variable length `--->`, `---->`
 
 **Styling:** `classDef`, `style`, `linkStyle` directives, `:::className` suffix
 
@@ -207,19 +207,19 @@ erDiagram
   │   CUSTOMER   │
   └──────────────┘
           │1
-          └─places──┐
-                    │
-                    │0..*
-            ┌──────────────┐
-            │    ORDER     │
-            └──────────────┘
-                    │1
-                    └─contains──┐
-                                │
-                                │1..*
-                        ┌──────────────┐
-                        │  LINE-ITEM   │
-                        └──────────────┘
+          │ places
+          │
+          │0..*
+  ┌──────────────┐
+  │    ORDER     │
+  └──────────────┘
+          │1
+          │ contains
+          │
+          │1..*
+  ┌──────────────┐
+  │  LINE-ITEM   │
+  └──────────────┘
 ```
 
 **Cardinality:** `||` (exactly one), `o|` (zero or one), `}|` (one or more), `o{` (zero or more)
@@ -245,26 +245,30 @@ stateDiagram-v2
 │              │
 ╰───────◯──────╯
         │
+        │
         ▼
 ╭──────────────╮
 │              │
 │     Idle     │
 │              │
 ╰───────┬──────╯
-        │start
+        │
+   start│
         ▼
 ╭──────────────╮
 │              │
 │  Processing  │
 │              │
 ╰───────┬──────╯
-        │complete
+        │
+complete│
         ▼
 ╭──────────────╮
 │              │
 │     Done     │
 │              │
 ╰───────┬──────╯
+        │
         │
         ▼
 ╭───────◯──────╮

@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from ..graph.model import Direction, Edge, EdgeStyle, Graph, LabelSegment, Node, Subgraph
+from ..graph.model import ArrowType, Direction, Edge, EdgeStyle, Graph, LabelSegment, Node, Subgraph
 from ..graph.shapes import NodeShape
 
 
@@ -470,6 +470,8 @@ class _FlowchartParser:
                             style=arrow_seg.edge_style,
                             has_arrow_start=arrow_seg.has_arrow_start,
                             has_arrow_end=arrow_seg.has_arrow_end,
+                            arrow_type_start=arrow_seg.arrow_type_start,
+                            arrow_type_end=arrow_seg.arrow_type_end,
                             min_length=arrow_seg.min_length,
                         )
                         self.graph.add_edge(edge)
@@ -568,21 +570,21 @@ class _FlowchartParser:
 
         while remaining:
             # Try to find the earliest arrow match
-            best_match: tuple[int, int, EdgeStyle, bool, bool, str, int] | None = None
+            best_match: tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None = None
 
             # First check for labeled arrows: -->|text| or -- text -->
             label_match = self._find_labeled_arrow(remaining)
             if label_match:
-                pos, end, style, arr_start, arr_end, label, length = label_match
+                pos, end, style, arr_start, arr_end, label, length, type_start, type_end = label_match
                 if best_match is None or pos < best_match[0]:
-                    best_match = (pos, end, style, arr_start, arr_end, label, length)
+                    best_match = (pos, end, style, arr_start, arr_end, label, length, type_start, type_end)
 
             # Then check for plain arrows
             plain_match = self._find_plain_arrow(remaining)
             if plain_match:
-                pos, end, style, arr_start, arr_end, length = plain_match
+                pos, end, style, arr_start, arr_end, length, type_start, type_end = plain_match
                 if best_match is None or pos < best_match[0]:
-                    best_match = (pos, end, style, arr_start, arr_end, "", length)
+                    best_match = (pos, end, style, arr_start, arr_end, "", length, type_start, type_end)
 
             if best_match is None:
                 # No more arrows - rest is a node group
@@ -591,7 +593,7 @@ class _FlowchartParser:
                     segments.append(_Segment(text=text))
                 break
 
-            pos, end, style, arr_start, arr_end, label, length = best_match
+            pos, end, style, arr_start, arr_end, label, length, type_start, type_end = best_match
 
             # Text before the arrow is a node group
             before = remaining[:pos].strip()
@@ -605,6 +607,8 @@ class _FlowchartParser:
                 edge_style=style,
                 has_arrow_start=arr_start,
                 has_arrow_end=arr_end,
+                arrow_type_start=type_start,
+                arrow_type_end=type_end,
                 label=label,
                 min_length=length,
             ))
@@ -613,18 +617,18 @@ class _FlowchartParser:
 
         return segments if segments else [_Segment(text=line.strip())]
 
-    def _find_labeled_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, str, int] | None:
+    def _find_labeled_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None:
         """Find arrows with labels: -->|text| or -- text --> or == text ==>.
-        Returns (start, end, style, arr_start, arr_end, label, min_length)."""
+        Returns (start, end, style, arr_start, arr_end, label, min_length, type_start, type_end)."""
         # Pattern: -->|text|
         m = re.search(r'(<--|<-\.|-\.|-+|=+|<)([-=.]+)(>?)(\|)([^|]*)(\|)', text)
         if m:
             label = m.group(5).strip()
             # Parse the arrow part (everything before the first |)
             arrow_part = text[m.start():m.start() + m.group(0).index("|")]
-            style, arr_start, arr_end = self._classify_arrow(arrow_part + ">")
+            style, arr_start, arr_end, type_start, type_end = self._classify_arrow(arrow_part + ">")
             length = _compute_arrow_length(arrow_part, style)
-            return (m.start(), m.end(), style, arr_start, arr_end, label, length)
+            return (m.start(), m.end(), style, arr_start, arr_end, label, length, type_start, type_end)
 
         # Pattern: -- text --> or == text ==> or -. text .->
         patterns = [
@@ -638,53 +642,67 @@ class _FlowchartParser:
                 label_text = m.group(2).strip()
                 arrow_portion = m.group(1) + m.group(3)
                 length = _compute_arrow_length(arrow_portion, style)
-                return (m.start(), m.end(), style, arr_start, arr_end, label_text, length)
+                return (m.start(), m.end(), style, arr_start, arr_end, label_text, length, ArrowType.ARROW, ArrowType.ARROW)
 
         return None
 
-    def _find_plain_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, int] | None:
-        """Find the first plain arrow in text. Returns (start, end, style, arr_start, arr_end, min_length)."""
+    def _find_plain_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, int, ArrowType, ArrowType] | None:
+        """Find the first plain arrow in text. Returns (start, end, style, arr_start, arr_end, min_length, type_start, type_end)."""
         # Try patterns in order of specificity
-        patterns = [
-            (r'<-\.+->',  EdgeStyle.DOTTED, True, True),
-            (r'<=+=>',     EdgeStyle.THICK, True, True),
-            (r'<-+->',     EdgeStyle.SOLID, True, True),
-            (r'o-+o',      EdgeStyle.SOLID, True, True),
-            (r'x-+x',      EdgeStyle.SOLID, True, True),
-            (r'-\.+->',    EdgeStyle.DOTTED, False, True),
-            (r'=+=>',      EdgeStyle.THICK, False, True),
-            (r'-+->',      EdgeStyle.SOLID, False, True),
-            (r'-+[xo](?=\s|$)', EdgeStyle.SOLID, False, True),
-            (r'~~~',       EdgeStyle.INVISIBLE, False, False),
-            (r'-\.-',      EdgeStyle.DOTTED, False, False),
-            (r'={3,}',     EdgeStyle.THICK, False, False),
-            (r'-{3,}',     EdgeStyle.SOLID, False, False),
+        # (pattern, style, arr_start, arr_end, type_start, type_end)
+        patterns: list[tuple[str, EdgeStyle, bool, bool, ArrowType, ArrowType]] = [
+            (r'<-\.+->',  EdgeStyle.DOTTED, True, True, ArrowType.ARROW, ArrowType.ARROW),
+            (r'<=+=>',     EdgeStyle.THICK, True, True, ArrowType.ARROW, ArrowType.ARROW),
+            (r'<-+->',     EdgeStyle.SOLID, True, True, ArrowType.ARROW, ArrowType.ARROW),
+            (r'o-+o',      EdgeStyle.SOLID, True, True, ArrowType.CIRCLE, ArrowType.CIRCLE),
+            (r'x-+x',      EdgeStyle.SOLID, True, True, ArrowType.CROSS, ArrowType.CROSS),
+            (r'-\.+->',    EdgeStyle.DOTTED, False, True, ArrowType.ARROW, ArrowType.ARROW),
+            (r'=+=>',      EdgeStyle.THICK, False, True, ArrowType.ARROW, ArrowType.ARROW),
+            (r'-+->',      EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.ARROW),
+            (r'-+o(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CIRCLE),
+            (r'-+x(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CROSS),
+            (r'~~~',       EdgeStyle.INVISIBLE, False, False, ArrowType.ARROW, ArrowType.ARROW),
+            (r'-\.-',      EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
+            (r'={3,}',     EdgeStyle.THICK, False, False, ArrowType.ARROW, ArrowType.ARROW),
+            (r'-{3,}',     EdgeStyle.SOLID, False, False, ArrowType.ARROW, ArrowType.ARROW),
         ]
-        best: tuple[int, int, EdgeStyle, bool, bool] | None = None
-        for pat, style, arr_start, arr_end in patterns:
+        best: tuple[int, int, EdgeStyle, bool, bool, ArrowType, ArrowType] | None = None
+        for pat, style, arr_start, arr_end, type_start, type_end in patterns:
             m = re.search(pat, text)
             if m and (best is None or m.start() < best[0]):
-                best = (m.start(), m.end(), style, arr_start, arr_end)
+                best = (m.start(), m.end(), style, arr_start, arr_end, type_start, type_end)
         if best is None:
             return None
-        pos, end, style, arr_start, arr_end = best
+        pos, end, style, arr_start, arr_end, type_start, type_end = best
         arrow_text = text[pos:end]
         length = _compute_arrow_length(arrow_text, style)
-        return (pos, end, style, arr_start, arr_end, length)
+        return (pos, end, style, arr_start, arr_end, length, type_start, type_end)
 
-    def _classify_arrow(self, arrow: str) -> tuple[EdgeStyle, bool, bool]:
-        """Classify an arrow string into style and direction."""
+    def _classify_arrow(self, arrow: str) -> tuple[EdgeStyle, bool, bool, ArrowType, ArrowType]:
+        """Classify an arrow string into style, direction, and endpoint types."""
         s = arrow.strip()
         has_start = s.startswith("<") or s.startswith("o") or s.startswith("x")
         has_end = s.endswith(">") or s.endswith("x") or s.endswith("o")
 
+        # Determine endpoint types
+        type_start = ArrowType.ARROW
+        type_end = ArrowType.ARROW
+        if s.startswith("o"):
+            type_start = ArrowType.CIRCLE
+        elif s.startswith("x"):
+            type_start = ArrowType.CROSS
+        if s.endswith("o"):
+            type_end = ArrowType.CIRCLE
+        elif s.endswith("x"):
+            type_end = ArrowType.CROSS
+
         if "." in s:
-            return (EdgeStyle.DOTTED, has_start, has_end)
+            return (EdgeStyle.DOTTED, has_start, has_end, type_start, type_end)
         if "=" in s:
-            return (EdgeStyle.THICK, has_start, has_end)
+            return (EdgeStyle.THICK, has_start, has_end, type_start, type_end)
         if "~" in s:
-            return (EdgeStyle.INVISIBLE, has_start, has_end)
-        return (EdgeStyle.SOLID, has_start, has_end)
+            return (EdgeStyle.INVISIBLE, has_start, has_end, type_start, type_end)
+        return (EdgeStyle.SOLID, has_start, has_end, type_start, type_end)
 
     def _parse_node(self, text: str) -> Node | None:
         """Parse a single node declaration like 'A', 'A[label]', 'A{label}', etc."""
@@ -772,5 +790,7 @@ class _Segment:
     edge_style: EdgeStyle = EdgeStyle.SOLID
     has_arrow_start: bool = False
     has_arrow_end: bool = True
+    arrow_type_start: ArrowType = ArrowType.ARROW
+    arrow_type_end: ArrowType = ArrowType.ARROW
     label: str = ""
     min_length: int = 1

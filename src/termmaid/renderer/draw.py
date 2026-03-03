@@ -12,7 +12,7 @@ Drawing order (back to front):
 """
 from __future__ import annotations
 
-from ..graph.model import Direction, EdgeStyle, Graph, GraphNote
+from ..graph.model import ArrowType, Direction, EdgeStyle, Graph, GraphNote
 from ..graph.shapes import NodeShape
 from ..layout.grid import GridLayout, NodePlacement, compute_layout
 from ..routing.router import AttachDir, RoutedEdge, route_edges
@@ -284,9 +284,9 @@ def _draw_edges(
 
         # Draw arrow heads
         if edge.has_arrow_end and len(re.draw_path) >= 2:
-            _draw_arrow_head(canvas, re.draw_path[-2], re.draw_path[-1], cs, style=arrow_style_key)
+            _draw_arrow_head(canvas, re.draw_path[-2], re.draw_path[-1], cs, style=arrow_style_key, arrow_type=edge.arrow_type_end)
         if edge.has_arrow_start and len(re.draw_path) >= 2:
-            _draw_arrow_head(canvas, re.draw_path[1], re.draw_path[0], cs, style=arrow_style_key)
+            _draw_arrow_head(canvas, re.draw_path[1], re.draw_path[0], cs, style=arrow_style_key, arrow_type=edge.arrow_type_start)
 
         # Draw T-junctions where edges leave node borders
         if len(re.draw_path) >= 2:
@@ -380,6 +380,7 @@ def _draw_arrow_head(
     to_point: tuple[int, int],
     cs: CharSet,
     style: str = "",
+    arrow_type: ArrowType = ArrowType.ARROW,
 ) -> None:
     """Draw an arrow head one cell before to_point (in the gap, not on the border).
 
@@ -399,7 +400,11 @@ def _draw_arrow_head(
     ax = tx - ndx
     ay = ty - ndy
 
-    if ndx > 0:
+    if arrow_type == ArrowType.CIRCLE:
+        canvas.put(ay, ax, cs.circle_endpoint, style=style)
+    elif arrow_type == ArrowType.CROSS:
+        canvas.put(ay, ax, cs.cross_endpoint, style=style)
+    elif ndx > 0:
         canvas.put(ay, ax, cs.arrow_right, style=style)
     elif ndx < 0:
         canvas.put(ay, ax, cs.arrow_left, style=style)
