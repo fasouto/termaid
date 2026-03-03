@@ -1,4 +1,4 @@
-Output demo/demo.gif
+Output demo/termaid-demo.gif
 
 Set Shell "bash"
 Set FontSize 14
@@ -11,21 +11,27 @@ Set Theme { "name": "Catppuccin Mocha", "black": "#1e1e2e", "red": "#f38ba8", "g
 Env "PS1" "$ "
 Env "VIRTUAL_ENV" ""
 
+Hide
+Type "cd demo"
+Enter
+Sleep 500ms
+Ctrl+L
+Show
 
 # 1. Sequence diagram — API call flow
-Type "termmaid demo/sequence.mmd --theme phosphor"
+Type "termmaid sequence.mmd --theme phosphor"
 Enter
 Sleep 4s
 
 # 2. Flowchart — branching decision tree with diamonds and labels
 Ctrl+L
-Type "termmaid demo/flowchart.mmd --theme terra"
+Type "termmaid flowchart.mmd --theme terra"
 Enter
 Sleep 4s
 
 # 3. Git graph — branches, merges, commits
 Ctrl+L
-Type "termmaid demo/gitgraph.mmd --theme amber"
+Type "termmaid gitgraph.mmd --theme amber"
 Enter
 Sleep 4s
 

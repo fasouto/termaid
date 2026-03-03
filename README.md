@@ -2,13 +2,9 @@
 
 Terminal-native Mermaid rendering for Python.
 
-```
-┌─────────┐    ┌───────────┐    ┌───◇───┐    ╭────────╮
-│         │    │           │    │       │Yes │        │
-│  Start  ├───►│  Process  ├───►│  OK?  ├───►│  Done  │
-│         │    │           │    │       │    │        │
-└─────────┘    └───────────┘    └───◇───┘    ╰────────╯
-```
+<p align="center">
+  <img src="demo/termaid-demo.gif" alt="termmaid demo" width="800">
+</p>
 
 Render [Mermaid](https://mermaid.js.org/) diagrams as Unicode art directly in your terminal. Pure Python, zero dependencies.
 
@@ -363,16 +359,16 @@ class MyApp(App):
 
 ## Themes
 
-Six built-in themes for `--color` / `render_rich()`:
+Six built-in themes for `--theme` / `render_rich()`:
 
-| Theme | Description |
-|-------|-------------|
-| `default` | Cyan nodes, yellow arrows, white labels |
-| `terra` | Warm earth tones (browns, oranges) |
-| `neon` | Magenta nodes, green arrows, cyan edges |
-| `mono` | White/gray monochrome |
-| `amber` | Amber/gold CRT-style |
-| `phosphor` | Green phosphor terminal-style |
+| Theme | Colors | Description |
+|-------|--------|-------------|
+| `default` | ![#00FFFF](https://placehold.co/12x12/00FFFF/00FFFF.png) ![#FFFF00](https://placehold.co/12x12/FFFF00/FFFF00.png) ![#FFFFFF](https://placehold.co/12x12/FFFFFF/FFFFFF.png) | Cyan nodes, yellow arrows, white labels |
+| `terra` | ![#D4845A](https://placehold.co/12x12/D4845A/D4845A.png) ![#E8A87C](https://placehold.co/12x12/E8A87C/E8A87C.png) ![#F5E6D3](https://placehold.co/12x12/F5E6D3/F5E6D3.png) | Warm earth tones (browns, oranges) |
+| `neon` | ![#FF00FF](https://placehold.co/12x12/FF00FF/FF00FF.png) ![#00FF00](https://placehold.co/12x12/00FF00/00FF00.png) ![#00FFFF](https://placehold.co/12x12/00FFFF/00FFFF.png) | Magenta nodes, green arrows, cyan edges |
+| `mono` | ![#FFFFFF](https://placehold.co/12x12/FFFFFF/FFFFFF.png) ![#AAAAAA](https://placehold.co/12x12/AAAAAA/AAAAAA.png) ![#666666](https://placehold.co/12x12/666666/666666.png) | White/gray monochrome |
+| `amber` | ![#FFB000](https://placehold.co/12x12/FFB000/FFB000.png) ![#FFD080](https://placehold.co/12x12/FFD080/FFD080.png) ![#FFD580](https://placehold.co/12x12/FFD580/FFD580.png) | Amber/gold CRT-style |
+| `phosphor` | ![#33FF33](https://placehold.co/12x12/33FF33/33FF33.png) ![#66FF66](https://placehold.co/12x12/66FF66/66FF66.png) ![#AAFFAA](https://placehold.co/12x12/AAFFAA/AAFFAA.png) | Green phosphor terminal-style |
 
 ## Optional extras
 
