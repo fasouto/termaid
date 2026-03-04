@@ -16,7 +16,13 @@ Env "PS1" "$ "
 Env "VIRTUAL_ENV" ""
 
 Hide
+Type "source .venv/bin/activate"
+Enter
+Sleep 500ms
 Type "cd demo"
+Enter
+Sleep 500ms
+Type "export PS1='$ '"
 Enter
 Sleep 500ms
 Ctrl+L
@@ -39,6 +45,24 @@ Sleep 4s
 
 # 4. One-liner hook — pipe-friendly with branching
 Ctrl+L
+Set TypingSpeed 0
+Type "# Pipe-friendly: works with echo, cat, curl..."
+Enter
+Set TypingSpeed 32ms
+Sleep 1s
 Type "echo 'graph LR; A[Request] --> B{Valid?}; B -->|Yes| C[Process]; B -->|No| D[Error]' | termaid --theme default"
 Enter
+Sleep 3s
+
+# 5. TUI mode — interactive viewer
+Ctrl+L
+Set TypingSpeed 0
+Type "# Interactive TUI mode"
+Enter
+Set TypingSpeed 32ms
+Sleep 1s
+Type "termaid erdiagram.mmd --tui"
+Enter
 Sleep 4s
+Type "q"
+Sleep 1s
