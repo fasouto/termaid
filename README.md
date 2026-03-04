@@ -1,12 +1,10 @@
-# termaid
+<h1 align="center">termaid</h1>
 
-Terminal-native Mermaid rendering for Python.
+<p align="center">Render Mermaid diagrams in your terminal or Python app.</p>
 
 <p align="center">
   <img src="demo/termaid-demo.gif" alt="termaid demo" width="800">
 </p>
-
-Render [Mermaid](https://mermaid.js.org/) diagrams in your terminal or Python app.
 
 ## Features
 
