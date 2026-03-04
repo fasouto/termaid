@@ -25,6 +25,7 @@ classifiers = [
 [project.optional-dependencies]
 rich = ["rich>=13.0"]
 textual = ["textual>=0.40"]
+tui = ["textual>=0.40"]
 dev = [
     "pytest>=7.0",
     "pytest-snapshot",
