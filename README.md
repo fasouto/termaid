@@ -27,6 +27,12 @@ Mermaid is great for documentation, but rendering it usually means spinning up a
 pip install termaid
 ```
 
+Or try it without installing:
+
+```bash
+uvx termaid diagram.mmd
+```
+
 ## Quick start
 
 ### CLI
@@ -328,6 +334,7 @@ gitGraph
 
 | Flag | Description |
 |------|-------------|
+| `--tui` | Interactive TUI viewer (requires `pip install termaid[tui]`) |
 | `--ascii` | ASCII-only output (no Unicode box-drawing) |
 | `--theme NAME` | Color theme: `default`, `terra`, `neon`, `mono`, `amber`, `phosphor` (requires `pip install termaid[rich]`) |
 | `--padding-x N` | Horizontal padding inside boxes (default: 4) |
