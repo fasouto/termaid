@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 (2026-03-20)
+
+- Add pie chart support (`pie` syntax, rendered as horizontal bar charts)
+- Add treemap support (`treemap-beta` syntax with nested sections and proportional sizing)
+- 9 diagram types now supported
+
 ## 0.1.3 (2026-03-04)
 
 - Add `--tui` flag to CLI for interactive TUI viewer
