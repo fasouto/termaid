@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 (2026-03-25)
+
+- Add `--gap` CLI flag and `gap` parameter for compact diagram spacing
+- Document wide LR diagram workarounds in README
+
 ## 0.2.0 (2026-03-20)
 
 - Add pie chart support (`pie` syntax, rendered as horizontal bar charts)
