@@ -86,8 +86,14 @@ def render_graph_canvas(
     routed = route_edges(graph, layout)
 
     # Create canvas (add some margin)
+    # Account for edge paths that may extend beyond node boundaries
+    # (e.g. back edges routed to the right/below of all nodes)
     width = layout.canvas_width + 4
     height = layout.canvas_height + 4
+    for re in routed:
+        for x, y in re.draw_path:
+            width = max(width, x + 2)
+            height = max(height, y + 2)
     canvas = Canvas(width, height)
 
     # 1. Draw subgraph borders (background layer)

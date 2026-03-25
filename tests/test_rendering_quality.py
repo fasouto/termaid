@@ -13,7 +13,6 @@ from termaid import render
 class TestTrailingDanglingCharacters:
     """Bug 2: Trailing dangling characters after back-edge junctions."""
 
-    @pytest.mark.xfail(reason="Bug 2: trailing dangling hyphen after junction")
     def test_back_edge_no_trailing_chars(self):
         """Back edges should not leave trailing chars after junction characters.
 
