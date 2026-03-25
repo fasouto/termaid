@@ -10,8 +10,9 @@
 
 ## Features
 
-- **9 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, and treemaps
+- **10 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, and mindmaps
 - **Zero dependencies:** pure Python, nothing to install beyond the package itself
+- **Terminal-aware:** auto-fits diagrams to terminal width with progressive compaction
 - **Rich and Textual integration:** colored output and TUI widgets with optional extras
 - **6 color themes:** default, terra, neon, mono, amber, phosphor
 - **ASCII fallback:** works on any terminal, even the most basic ones
@@ -374,6 +375,30 @@ treemap-beta
 
 **Features:** nested sections via indentation, `"label": value` syntax, proportional sizing, `%%` comments
 
+### Mindmaps
+
+```mermaid
+mindmap
+  Project
+    Design
+      Wireframes
+      Mockups
+    Development
+      Frontend
+      Backend
+    Testing
+```
+
+```
+          ╭─ Design ──╭─ Wireframes
+          │           ╰─ Mockups
+Project ──├─ Development ──╭─ Frontend
+          │                ╰─ Backend
+          ╰─ Testing
+```
+
+**Features:** indentation-based nesting, automatic overflow to the left when many children, rounded/sharp/ASCII branch characters, Mermaid shape markers stripped (`(round)`, `[square]`, `{{hexagon}}`, `)cloud(`)
+
 ## CLI options
 
 | Flag | Description |
@@ -381,10 +406,17 @@ treemap-beta
 | `--tui` | Interactive TUI viewer (requires `pip install termaid[tui]`) |
 | `--ascii` | ASCII-only output (no Unicode box-drawing) |
 | `--theme NAME` | Color theme: `default`, `terra`, `neon`, `mono`, `amber`, `phosphor` (requires `pip install termaid[rich]`) |
+| `--color MODE` | Color mode: `always` (overrides `NO_COLOR`), `auto`, `never` |
 | `--padding-x N` | Horizontal padding inside boxes (default: 4) |
 | `--padding-y N` | Vertical padding inside boxes (default: 2) |
 | `--gap N` | Space between nodes (default: 4). Use `1` or `2` for compact diagrams |
+| `--width N` | Max output width. Re-renders with smaller gap/padding if exceeded |
+| `--no-auto-fit` | Disable automatic compaction when diagram exceeds terminal width |
 | `--sharp-edges` | Sharp corners on edge turns instead of rounded |
+| `-o FILE` | Write output to file instead of stdout |
+| `--lint` | Validate diagram syntax without rendering (exit 0 if valid, 1 if not) |
+| `--lint --json` | Output validation result as JSON |
+| `--show-ids` | Show node IDs alongside labels for debugging (e.g. `myId: My Label`) |
 
 ## Python API
 
@@ -430,9 +462,9 @@ pip install termaid[textual]   # Textual TUI widget
 
 ## Limitations
 
-- **Layout engine is approximate.** Node positioning uses a grid-based barycenter heuristic. Graphs with many cross-layer edges may still produce crossings.
-- **Manhattan-only edge routing.** Edges use A* pathfinding on a grid. Very dense graphs may have overlapping edges.
-- **Wide LR diagrams.** Long horizontal chains can exceed terminal width. Use `--gap 1` or `--padding-x 0` for compact output, or pipe through `less -S` for horizontal scrolling.
+- **Layout engine is approximate.** Node positioning uses a grid-based barycenter heuristic. Very dense graphs may still produce some edge crossings.
+- **Manhattan-only edge routing.** Edges use A* pathfinding on a grid. The engine auto-expands gaps for crossing edges and biases toward flow-aligned routes.
+- **Wide diagrams.** The CLI auto-compacts when the diagram exceeds terminal width. For very wide LR chains, use `--width N`, `--gap 1`, or pipe through `less -S`.
 
 ## Acknowledgements
 
