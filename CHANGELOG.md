@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.3.0 (2026-03-25)
+
+### Rendering engine overhaul
+
+- **Directional canvas**: junction characters derived from direction bitfields instead of a lookup table, producing correct junctions in all cases
+- **Gap expansion**: crossing edges between layers automatically get extra routing space so they no longer overlap
+- **Endpoint spreading**: overlapping arrows on the same node border are spread apart so all edges are visible
+- **Subgraph separation**: nodes stay inside their declared subgraph even with cross-boundary edges
+- **Routing bias**: edges prefer the natural flow direction, avoiding tight corners next to node borders
+- **Label separation**: edge labels from different edges no longer merge onto the same output line
+- **Parser fix**: arrow syntax inside quoted labels (`A["has --> arrow"]`) no longer confuses the parser
+
+### New diagram type
+
+- **Mindmaps** (`mindmap` syntax): indentation-based tree layout with automatic overflow to the left for crowded roots, rounded/sharp/ASCII branch characters
+
+### CLI improvements
+
+- `--width N`: set max output width, re-renders with smaller gap/padding if exceeded
+- `-o FILE` / `--output FILE`: write output to file instead of stdout
+- `--show-ids`: show node IDs alongside labels for debugging
+- `--no-auto-fit`: disable automatic terminal width compaction
+- `NO_COLOR` environment variable respected
+- `--version` reads from package metadata instead of hardcoded string
+- Auto-fit: diagrams that exceed terminal width are automatically re-rendered with compact settings
+
+### Code quality
+
+- Layout engine split from 1 file (1095 lines) into 5 focused modules
+- 1066 tests, 0 failures, 0 xfails (up from 1004 tests, 5 xfails)
+- Gallery script and docs/gallery.md with all 78 fixture diagrams
+
 ## 0.2.1 (2026-03-25)
 
 - Add `--gap` CLI flag and `gap` parameter for compact diagram spacing
