@@ -294,18 +294,36 @@ def main(argv: list[str] | None = None) -> int:
 def _lint(source: str, args: argparse.Namespace) -> int:
     """Validate diagram syntax. Returns 0 if valid, 1 if invalid."""
     try:
-        from termaid import render
+        from termaid import render, parse
+        from termaid._strip_frontmatter import _strip_frontmatter
     except ImportError:
         _src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sys.path.insert(0, _src_dir)
-        from termaid import render
+        from termaid import render, parse
 
+    error_msg: str | None = None
+
+    # First check: does render() report an error?
     result = render(source)
-    is_error = result.startswith("[termaid] Failed")
-    error_msg = result.removeprefix("[termaid] Failed to render diagram: ") if is_error else None
+    if result.startswith("[termaid] Failed"):
+        error_msg = result.removeprefix("[termaid] Failed to render diagram: ")
+    elif not result.strip():
+        error_msg = "diagram produced no output"
+    else:
+        # Second check: for flowcharts/state diagrams, verify the graph
+        # has at least one node (catches garbage input that the parser
+        # silently ignores).
+        try:
+            graph = parse(source)
+            if not graph.nodes:
+                error_msg = "no nodes found in diagram"
+        except Exception:
+            pass  # non-flowchart types (sequence, etc.) skip this check
+
+    is_error = error_msg is not None
 
     if args.json:
-        output = {
+        output: dict[str, object] = {
             "valid": not is_error,
             "file": args.file or "<stdin>",
         }
