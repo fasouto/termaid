@@ -103,8 +103,7 @@ def _use_color(args: argparse.Namespace) -> bool:
     """Determine whether to use color output, respecting NO_COLOR."""
     if args.theme is None:
         return False
-    # NO_COLOR (https://no-color.org/) disables color unless overridden
-    if os.environ.get("NO_COLOR") is not None and args.color != "always":
+    if os.environ.get("NO_COLOR") is not None:
         return False
     return True
 
@@ -161,12 +160,6 @@ def main(argv: list[str] | None = None) -> int:
         help="Color theme. Requires 'rich' package (pip install termaid[rich]).",
     )
     parser.add_argument(
-        "--color",
-        default=None,
-        choices=["always", "auto", "never"],
-        help="Color mode. 'always' overrides NO_COLOR, 'never' disables --theme.",
-    )
-    parser.add_argument(
         "--tui",
         action="store_true",
         help="Launch interactive TUI viewer. Requires 'textual' (pip install termaid[tui]).",
@@ -194,9 +187,6 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     args = parser.parse_args(argv)
-
-    if args.color == "never":
-        args.theme = None
 
     # Read input
     source = _read_source(args)

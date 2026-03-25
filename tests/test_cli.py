@@ -88,35 +88,13 @@ class TestCliNoColor:
         old = os.environ.get("NO_COLOR")
         try:
             os.environ["NO_COLOR"] = "1"
-            args = argparse.Namespace(theme="neon", color=None)
+            args = argparse.Namespace(theme="neon")
             assert _use_color(args) is False
         finally:
             if old is None:
                 os.environ.pop("NO_COLOR", None)
             else:
                 os.environ["NO_COLOR"] = old
-
-    def test_color_always_overrides_no_color(self):
-        from termaid.cli import _use_color
-        import argparse, os
-        old = os.environ.get("NO_COLOR")
-        try:
-            os.environ["NO_COLOR"] = "1"
-            args = argparse.Namespace(theme="neon", color="always")
-            assert _use_color(args) is True
-        finally:
-            if old is None:
-                os.environ.pop("NO_COLOR", None)
-            else:
-                os.environ["NO_COLOR"] = old
-
-    def test_color_never_disables_theme(self, tmp_path: Path, capsys):
-        """--color never should render plain text even with --theme."""
-        mmd = tmp_path / "test.mmd"
-        mmd.write_text("graph LR\n  A --> B")
-        # --color never causes args.theme to be set to None in main()
-        result = main([str(mmd), "--theme", "neon", "--color", "never"])
-        assert result == 0
 
 
 class TestCliPipe:

@@ -406,7 +406,6 @@ Project ──├─ Development ──╭─ Frontend
 | `--tui` | Interactive TUI viewer (requires `pip install termaid[tui]`) |
 | `--ascii` | ASCII-only output (no Unicode box-drawing) |
 | `--theme NAME` | Color theme: `default`, `terra`, `neon`, `mono`, `amber`, `phosphor` (requires `pip install termaid[rich]`) |
-| `--color MODE` | Color mode: `always` (overrides `NO_COLOR`), `auto`, `never` |
 | `--padding-x N` | Horizontal padding inside boxes (default: 4) |
 | `--padding-y N` | Vertical padding inside boxes (default: 2) |
 | `--gap N` | Space between nodes (default: 4). Use `1` or `2` for compact diagrams |
