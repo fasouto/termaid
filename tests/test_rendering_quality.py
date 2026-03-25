@@ -40,7 +40,6 @@ class TestTrailingDanglingCharacters:
 class TestArrowBorderCollision:
     """Bug 3: Arrow tip ◄ collides with node border ├."""
 
-    @pytest.mark.xfail(reason="Bug 3: arrow collides with node border")
     def test_hub_node_no_arrow_border_collision(self):
         """A node receiving and sending edges should not have ├◄ collision.
 
@@ -85,7 +84,6 @@ class TestJunctionCharacters:
 class TestSubgraphLayout:
     """Bug 7: Nodes rendered in wrong subgraph when cross-boundary edges exist."""
 
-    @pytest.mark.xfail(reason="Bug 7: node B appears inside S2 visually")
     def test_nodes_stay_in_declared_subgraph(self):
         """Nodes should be visually inside their declared subgraph.
 
@@ -129,7 +127,6 @@ class TestSubgraphLayout:
 class TestMissingEdges:
     """Bug 8: Edges missing when labels overlap with crossings."""
 
-    @pytest.mark.xfail(reason="Bug 8: missing edges with label crossings")
     def test_all_four_edges_rendered(self):
         """All 4 edges should be visible even with crossing labels.
 
@@ -143,7 +140,6 @@ class TestMissingEdges:
             f"Expected 4 arrows for 4 edges, found {arrow_count}:\n{out}"
         )
 
-    @pytest.mark.xfail(reason="Bug 8: labels from different edges merge")
     def test_crossing_labels_on_separate_lines(self):
         """Edge labels on crossing edges should not merge into one line.
 

@@ -241,34 +241,37 @@ def _draw_edges(
         h_char, v_char = _edge_line_chars(edge.style, cs)
         n_segs = len(re.draw_path) - 1
 
-        # Draw line segments, clipping endpoints where arrows are present
-        # so the arrow + gap sit between the line and the node border.
+        # Draw line segments, clipping endpoints at node borders and turn
+        # points so that corners/junctions own their cells and get correct
+        # direction bits when the directional canvas merges overlapping edges.
         for i in range(n_segs):
             x1, y1 = re.draw_path[i]
             x2, y2 = re.draw_path[i + 1]
 
-            # Clip first segment start: move 1 cell away from node border
-            # (the T-junction handles the border connection)
-            if i == 0:
-                dx = 0 if x2 == x1 else (1 if x2 > x1 else -1)
-                dy = 0 if y2 == y1 else (1 if y2 > y1 else -1)
+            dx = 0 if x2 == x1 else (1 if x2 > x1 else -1)
+            dy = 0 if y2 == y1 else (1 if y2 > y1 else -1)
+
+            # Clip start: 1 cell away from node border or turn point
+            x1, y1 = x1 + dx, y1 + dy
+            # Extra clip for start arrow on first segment
+            if i == 0 and edge.has_arrow_start:
                 x1, y1 = x1 + dx, y1 + dy
-                # Clip an extra cell if there's a start arrow
-                if edge.has_arrow_start:
-                    x1, y1 = x1 + dx, y1 + dy
 
-            # Clip last segment end: move 1 cell away from target border
-            # (the T-junction or arrow handles the border connection)
-            if i == n_segs - 1:
-                dx = 0 if x2 == x1 else (1 if x2 > x1 else -1)
-                dy = 0 if y2 == y1 else (1 if y2 > y1 else -1)
-                x2, y2 = x2 - dx, y2 - dy
+            # Clip end: 1 cell away from target border or turn point
+            x2, y2 = x2 - dx, y2 - dy
 
-            if y1 == y2:
-                # Horizontal segment
+            # Use original direction (dx/dy) for classification, not clipped
+            # coordinates, since clipping can reduce a segment to a single
+            # point where both y1==y2 and x1==x2 are true.
+            if dy == 0:
+                # Horizontal: skip if clipping reversed the segment
+                if (dx > 0 and x1 > x2) or (dx < 0 and x1 < x2):
+                    continue
                 canvas.draw_horizontal(y1, x1, x2, h_char, style=edge_style_key)
-            elif x1 == x2:
-                # Vertical segment
+            elif dx == 0:
+                # Vertical: skip if clipping reversed the segment
+                if (dy > 0 and y1 > y2) or (dy < 0 and y1 < y2):
+                    continue
                 canvas.draw_vertical(x1, y1, y2, v_char, style=edge_style_key)
             else:
                 # Diagonal (shouldn't happen with A*, but handle gracefully)
@@ -466,9 +469,14 @@ def _label_overlaps(
     row: int, col_start: int, col_end: int,
     placed: list[tuple[int, int, int]],
 ) -> bool:
-    """Check if a label placement overlaps any already-placed label."""
+    """Check if a label placement conflicts with any already-placed label.
+
+    Rejects placements on any row that already has a label, not just
+    column-overlapping ones, so labels from different edges never share
+    the same output line.
+    """
     for pr, ps, pe in placed:
-        if pr == row and col_start < pe and col_end > ps:
+        if pr == row:
             return True
     return False
 

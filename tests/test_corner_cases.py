@@ -57,7 +57,6 @@ class TestFlowchartParserEdgeCases:
         g = parse_flowchart('graph LR\n  A[""]')
         assert g.nodes["A"].label == ""
 
-    @pytest.mark.xfail(reason="Arrow syntax inside quoted labels confuses parser")
     def test_label_with_arrows_inside_quotes(self):
         """Arrows inside quoted labels should not confuse parser."""
         g = parse_flowchart('graph LR\n  A["has --> arrow"] --> B')
@@ -654,3 +653,166 @@ class TestStateDiagramEdgeCases:
         )
         assert "Running" in output
         assert "Paused" in output
+
+
+# ── Additional parser edge cases ─────────────────────────────────────────────
+
+
+class TestMalformedInput:
+    """Malformed input should not crash, just degrade gracefully."""
+
+    def test_garbage_input(self):
+        result = render("this is not a diagram at all")
+        assert isinstance(result, str)
+
+    def test_unclosed_bracket(self):
+        result = render("graph LR\n  A[unclosed --> B")
+        assert isinstance(result, str)
+
+    def test_unclosed_subgraph(self):
+        result = render("graph TD\n  subgraph S1\n    A-->B")
+        assert isinstance(result, str)
+
+    def test_empty_string(self):
+        result = render("")
+        assert isinstance(result, str)
+
+    def test_only_whitespace(self):
+        result = render("   \n\n  \n")
+        assert isinstance(result, str)
+
+    def test_header_only(self):
+        result = render("graph LR")
+        assert isinstance(result, str)
+
+    def test_missing_arrow(self):
+        result = render("graph TD\n  A B C")
+        assert isinstance(result, str)
+
+    def test_just_direction(self):
+        for d in ["graph TD", "graph LR", "graph BT", "graph RL"]:
+            result = render(d)
+            assert isinstance(result, str)
+
+
+class TestSpecialCharactersInLabels:
+    """Labels with unusual characters should parse and render."""
+
+    def test_backtick_label(self):
+        out = render('graph LR\n  A["`code`"] --> B')
+        assert isinstance(out, str)
+
+    def test_ampersand_in_label(self):
+        out = render('graph LR\n  A["R&D"] --> B')
+        assert "R&D" in out
+
+    def test_quotes_in_label(self):
+        out = render("graph LR\n  A[\"it's\"] --> B")
+        assert isinstance(out, str)
+
+    def test_very_long_label_50_chars(self):
+        label = "A" * 50
+        out = render(f'graph TD\n  X["{label}"] --> Y')
+        assert "Y" in out
+
+    def test_very_long_label_100_chars(self):
+        label = "B" * 100
+        out = render(f'graph TD\n  X["{label}"] --> Y')
+        assert "Y" in out
+
+    def test_emoji_in_label(self):
+        out = render('graph LR\n  A["Start 🚀"] --> B["Done ✅"]')
+        assert isinstance(out, str)
+
+    def test_newline_escape_in_label(self):
+        out = render('graph TD\n  A["Line1\\nLine2"] --> B')
+        assert isinstance(out, str)
+
+
+class TestStructuralEdgeCases:
+    """Edge cases in graph structure."""
+
+    def test_100_nodes_chain(self):
+        """Long chain should render without timeout or crash."""
+        nodes = "-->".join(f"N{i}" for i in range(100))
+        out = render(f"graph LR\n  {nodes}")
+        assert "N0" in out
+        assert "N99" in out
+
+    def test_node_pointing_to_itself(self):
+        out = render("graph TD\n  A-->A")
+        assert "A" in out
+
+    def test_multiple_edges_same_pair(self):
+        out = render("graph LR\n  A-->B\n  A-->B\n  A-->B")
+        assert "A" in out
+        assert "B" in out
+
+    def test_all_nodes_disconnected(self):
+        out = render("graph TD\n  A\n  B\n  C\n  D")
+        for n in "ABCD":
+            assert n in out
+
+    def test_subgraph_3_levels(self):
+        src = (
+            "graph TD\n"
+            "  subgraph L1\n"
+            "    subgraph L2\n"
+            "      subgraph L3\n"
+            "        A-->B\n"
+            "      end\n"
+            "    end\n"
+            "  end"
+        )
+        out = render(src)
+        assert "A" in out
+        assert "B" in out
+        assert "L1" in out
+        assert "L3" in out
+
+    def test_frontmatter_with_special_yaml(self):
+        src = '---\ntitle: "test: value"\nconfig:\n  key: true\n---\ngraph LR\n  A-->B'
+        out = render(src)
+        assert "A" in out
+        assert "---" not in out
+
+
+class TestMindmapEdgeCases:
+    """Edge cases specific to mindmap diagrams."""
+
+    def test_single_child(self):
+        out = render("mindmap\n  Root\n    Only")
+        assert "Root" in out
+        assert "Only" in out
+
+    def test_wide_labels(self):
+        out = render("mindmap\n  Root\n    This is a very long branch label\n    Short")
+        assert "This is a very long branch label" in out
+
+    def test_many_levels(self):
+        src = "mindmap\n  A\n    B\n      C\n        D\n          E"
+        out = render(src)
+        for n in "ABCDE":
+            assert n in out
+
+
+class TestAllDiagramTypesNoCrash:
+    """Every diagram type should handle minimal valid input without crashing."""
+
+    @pytest.mark.parametrize("source", [
+        "graph LR\n  A-->B",
+        "graph TD\n  A-->B",
+        "graph BT\n  A-->B",
+        "graph RL\n  A-->B",
+        "sequenceDiagram\n  A->>B: hello",
+        "classDiagram\n  class Animal",
+        "erDiagram\n  A ||--o{ B : has",
+        "stateDiagram-v2\n  [*] --> A",
+        "pie\n  \"A\" : 30\n  \"B\" : 70",
+        'treemap-beta\n  "Root": 100',
+        "mindmap\n  Root\n    A\n    B",
+    ])
+    def test_diagram_type_renders(self, source):
+        out = render(source)
+        assert isinstance(out, str)
+        assert len(out) > 0

@@ -1,135 +1,78 @@
 """2D character canvas for rendering diagrams.
 
 Row-major indexing: canvas[row][col] holds a single character.
-Supports junction merging when box-drawing characters overlap.
+Supports direction-based junction merging when box-drawing characters overlap.
+Each cell tracks which directions (UP/DOWN/LEFT/RIGHT) are connected,
+and the correct junction character is derived from the combined directions.
 """
 from __future__ import annotations
 
 from .charset import CharSet, UNICODE
 
 
-# Junction merging lookup table
-# Maps (existing_char, new_char) -> merged_char for Unicode box-drawing
-_JUNCTION_TABLE: dict[tuple[str, str], str] = {}
+# Direction bitfield constants
+UP = 1
+DOWN = 2
+LEFT = 4
+RIGHT = 8
 
+# Derive the correct box-drawing character from a direction bitfield.
+# Always produces standard single-line characters for junctions.
+_DIRECTION_TO_CHAR: dict[int, str] = {
+    LEFT | RIGHT: "─",
+    UP | DOWN: "│",
+    RIGHT | DOWN: "┌",
+    LEFT | DOWN: "┐",
+    RIGHT | UP: "└",
+    LEFT | UP: "┘",
+    LEFT | RIGHT | DOWN: "┬",
+    LEFT | RIGHT | UP: "┴",
+    UP | DOWN | RIGHT: "├",
+    UP | DOWN | LEFT: "┤",
+    LEFT | RIGHT | UP | DOWN: "┼",
+    # Single directions (endpoints)
+    RIGHT: "─",
+    LEFT: "─",
+    UP: "│",
+    DOWN: "│",
+}
 
-def _build_junction_table() -> None:
-    """Build the junction merge lookup table."""
-    # Horizontal + Vertical = Cross
-    pairs = [
-        ("─", "│", "┼"),
-        ("│", "─", "┼"),
-        # Horizontal + corners = T-junctions
-        ("─", "┌", "┬"), ("─", "┐", "┬"),
-        ("─", "└", "┴"), ("─", "┘", "┴"),
-        ("┌", "─", "┬"), ("┐", "─", "┬"),
-        ("└", "─", "┴"), ("┘", "─", "┴"),
-        # Vertical + corners = T-junctions
-        ("│", "┌", "├"), ("│", "└", "├"),
-        ("│", "┐", "┤"), ("│", "┘", "┤"),
-        ("┌", "│", "├"), ("└", "│", "├"),
-        ("┐", "│", "┤"), ("┘", "│", "┤"),
-        # T-junctions + lines = cross
-        ("├", "─", "┼"), ("┤", "─", "┼"),
-        ("┬", "│", "┼"), ("┴", "│", "┼"),
-        ("─", "├", "┼"), ("─", "┤", "┼"),
-        ("│", "┬", "┼"), ("│", "┴", "┼"),
-        # T-junction + corner
-        ("├", "┐", "┼"), ("├", "┘", "┼"),
-        ("┤", "┌", "┼"), ("┤", "└", "┼"),
-        ("┬", "└", "┼"), ("┬", "┘", "┼"),
-        ("┴", "┌", "┼"), ("┴", "┐", "┼"),
-        # T-junctions combining
-        ("├", "┤", "┼"), ("┤", "├", "┼"),
-        ("┬", "┴", "┼"), ("┴", "┬", "┼"),
-        # Corners combining
-        ("┌", "┘", "┼"), ("┘", "┌", "┼"),
-        ("┐", "└", "┼"), ("└", "┐", "┼"),
-        ("┌", "┐", "┬"), ("┐", "┌", "┬"),
-        ("└", "┘", "┴"), ("┘", "└", "┴"),
-        ("┌", "└", "├"), ("└", "┌", "├"),
-        ("┐", "┘", "┤"), ("┘", "┐", "┤"),
-        # Thick lines
-        ("━", "┃", "╋"),
-        ("┃", "━", "╋"),
-        # Dotted lines
-        ("┄", "┆", "┼"),
-        ("┆", "┄", "┼"),
-        # Mixed line styles with junctions
-        ("─", "┃", "┼"), ("┃", "─", "┼"),
-        ("━", "│", "┼"), ("│", "━", "┼"),
-        # Rounded corners with lines = T-junctions
-        ("─", "╭", "┬"), ("─", "╮", "┬"),
-        ("─", "╰", "┴"), ("─", "╯", "┴"),
-        ("╭", "─", "┬"), ("╮", "─", "┬"),
-        ("╰", "─", "┴"), ("╯", "─", "┴"),
-        ("│", "╭", "├"), ("│", "╰", "├"),
-        ("│", "╮", "┤"), ("│", "╯", "┤"),
-        ("╭", "│", "├"), ("╰", "│", "├"),
-        ("╮", "│", "┤"), ("╯", "│", "┤"),
-        # Rounded corners combining
-        ("╭", "╯", "┼"), ("╯", "╭", "┼"),
-        ("╮", "╰", "┼"), ("╰", "╮", "┼"),
-        ("╭", "╮", "┬"), ("╮", "╭", "┬"),
-        ("╰", "╯", "┴"), ("╯", "╰", "┴"),
-        ("╭", "╰", "├"), ("╰", "╭", "├"),
-        ("╮", "╯", "┤"), ("╯", "╮", "┤"),
-        # Rounded + T-junctions = cross
-        ("├", "╮", "┼"), ("├", "╯", "┼"),
-        ("┤", "╭", "┼"), ("┤", "╰", "┼"),
-        ("┬", "╰", "┼"), ("┬", "╯", "┼"),
-        ("┴", "╭", "┼"), ("┴", "╮", "┼"),
-        # Double-line borders merging with single-line edges
-        ("═", "│", "┼"), ("│", "═", "┼"),
-        ("║", "─", "┼"), ("─", "║", "┼"),
-        ("╔", "─", "┬"), ("╗", "─", "┬"),
-        ("╚", "─", "┴"), ("╝", "─", "┴"),
-        ("╔", "│", "├"), ("╚", "│", "├"),
-        ("╗", "│", "┤"), ("╝", "│", "┤"),
-        ("║", "┌", "├"), ("║", "└", "├"),
-        ("║", "┐", "┤"), ("║", "┘", "┤"),
-        ("═", "┌", "┬"), ("═", "┐", "┬"),
-        ("═", "└", "┴"), ("═", "┘", "┴"),
-    ]
-    # T-junctions absorb lines they already contain.
-    # ├ has up+down+right: adding │ or ─ doesn't change it.
-    # ┤ has up+down+left: same.
-    # ┬ has left+right+down: same.
-    # ┴ has left+right+up: same.
-    for tee, contained_lines in [
-        ("├", "│─"),  # ├ already has vertical (│) and rightward (─)
-        ("┤", "│─"),  # ┤ already has vertical (│) and leftward (─)
-        ("┬", "─│"),  # ┬ already has horizontal (─) and downward (│)
-        ("┴", "─│"),  # ┴ already has horizontal (─) and upward (│)
-    ]:
-        for line in contained_lines:
-            pairs.append((tee, line, tee))
-            pairs.append((line, tee, tee))
-        # T + same T = same T
-        pairs.append((tee, tee, tee))
-
-    # Cross (┼) absorbs any single line or corner drawn over it.
-    # ┼ already represents all 4 directions, so adding another line
-    # or corner character doesn't change the visual meaning.
-    for ch in "─│╭╮╰╯┌┐└┘├┤┬┴":
-        pairs.append(("┼", ch, "┼"))
-        pairs.append((ch, "┼", "┼"))
-
-    # Shape markers (◆ for diamond, ◯ for circle) are immovable:
-    # any box-drawing char merging with them keeps the marker.
-    _all_box = set("─│┌┐└┘├┤┬┴┼━┃╋┄┆╭╮╰╯═║╔╗╚╝")
-    for marker in ("◆", "◇", "◯"):
-        for bc in _all_box:
-            pairs.append((marker, bc, marker))
-            pairs.append((bc, marker, marker))
-    for existing, new, merged in pairs:
-        _JUNCTION_TABLE[(existing, new)] = merged
-
-
-_build_junction_table()
-
-# Set of all box-drawing characters that participate in junction merging
-_BOX_CHARS = set("─│┌┐└┘├┤┬┴┼━┃╋┄┆╭╮╰╯═║╔╗╚╝◆◇◯")
+# Reverse mapping: infer direction bitfield from a box-drawing character.
+# Used when callers place box chars without explicit direction info
+# (e.g. node borders, subgraph borders, shape renderers).
+_CHAR_TO_DIRECTIONS: dict[str, int] = {
+    # Standard single-line
+    "─": LEFT | RIGHT,
+    "│": UP | DOWN,
+    "┌": RIGHT | DOWN,
+    "┐": LEFT | DOWN,
+    "└": RIGHT | UP,
+    "┘": LEFT | UP,
+    "├": UP | DOWN | RIGHT,
+    "┤": UP | DOWN | LEFT,
+    "┬": LEFT | RIGHT | DOWN,
+    "┴": LEFT | RIGHT | UP,
+    "┼": LEFT | RIGHT | UP | DOWN,
+    # Rounded corners (same directions as sharp equivalents)
+    "╭": RIGHT | DOWN,
+    "╮": LEFT | DOWN,
+    "╰": RIGHT | UP,
+    "╯": LEFT | UP,
+    # Double-line
+    "═": LEFT | RIGHT,
+    "║": UP | DOWN,
+    "╔": RIGHT | DOWN,
+    "╗": LEFT | DOWN,
+    "╚": RIGHT | UP,
+    "╝": LEFT | UP,
+    # Thick
+    "━": LEFT | RIGHT,
+    "┃": UP | DOWN,
+    "╋": LEFT | RIGHT | UP | DOWN,
+    # Dotted
+    "┄": LEFT | RIGHT,
+    "┆": UP | DOWN,
+}
 
 
 class Canvas:
@@ -137,7 +80,11 @@ class Canvas:
 
     Supports cell protection: cells marked as "node" won't be overwritten
     by edge lines. Protected cells only accept junction merges that add
-    a new direction (e.g. ─ on a │ border → ├), preserving node borders.
+    a new direction (e.g. ─ on a │ border -> ├), preserving node borders.
+
+    Each cell tracks a direction bitfield so that overlapping box-drawing
+    characters merge correctly. The final character is derived from the
+    combined directions rather than from a pair-lookup table.
     """
 
     def __init__(self, width: int, height: int) -> None:
@@ -152,6 +99,9 @@ class Canvas:
         self._protected: list[list[bool]] = [
             [False for _ in range(width)] for _ in range(height)
         ]
+        self._directions: list[list[int]] = [
+            [0 for _ in range(width)] for _ in range(height)
+        ]
 
     def resize(self, new_width: int, new_height: int) -> None:
         """Expand the canvas to at least the given dimensions."""
@@ -163,10 +113,12 @@ class Canvas:
             self._grid[r].extend(" " for _ in range(new_w - self.width))
             self._style_grid[r].extend("default" for _ in range(new_w - self.width))
             self._protected[r].extend(False for _ in range(new_w - self.width))
+            self._directions[r].extend(0 for _ in range(new_w - self.width))
         for _ in range(new_h - self.height):
             self._grid.append([" " for _ in range(new_w)])
             self._style_grid.append(["default" for _ in range(new_w)])
             self._protected.append([False for _ in range(new_w)])
+            self._directions.append([0 for _ in range(new_w)])
         self.width = new_w
         self.height = new_h
 
@@ -189,34 +141,51 @@ class Canvas:
     def put(self, row: int, col: int, ch: str, merge: bool = True, style: str = "") -> None:
         """Place a character on the canvas, optionally merging junctions.
 
-        Protected cells (node borders) only accept junction merges that
-        produce a T-junction or cross. Plain line overwrites are blocked.
+        When merge is True and both the existing cell and the new character
+        have directional information (from box-drawing characters), their
+        direction bits are OR'd together and the correct junction character
+        is derived from the combined bitfield.
+
+        Protected cells (node borders) only accept merges that add new
+        directions. Plain overwrites are blocked.
         """
         if not (0 <= row < self.height and 0 <= col < self.width):
             return
         if ch == " ":
             return
 
+        # Infer directions from the character if not otherwise known
+        new_dirs = _CHAR_TO_DIRECTIONS.get(ch, 0)
+
         existing = self._grid[row][col]
+        existing_dirs = self._directions[row][col]
+
         if existing == " ":
+            # Empty cell: just place
             self._grid[row][col] = ch
-        elif merge and existing in _BOX_CHARS and ch in _BOX_CHARS:
-            merged = _JUNCTION_TABLE.get((existing, ch))
-            if merged:
-                if self._protected[row][col] and merged == existing:
-                    # Protected cell unchanged by merge: skip style update
-                    return
-                self._grid[row][col] = merged
+            self._directions[row][col] = new_dirs
+        elif merge and existing_dirs and new_dirs:
+            # Both cells carry directional info: merge via OR
+            combined = existing_dirs | new_dirs
+            if self._protected[row][col] and combined == existing_dirs:
+                # Protected cell unchanged by merge: skip style update
+                return
+            derived = _DIRECTION_TO_CHAR.get(combined)
+            if derived:
+                self._grid[row][col] = derived
+                self._directions[row][col] = combined
             elif self._protected[row][col]:
-                # Protected cell: don't overwrite with unrelated character
+                # Can't derive a valid char, protected: don't overwrite
                 return
             else:
                 self._grid[row][col] = ch
+                self._directions[row][col] = new_dirs
         elif self._protected[row][col]:
-            # Protected cell: don't overwrite with non-box character
+            # Protected cell: don't overwrite with non-directional character
             return
         else:
             self._grid[row][col] = ch
+            self._directions[row][col] = new_dirs
 
         if style:
             self._style_grid[row][col] = style
@@ -251,13 +220,13 @@ class Canvas:
         return result
 
     def draw_horizontal(self, row: int, col_start: int, col_end: int, ch: str, style: str = "") -> None:
-        """Draw a horizontal line."""
+        """Draw a horizontal line, setting LEFT|RIGHT directions on each cell."""
         c_min, c_max = min(col_start, col_end), max(col_start, col_end)
         for c in range(c_min, c_max + 1):
             self.put(row, c, ch, style=style)
 
     def draw_vertical(self, col: int, row_start: int, row_end: int, ch: str, style: str = "") -> None:
-        """Draw a vertical line."""
+        """Draw a vertical line, setting UP|DOWN directions on each cell."""
         r_min, r_max = min(row_start, row_end), max(row_start, row_end)
         for r in range(r_min, r_max + 1):
             self.put(r, col, ch, style=style)
@@ -277,6 +246,7 @@ class Canvas:
         """Flip the canvas vertically (for BT direction)."""
         self._grid.reverse()
         self._style_grid.reverse()
+        self._directions.reverse()
         # Remap characters
         _flip_map = {
             "┌": "└", "┐": "┘", "└": "┌", "┘": "┐",
@@ -291,12 +261,22 @@ class Canvas:
                 ch = self._grid[r][c]
                 if ch in _flip_map:
                     self._grid[r][c] = _flip_map[ch]
+                # Flip direction bits: UP <-> DOWN
+                d = self._directions[r][c]
+                if d:
+                    flipped = d & (LEFT | RIGHT)  # keep horizontal
+                    if d & UP:
+                        flipped |= DOWN
+                    if d & DOWN:
+                        flipped |= UP
+                    self._directions[r][c] = flipped
 
     def flip_horizontal(self) -> None:
         """Flip the canvas horizontally (for RL direction)."""
         for r in range(self.height):
             self._grid[r].reverse()
             self._style_grid[r].reverse()
+            self._directions[r].reverse()
         _flip_map = {
             "┌": "┐", "┐": "┌", "└": "┘", "┘": "└",
             "├": "┤", "┤": "├", "┬": "┬", "┴": "┴",
@@ -310,3 +290,12 @@ class Canvas:
                 ch = self._grid[r][c]
                 if ch in _flip_map:
                     self._grid[r][c] = _flip_map[ch]
+                # Flip direction bits: LEFT <-> RIGHT
+                d = self._directions[r][c]
+                if d:
+                    flipped = d & (UP | DOWN)  # keep vertical
+                    if d & LEFT:
+                        flipped |= RIGHT
+                    if d & RIGHT:
+                        flipped |= LEFT
+                    self._directions[r][c] = flipped

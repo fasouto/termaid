@@ -212,6 +212,15 @@ def _parse_css_props(text: str) -> dict[str, str]:
     return props
 
 
+def _inside_quotes(text: str, pos: int) -> bool:
+    """Check if a position in text is inside a double-quoted string."""
+    in_quote = False
+    for i in range(pos):
+        if text[i] == '"':
+            in_quote = not in_quote
+    return in_quote
+
+
 def _strip_quotes(text: str) -> str:
     """Remove surrounding quotes from text."""
     if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
@@ -563,24 +572,43 @@ class _FlowchartParser:
             parts.append(part)
         return parts
 
+    @staticmethod
+    def _mask_quotes(text: str) -> str:
+        """Replace content inside quotes with spaces so arrow regex doesn't match inside labels."""
+        result = list(text)
+        in_quote = False
+        quote_char = ""
+        for i, ch in enumerate(result):
+            if not in_quote and ch == '"':
+                in_quote = True
+                quote_char = ch
+            elif in_quote and ch == quote_char:
+                in_quote = False
+            elif in_quote:
+                result[i] = " "
+        return "".join(result)
+
     def _split_by_arrows(self, line: str) -> list[_Segment]:
         """Split a line into alternating node and arrow segments."""
         segments: list[_Segment] = []
         remaining = line.strip()
 
         while remaining:
+            # Mask quoted strings so arrows inside "..." aren't matched
+            masked = self._mask_quotes(remaining)
+
             # Try to find the earliest arrow match
             best_match: tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None = None
 
             # First check for labeled arrows: -->|text| or -- text -->
-            label_match = self._find_labeled_arrow(remaining)
+            label_match = self._find_labeled_arrow(masked)
             if label_match:
                 pos, end, style, arr_start, arr_end, label, length, type_start, type_end = label_match
                 if best_match is None or pos < best_match[0]:
                     best_match = (pos, end, style, arr_start, arr_end, label, length, type_start, type_end)
 
             # Then check for plain arrows
-            plain_match = self._find_plain_arrow(remaining)
+            plain_match = self._find_plain_arrow(masked)
             if plain_match:
                 pos, end, style, arr_start, arr_end, length, type_start, type_end = plain_match
                 if best_match is None or pos < best_match[0]:
@@ -739,6 +767,9 @@ class _FlowchartParser:
         for open_delim, close_delim, shape in _SHAPE_PATTERNS:
             idx = text.find(open_delim)
             if idx > 0:
+                # Skip if the delimiter is inside a quoted string
+                if _inside_quotes(text, idx):
+                    continue
                 # Check if it ends with close_delim
                 rest = text[idx + len(open_delim):]
                 if rest.endswith(close_delim):

@@ -65,7 +65,102 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
         soft_obstacles.update(re.occupied_cells)
         routed.append(re)
 
+    # Post-process: spread edges that share the same target endpoint so
+    # arrows don't overlap on the same cell.  Start points are NOT spread
+    # because edges diverge naturally from a shared T-junction, and
+    # spreading the start creates jog segments at the border that produce
+    # ┼ artifacts when the jog crosses the node border characters.
+    _spread_shared_endpoints(routed, layout)
+
     return routed
+
+
+def _spread_shared_endpoints(routed: list[RoutedEdge], layout: GridLayout) -> None:
+    """Spread edges that share the same draw-path end point.
+
+    When multiple edges converge on the same cell (e.g. two edges arriving
+    at the center of a node's top border), offset them along the border so
+    each edge gets its own arrow cell.
+    """
+    from collections import defaultdict
+
+    end_groups: dict[tuple[int, int], list[RoutedEdge]] = defaultdict(list)
+    for re in routed:
+        if len(re.draw_path) >= 2:
+            end_groups[re.draw_path[-1]].append(re)
+
+    for point, edges in end_groups.items():
+        if len(edges) <= 1:
+            continue
+        tgt_id = edges[0].edge.target
+        tgt = layout.placements.get(tgt_id)
+        if not tgt:
+            continue
+        _apply_spread(edges, point, tgt, is_start=False)
+
+
+def _apply_spread(
+    edges: list[RoutedEdge],
+    point: tuple[int, int],
+    placement: NodePlacement,
+    is_start: bool,
+) -> None:
+    """Offset each edge's endpoint along the node border.
+
+    For TOP/BOTTOM attachment (horizontal spread): shifts the adjacent
+    corner point to match the new x, avoiding backward horizontal jog
+    segments that create stray line artifacts.
+
+    For LEFT/RIGHT attachment (vertical spread): inserts a short
+    perpendicular jog at the adjacent point's x so the last segment
+    stays horizontal and the arrow direction is correct.
+    """
+    if is_start:
+        return  # start spreading disabled; causes border artifacts
+
+    n = len(edges)
+    px, py = point
+    attach = edges[0].end_dir
+
+    if attach in (AttachDir.TOP, AttachDir.BOTTOM):
+        # Vertical arrival: spread horizontally along the border.
+        min_x = placement.draw_x + 1
+        max_x = placement.draw_x + placement.draw_width - 2
+        spread_range = max_x - min_x
+        if spread_range < n - 1:
+            return
+        step = min(2, spread_range // max(n - 1, 1))
+        for i, re in enumerate(edges):
+            offset = int((i - (n - 1) / 2) * step)
+            if offset == 0:
+                continue
+            new_x = max(min_x, min(max_x, px + offset))
+            adj_x, adj_y = re.draw_path[-2]
+            re.draw_path[-1] = (new_x, py)
+            re.draw_path[-2] = (new_x, adj_y)
+    else:
+        # Horizontal arrival: spread vertically along the border.
+        # Only spread when the approach segment is long enough to fit
+        # a clean corner + line + arrow (>= 4 cells from the last turn
+        # to the endpoint).  Tight gaps produce cramped ╭► patterns.
+        min_y = placement.draw_y + 1
+        max_y = placement.draw_y + placement.draw_height - 2
+        spread_range = max_y - min_y
+        if spread_range < n - 1:
+            return
+        # Check that all edges have enough approach distance
+        min_gap = min(abs(px - re.draw_path[-2][0]) for re in edges)
+        if min_gap < 4:
+            return  # not enough room for clean corner + arrow
+        step = min(2, spread_range // max(n - 1, 1))
+        for i, re in enumerate(edges):
+            offset = int((i - (n - 1) / 2) * step)
+            if offset == 0:
+                continue
+            new_y = max(min_y, min(max_y, py + offset))
+            adj_x, adj_y = re.draw_path[-2]
+            re.draw_path[-1] = (px, new_y)
+            re.draw_path.insert(-1, (adj_x, new_y))
 
 
 def _resolve_placement(
@@ -209,9 +304,13 @@ def _route_edge(
         soft_obstacles,
     )
 
-    # Pick shorter path
+    # Pick path: prefer the flow-aligned direction unless the alternative
+    # is significantly shorter.  A small bias keeps edges exiting in the
+    # natural flow direction (BOTTOM for TD, RIGHT for LR) which avoids
+    # tight corners next to node borders.
+    _PREFER_BIAS = 3  # allow preferred path to be up to 3 cells longer
     if path_pref and path_alt:
-        if len(path_pref) <= len(path_alt):
+        if len(path_pref) <= len(path_alt) + _PREFER_BIAS:
             path, start_dir, end_dir = path_pref, preferred[0], preferred[1]
         else:
             path, start_dir, end_dir = path_alt, alt[0], alt[1]

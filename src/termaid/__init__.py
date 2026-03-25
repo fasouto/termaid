@@ -104,6 +104,12 @@ def render(
             diagram = parse_treemap(text)
             return render_treemap(diagram, use_ascii=use_ascii).to_string()
 
+        if text.startswith("mindmap"):
+            from .parser.mindmap import parse_mindmap
+            from .renderer.mindmap import render_mindmap
+            diagram = parse_mindmap(text)
+            return render_mindmap(diagram, use_ascii=use_ascii, rounded=rounded_edges).to_string()
+
         graph = parse(text)
         from .output.text import render_text
         return render_text(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges, gap=gap)
@@ -190,6 +196,14 @@ def render_rich(
             from .output.rich import render_sequence_rich
             diagram = parse_treemap(text)
             canvas = render_treemap(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
+
+        if text.startswith("mindmap"):
+            from .parser.mindmap import parse_mindmap
+            from .renderer.mindmap import render_mindmap
+            from .output.rich import render_sequence_rich
+            diagram = parse_mindmap(text)
+            canvas = render_mindmap(diagram, use_ascii=use_ascii)
             return render_sequence_rich(canvas, theme=theme)
 
         graph = parse(text)
