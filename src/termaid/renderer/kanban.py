@@ -20,6 +20,8 @@ def render_kanban(
     diagram: Kanban,
     *,
     use_ascii: bool = False,
+    padding_x: int = _CARD_PAD,
+    gap: int = _COL_GAP,
 ) -> Canvas:
     """Render a Kanban model to a Canvas."""
     cs = ASCII if use_ascii else UNICODE
@@ -33,7 +35,7 @@ def render_kanban(
         title_w = len(col.title)
         card_w = max((len(card.title) + (len(card.metadata) + 1 if card.metadata else 0)
                       for card in col.cards), default=0)
-        inner_w = max(title_w, card_w) + _CARD_PAD * 2
+        inner_w = max(title_w, card_w) + padding_x * 2
         col_widths.append(max(inner_w + 2, 10))  # +2 for card borders, min 10
 
     # Compute column heights (title + cards)
@@ -48,7 +50,7 @@ def render_kanban(
         col_heights.append(h)
 
     total_height = max(col_heights) if col_heights else 4
-    total_width = sum(col_widths) + _COL_GAP * (len(col_widths) - 1)
+    total_width = sum(col_widths) + gap * (len(col_widths) - 1)
 
     canvas = Canvas(total_width + 1, total_height + 1)
 
@@ -57,7 +59,7 @@ def render_kanban(
     for ci, col in enumerate(diagram.columns):
         w = col_widths[ci]
         _draw_column(canvas, cs, col, x, 0, w, total_height, use_ascii)
-        x += w + _COL_GAP
+        x += w + gap
 
     return canvas
 

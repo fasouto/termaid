@@ -129,7 +129,7 @@ def render(
             from .parser.kanban import parse_kanban
             from .renderer.kanban import render_kanban
             diagram = parse_kanban(text)
-            return render_kanban(diagram, use_ascii=use_ascii).to_string()
+            return render_kanban(diagram, use_ascii=use_ascii, **_extra).to_string()
 
         if text.startswith("quadrantChart"):
             from .parser.quadrant import parse_quadrant
@@ -250,7 +250,7 @@ def render_rich(
             from .renderer.kanban import render_kanban
             from .output.rich import render_sequence_rich
             diagram = parse_kanban(text)
-            canvas = render_kanban(diagram, use_ascii=use_ascii)
+            canvas = render_kanban(diagram, use_ascii=use_ascii, **_extra_r)
             return render_sequence_rich(canvas, theme=theme)
 
         if text.startswith("quadrantChart"):
