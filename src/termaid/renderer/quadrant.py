@@ -115,13 +115,19 @@ def render_quadrant(
     for r, line in enumerate(lines):
         canvas.put_text(r, 0, line, style="label")
 
-    # Write grid with per-cell styles
+    # Write ALL grid cells (including spaces) so backgrounds fill
+    # the entire quadrant region. For non-space chars, use put().
+    # For spaces, write the style directly since put() skips them.
     for r in range(_CHART_H):
+        row_y = title_lines + r
         for c in range(_CHART_W):
+            col_x = _MARGIN_L + c
             ch = grid[r][c]
+            style = style_grid[r][c]
             if ch != " ":
-                canvas.put(title_lines + r, _MARGIN_L + c, ch,
-                          merge=False, style=style_grid[r][c])
+                canvas.put(row_y, col_x, ch, merge=False, style=style)
+            else:
+                canvas._style_grid[row_y][col_x] = style
 
     # Write x-axis label
     if x_label_line:

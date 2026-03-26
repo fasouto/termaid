@@ -207,9 +207,13 @@ def render_sequence_rich(
 
     styled_pairs = canvas.to_styled_pairs()
 
+    # Build lines, preserving trailing spaces on rows that have section
+    # backgrounds (so the colored bg fills the full width).
     lines: list[str] = []
     for row in styled_pairs:
-        lines.append("".join(ch for ch, _ in row).rstrip())
+        has_section = any(s.startswith("section:") for _, s in row)
+        raw = "".join(ch for ch, _ in row)
+        lines.append(raw if has_section else raw.rstrip())
 
     while lines and not lines[-1]:
         lines.pop()
@@ -229,7 +233,6 @@ def render_sequence_rich(
                 break
             if is_solid:
                 if style_key.startswith("section:"):
-                    # Section cells use their own bg from the style_map
                     style_str = style_map.get(style_key, th.bg_default)
                 elif style_key in ("node", "label"):
                     bg = th.bg_node
