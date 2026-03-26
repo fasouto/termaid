@@ -110,11 +110,11 @@ def _draw_column(
         cw = w - 2 * _COL_PAD
         cx = x + _COL_PAD
 
-        # Card box
-        canvas.put_text(card_y, cx, card_tl + card_hz * (cw - 2) + card_tr, style="node")
-        canvas.put(card_y + 1, cx, card_vt, merge=False, style="node")
-        canvas.put(card_y + 1, cx + cw - 1, card_vt, merge=False, style="node")
-        canvas.put_text(card_y + 2, cx, card_bl + card_hz * (cw - 2) + card_br, style="node")
+        # Card box (inherits column section color)
+        canvas.put_text(card_y, cx, card_tl + card_hz * (cw - 2) + card_tr, style=section_style)
+        canvas.put(card_y + 1, cx, card_vt, merge=False, style=section_style)
+        canvas.put(card_y + 1, cx + cw - 1, card_vt, merge=False, style=section_style)
+        canvas.put_text(card_y + 2, cx, card_bl + card_hz * (cw - 2) + card_br, style=section_style)
 
         # Card content
         text = card.title

@@ -186,8 +186,8 @@ def render_sequence_rich(
 
     # Section color cycle for kanban columns, timeline sections, quadrant regions
     _SECTION_COLORS = [
-        "#61AFEF", "#E06C75", "#98C379", "#E5C07B",
-        "#C678DD", "#56B6C2", "#BE5046", "#7EC8E3",
+        "bold #61AFEF", "bold #E06C75", "bold #98C379", "bold #E5C07B",
+        "bold #C678DD", "bold #56B6C2", "bold #BE5046", "bold #7EC8E3",
     ]
 
     style_map = {
