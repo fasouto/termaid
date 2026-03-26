@@ -162,8 +162,9 @@ def render_rich(
                     text.stylize(style_str, pos + col_idx, pos + col_idx + 1)
             else:
                 # Text themes: only style non-space characters
-                if ch != " " and style_key in style_map and style_map[style_key]:
-                    text.stylize(style_map[style_key], pos + col_idx, pos + col_idx + 1)
+                if style_key in style_map and style_map[style_key]:
+                    if ch != " " or style_key.startswith("section:"):
+                        text.stylize(style_map[style_key], pos + col_idx, pos + col_idx + 1)
         pos += len(line) + 1  # +1 for newline
 
     return text
@@ -184,10 +185,11 @@ def render_sequence_rich(
 
     th = get_theme(theme)
 
-    # Section color cycle for kanban columns, timeline sections, quadrant regions
-    _SECTION_COLORS = [
-        "bold #61AFEF", "bold #E06C75", "bold #98C379", "bold #E5C07B",
-        "bold #C678DD", "bold #56B6C2", "bold #BE5046", "bold #7EC8E3",
+    # Section background colors for kanban columns, timeline sections, quadrant regions.
+    # Muted dark tones that work as backgrounds with white text on top.
+    _SECTION_BG = [
+        "on #1B3A4B", "on #3B1B2B", "on #1B3B2B", "on #3B3B1B",
+        "on #2B1B3B", "on #1B3B3B", "on #3B2B1B", "on #1B2B3B",
     ]
 
     style_map = {
@@ -199,9 +201,9 @@ def render_sequence_rich(
         "default": th.default,
     }
 
-    # Add section styles with cycling colors
-    for i in range(len(_SECTION_COLORS)):
-        style_map[f"section:{i}"] = _SECTION_COLORS[i % len(_SECTION_COLORS)]
+    # Add section styles: white text on colored backgrounds
+    for i in range(len(_SECTION_BG)):
+        style_map[f"section:{i}"] = f"bold white {_SECTION_BG[i % len(_SECTION_BG)]}"
 
     styled_pairs = canvas.to_styled_pairs()
 
@@ -226,17 +228,23 @@ def render_sequence_rich(
             if col_idx >= len(line):
                 break
             if is_solid:
-                if style_key in ("node", "label") or style_key.startswith("section:"):
+                if style_key.startswith("section:"):
+                    # Section cells use their own bg from the style_map
+                    style_str = style_map.get(style_key, th.bg_default)
+                elif style_key in ("node", "label"):
                     bg = th.bg_node
+                    fg = style_map.get(style_key, "") if ch != " " else ""
+                    style_str = f"{fg} {bg}".strip() if fg else bg
                 else:
                     bg = th.bg_default
-                fg = style_map.get(style_key, "") if ch != " " else ""
-                style_str = f"{fg} {bg}".strip() if fg else bg
+                    fg = style_map.get(style_key, "") if ch != " " else ""
+                    style_str = f"{fg} {bg}".strip() if fg else bg
                 if style_str:
                     text.stylize(style_str, pos + col_idx, pos + col_idx + 1)
             else:
-                if ch != " " and style_key in style_map and style_map[style_key]:
-                    text.stylize(style_map[style_key], pos + col_idx, pos + col_idx + 1)
+                if style_key in style_map and style_map[style_key]:
+                    if ch != " " or style_key.startswith("section:"):
+                        text.stylize(style_map[style_key], pos + col_idx, pos + col_idx + 1)
         pos += len(line) + 1
 
     return text
