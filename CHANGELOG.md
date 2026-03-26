@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0 (2026-03-26)
+
+### New diagram types
+- **Timeline** (`timeline` syntax): vertical event list with sections and details
+- **Kanban** (`kanban` syntax): column-based task boards with cards
+- **Quadrant chart** (`quadrantChart` syntax): 2x2 grid with plotted data points
+- 13 diagram types now supported
+
+### New themes
+- **Solid-background themes**: `gruvbox`, `monokai`, `dracula`, `nord`, `solarized` with filled region backgrounds
+- Per-section coloring: kanban columns, quadrant regions, and timeline sections get distinct colors
+- Depth shading: kanban cards use a lighter shade of the column color
+- `--themes` flag to list all available themes
+
+### New features
+- **JSON ingest** (`--json TYPE`): pipe structured data and render as treemap, pie, mindmap, or flowchart
+- **`--demo [TYPE]`**: render sample diagrams for any diagram type
+- **`padding_x` and `gap`** now supported by sequence, class, ER, block, and kanban renderers
+- Parser fix: edge labels with quoted text (`-->|"Yes"|`) no longer rendered as spaces
+
 ## 0.3.0 (2026-03-25)
 
 ### Rendering engine overhaul
