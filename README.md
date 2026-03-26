@@ -10,7 +10,7 @@
 
 ## Features
 
-- **10 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, and mindmaps
+- **13 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, mindmaps, timelines, kanban boards, and quadrant charts
 - **Zero dependencies:** pure Python, nothing to install beyond the package itself
 - **Terminal-aware:** auto-fits diagrams to terminal width with progressive compaction
 - **Rich and Textual integration:** colored output and TUI widgets with optional extras
@@ -403,9 +403,10 @@ Project ──├─ Development ──╭─ Frontend
 
 | Flag | Description |
 |------|-------------|
-| `--tui` | Interactive TUI viewer (requires `pip install termaid[tui]`) |
 | `--ascii` | ASCII-only output (no Unicode box-drawing) |
-| `--theme NAME` | Color theme: `default`, `terra`, `neon`, `mono`, `amber`, `phosphor` (requires `pip install termaid[rich]`) |
+| `--theme NAME` | Color theme (requires `pip install termaid[rich]`). Use `--themes` to list |
+| `--themes` | List all available color themes |
+| `--demo [TYPE]` | Render sample diagrams (`all`, `flowchart`, `sequence`, `mindmap`, etc.) |
 | `--padding-x N` | Horizontal padding inside boxes (default: 4) |
 | `--padding-y N` | Vertical padding inside boxes (default: 2) |
 | `--gap N` | Space between nodes (default: 4). Use `1` or `2` for compact diagrams |
@@ -414,6 +415,8 @@ Project ──├─ Development ──╭─ Frontend
 | `--sharp-edges` | Sharp corners on edge turns instead of rounded |
 | `-o FILE` | Write output to file instead of stdout |
 | `--show-ids` | Show node IDs alongside labels for debugging (e.g. `myId: My Label`) |
+| `--json TYPE` | Pipe JSON/tabular data and render as `treemap`, `pie`, `mindmap`, or `flowchart` |
+| `--tui` | Interactive TUI viewer (requires `pip install termaid[tui]`) |
 
 ## Python API
 
@@ -439,7 +442,9 @@ class MyApp(App):
 
 ## Themes
 
-Six built-in themes for `--theme` / `render_rich()`:
+11 built-in themes for `--theme` / `render_rich()`. Run `termaid --themes` to list them.
+
+**Text themes** (foreground colors only):
 
 | Theme | Colors | Description |
 |-------|--------|-------------|
@@ -449,6 +454,16 @@ Six built-in themes for `--theme` / `render_rich()`:
 | `mono` | ![#FFFFFF](https://placehold.co/12x12/FFFFFF/FFFFFF.png) ![#AAAAAA](https://placehold.co/12x12/AAAAAA/AAAAAA.png) ![#666666](https://placehold.co/12x12/666666/666666.png) | White/gray monochrome |
 | `amber` | ![#FFB000](https://placehold.co/12x12/FFB000/FFB000.png) ![#FFD080](https://placehold.co/12x12/FFD080/FFD080.png) ![#FFD580](https://placehold.co/12x12/FFD580/FFD580.png) | Amber/gold CRT-style |
 | `phosphor` | ![#33FF33](https://placehold.co/12x12/33FF33/33FF33.png) ![#66FF66](https://placehold.co/12x12/66FF66/66FF66.png) ![#AAFFAA](https://placehold.co/12x12/AAFFAA/AAFFAA.png) | Green phosphor terminal-style |
+
+**Solid themes** (filled backgrounds with foreground colors):
+
+| Theme | Colors | Description |
+|-------|--------|-------------|
+| `gruvbox` | ![#282828](https://placehold.co/12x12/282828/282828.png) ![#FABD2F](https://placehold.co/12x12/FABD2F/FABD2F.png) ![#FE8019](https://placehold.co/12x12/FE8019/FE8019.png) | Gruvbox dark palette |
+| `monokai` | ![#272822](https://placehold.co/12x12/272822/272822.png) ![#F92672](https://placehold.co/12x12/F92672/F92672.png) ![#A6E22E](https://placehold.co/12x12/A6E22E/A6E22E.png) | Monokai dark with pink/green accents |
+| `dracula` | ![#282A36](https://placehold.co/12x12/282A36/282A36.png) ![#BD93F9](https://placehold.co/12x12/BD93F9/BD93F9.png) ![#50FA7B](https://placehold.co/12x12/50FA7B/50FA7B.png) | Dracula purple/pink/green palette |
+| `nord` | ![#2E3440](https://placehold.co/12x12/2E3440/2E3440.png) ![#88C0D0](https://placehold.co/12x12/88C0D0/88C0D0.png) ![#A3BE8C](https://placehold.co/12x12/A3BE8C/A3BE8C.png) | Nord muted blue/cyan arctic palette |
+| `solarized` | ![#002B36](https://placehold.co/12x12/002B36/002B36.png) ![#268BD2](https://placehold.co/12x12/268BD2/268BD2.png) ![#B58900](https://placehold.co/12x12/B58900/B58900.png) | Solarized dark blue/yellow/cyan |
 
 ## Optional extras
 
