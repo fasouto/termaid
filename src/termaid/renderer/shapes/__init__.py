@@ -130,7 +130,8 @@ def draw_diamond(
     """
     is_unicode = cs.horizontal == "─"
     marker = "◇" if is_unicode else "*"
-    cx = x + (width - char_width(marker)) // 2
+    mw = char_width(marker)
+    cx = x + (width - mw) // 2 if mw > 1 else x + width // 2
 
     # Top border with ◆ at center
     canvas.put(y, x, cs.top_left, style=style)
@@ -194,7 +195,8 @@ def draw_circle(
     """
     is_unicode = cs.horizontal == "─"
     marker = "◯" if is_unicode else "O"
-    cx = x + (width - char_width(marker)) // 2
+    mw = char_width(marker)
+    cx = x + (width - mw) // 2 if mw > 1 else x + width // 2
 
     # Draw as rounded box first
     draw_rounded(canvas, x, y, width, height, label, cs, style=style)
@@ -410,8 +412,9 @@ def draw_start_state(
 ) -> None:
     """Draw a start state: filled circle (●)."""
     marker = "●" if cs.horizontal == "─" else "*"
+    mw = char_width(marker)
     cy = y + height // 2
-    cx = x + (width - char_width(marker)) // 2
+    cx = x + (width - mw) // 2 if mw > 1 else x + width // 2
     canvas.put(cy, cx, marker, style=style)
 
 
@@ -421,8 +424,9 @@ def draw_end_state(
 ) -> None:
     """Draw an end state: bullseye (◉)."""
     marker = "◉" if cs.horizontal == "─" else "@"
+    mw = char_width(marker)
     cy = y + height // 2
-    cx = x + (width - char_width(marker)) // 2
+    cx = x + (width - mw) // 2 if mw > 1 else x + width // 2
     canvas.put(cy, cx, marker, style=style)
 
 

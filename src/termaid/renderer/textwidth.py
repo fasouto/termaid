@@ -139,6 +139,8 @@ def display_ljust(text: str, width: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Auto-detect on import
+# Default: OFF.  CJK-ambiguous marker width varies across terminal fonts
+# even on CJK systems, so auto-detection is unreliable.  Users who need
+# wide markers should opt in via ``--cjk`` or ``TERMAID_CJK=1``.
 # ---------------------------------------------------------------------------
-_cjk_mode = _detect_cjk()
+_cjk_mode = _detect_cjk() if os.environ.get("TERMAID_CJK") else False
