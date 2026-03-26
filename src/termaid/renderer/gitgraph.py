@@ -223,6 +223,18 @@ def _draw_lr(
             for r in range(r_min, r_max + 1):
                 canvas.put(r, col, v_char, style="edge")
 
+    # Build a set of columns occupied by vertical merge/fork lines
+    # so labels can avoid overlapping them.
+    merge_cols: set[int] = set()
+    for c in diagram.commits:
+        col = commit_col[c.id]
+        for parent_id in c.parents:
+            if parent_id not in commit_map:
+                continue
+            parent = commit_map[parent_id]
+            if parent.branch != c.branch:
+                merge_cols.add(col)
+
     # 4. Draw commit markers and labels (LAST so they are visible)
     for c in diagram.commits:
         col = commit_col[c.id]
@@ -232,10 +244,14 @@ def _draw_lr(
 
         canvas.put(row, col, marker, merge=False, style="node")
 
-        # Center label under the marker's visual midpoint
+        # Center label under the marker's visual midpoint.
+        # If the label would land on or immediately after a merge vertical
+        # line (which occupies the col below ┼), nudge it right.
         label = c.id
         visual_center = col + mw // 2
         label_col = visual_center - display_width(label) // 2
+        if col in merge_cols and label_col <= col + 1 and mw > 1:
+            label_col = col + 2
         canvas.put_text(row + 1, label_col, label, style="label")
 
         if c.tag:
