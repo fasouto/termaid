@@ -400,8 +400,6 @@ _DEMO_SOURCES = {
 
 def _run_demo(args: argparse.Namespace) -> int:
     """Render sample diagrams."""
-    from termaid import render
-
     demo_type = args.demo.lower()
     if demo_type == "all":
         keys = list(_DEMO_SOURCES.keys())
@@ -412,10 +410,22 @@ def _run_demo(args: argparse.Namespace) -> int:
         print(f"Available: all, {', '.join(_DEMO_SOURCES.keys())}", file=sys.stderr)
         return 1
 
+    use_color = _use_color(args)
+
     for key in keys:
         title, source = _DEMO_SOURCES[key]
         print(f"=== {title} ===")
-        print(render(source))
+        if use_color:
+            try:
+                from termaid import render_rich
+                from rich import print as rprint
+                rprint(render_rich(source, theme=args.theme or "default"))
+            except ImportError:
+                from termaid import render
+                print(render(source))
+        else:
+            from termaid import render
+            print(render(source))
         print()
 
     return 0
