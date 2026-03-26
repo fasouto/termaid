@@ -32,15 +32,18 @@ import unicodedata
 # are intentionally excluded — they stay 1 column everywhere.
 # ---------------------------------------------------------------------------
 _CJK_WIDE_AMBIGUOUS: set[str] = set(
-    # Geometric Shapes (U+25A0–25FF) used as border markers
+    # Geometric Shapes used as border markers (inside box outlines).
+    # These MUST be 2-column in CJK mode so borders align with body rows.
     "◇◆●○◯"
-    "▲△▼▽"
     "■□▪▫"
-    # Miscellaneous Symbols used as markers
+    # Note: ▲▼△▽ (directional arrows / inheritance triangles) are
+    # intentionally excluded.  They are standalone markers placed at
+    # edge endpoints, and treating them as 2 columns causes adjacent
+    # markers (e.g. class diagram inheritance △△) to overlap.
+    # Note: Block Elements (█▓▒ etc.) are also excluded — they are
+    # bar-chart fill characters that must stay 1-column.
+    # Miscellaneous Symbols
     "✖"
-    # Note: Block Elements (█▓▒ etc.) are intentionally excluded.
-    # They are used as bar-chart fill characters and should remain
-    # 1-column in the grid to preserve bar proportions.
 )
 
 # Characters that have EAW=N (Narrow) but render as 2 columns in CJK
