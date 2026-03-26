@@ -184,6 +184,12 @@ def render_sequence_rich(
 
     th = get_theme(theme)
 
+    # Section color cycle for kanban columns, timeline sections, quadrant regions
+    _SECTION_COLORS = [
+        "#61AFEF", "#E06C75", "#98C379", "#E5C07B",
+        "#C678DD", "#56B6C2", "#BE5046", "#7EC8E3",
+    ]
+
     style_map = {
         "node": th.node,
         "edge": th.edge,
@@ -192,6 +198,10 @@ def render_sequence_rich(
         "edge_label": th.edge_label,
         "default": th.default,
     }
+
+    # Add section styles with cycling colors
+    for i in range(len(_SECTION_COLORS)):
+        style_map[f"section:{i}"] = _SECTION_COLORS[i % len(_SECTION_COLORS)]
 
     styled_pairs = canvas.to_styled_pairs()
 
@@ -216,7 +226,10 @@ def render_sequence_rich(
             if col_idx >= len(line):
                 break
             if is_solid:
-                bg = th.bg_node if style_key in ("node", "label") else th.bg_default
+                if style_key in ("node", "label") or style_key.startswith("section:"):
+                    bg = th.bg_node
+                else:
+                    bg = th.bg_default
                 fg = style_map.get(style_key, "") if ch != " " else ""
                 style_str = f"{fg} {bg}".strip() if fg else bg
                 if style_str:

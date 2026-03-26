@@ -79,23 +79,53 @@ def render_quadrant(
                 if 0 <= start + i < _CHART_W:
                     grid[py][start + i] = ch
 
-    # Render grid with left margin
-    pad = " " * _MARGIN_L
-    for row in grid:
-        lines.append(pad + "".join(row))
+    # Build a style grid matching the char grid
+    style_grid: list[list[str]] = [["default" for _ in range(_CHART_W)] for _ in range(_CHART_H)]
+    for r in range(_CHART_H):
+        for c in range(_CHART_W):
+            if r < half_h and c < half_w:
+                style_grid[r][c] = "section:1"   # Q2 top-left
+            elif r < half_h and c >= half_w:
+                style_grid[r][c] = "section:0"   # Q1 top-right
+            elif r >= half_h and c < half_w:
+                style_grid[r][c] = "section:2"   # Q3 bottom-left
+            else:
+                style_grid[r][c] = "section:3"   # Q4 bottom-right
+    # Axes get edge style
+    for c in range(_CHART_W):
+        style_grid[half_h][c] = "edge"
+    for r in range(_CHART_H):
+        style_grid[r][half_w] = "edge"
 
-    # X-axis
+    # Render grid with left margin
+    title_lines = len(lines)  # lines added before the grid (title)
+
+    # X-axis label
+    x_label_line = ""
     if diagram.x_label:
         x_pad = _MARGIN_L + (_CHART_W - len(diagram.x_label)) // 2
-        lines.append("")
-        lines.append(" " * max(0, x_pad) + diagram.x_label)
+        x_label_line = " " * max(0, x_pad) + diagram.x_label
 
-    # Write to canvas
-    width = max((len(line) for line in lines), default=1) + 1
-    height = len(lines)
-    canvas = Canvas(width, height)
+    # Compute canvas size
+    total_h = title_lines + _CHART_H + (2 if x_label_line else 0)
+    width = _MARGIN_L + _CHART_W + 1
+    canvas = Canvas(width, total_h)
+
+    # Write title lines
     for r, line in enumerate(lines):
-        canvas.put_text(r, 0, line, style="node")
+        canvas.put_text(r, 0, line, style="label")
+
+    # Write grid with per-cell styles
+    for r in range(_CHART_H):
+        for c in range(_CHART_W):
+            ch = grid[r][c]
+            if ch != " ":
+                canvas.put(title_lines + r, _MARGIN_L + c, ch,
+                          merge=False, style=style_grid[r][c])
+
+    # Write x-axis label
+    if x_label_line:
+        canvas.put_text(title_lines + _CHART_H + 1, 0, x_label_line, style="edge_label")
 
     return canvas
 

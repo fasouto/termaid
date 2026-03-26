@@ -21,13 +21,13 @@ def render_timeline(
     if not diagram.sections:
         return Canvas(1, 1)
 
-    # Build lines of output
-    lines: list[str] = []
+    # Build lines with per-section styles
+    styled_lines: list[tuple[str, str]] = []  # (text, style_key)
 
     # Title
     if diagram.title:
-        lines.append(diagram.title)
-        lines.append("")
+        styled_lines.append((diagram.title, "label"))
+        styled_lines.append(("", "default"))
 
     v = "|" if use_ascii else "│"
     h = "-" if use_ascii else "─"
@@ -35,32 +35,31 @@ def render_timeline(
     section_marker = "=" if use_ascii else "═"
 
     for si, section in enumerate(diagram.sections):
+        style = f"section:{si}"
+
         # Section header
         if section.title:
             header = f" {section_marker}{section_marker} {section.title} {section_marker}{section_marker}"
-            lines.append(header)
-            lines.append(f" {v}")
+            styled_lines.append((header, style))
+            styled_lines.append((f" {v}", style))
 
         for ei, event in enumerate(section.events):
-            # Event node
             is_last_event = ei == len(section.events) - 1
             is_last_section = si == len(diagram.sections) - 1
 
-            lines.append(f" {bullet}{h}{h} {event.title}")
+            styled_lines.append((f" {bullet}{h}{h} {event.title}", style))
 
-            # Details indented under the event
             for detail in event.details:
-                lines.append(f" {v}   {detail}")
+                styled_lines.append((f" {v}   {detail}", "edge_label"))
 
-            # Continuation line
             if not (is_last_event and is_last_section):
-                lines.append(f" {v}")
+                styled_lines.append((f" {v}", style))
 
     # Write to canvas
-    width = max((len(line) for line in lines), default=1) + 1
-    height = len(lines)
+    width = max((len(line) for line, _ in styled_lines), default=1) + 1
+    height = len(styled_lines)
     canvas = Canvas(width, height)
-    for r, line in enumerate(lines):
-        canvas.put_text(r, 0, line, style="node")
+    for r, (line, style) in enumerate(styled_lines):
+        canvas.put_text(r, 0, line, style=style)
 
     return canvas

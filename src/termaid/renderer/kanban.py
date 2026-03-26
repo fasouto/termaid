@@ -54,11 +54,12 @@ def render_kanban(
 
     canvas = Canvas(total_width + 1, total_height + 1)
 
-    # Draw each column
+    # Draw each column with a rotating section style
     x = 0
     for ci, col in enumerate(diagram.columns):
         w = col_widths[ci]
-        _draw_column(canvas, cs, col, x, 0, w, total_height, use_ascii)
+        section_style = f"section:{ci}"
+        _draw_column(canvas, cs, col, x, 0, w, total_height, use_ascii, section_style)
         x += w + gap
 
     return canvas
@@ -68,6 +69,7 @@ def _draw_column(
     canvas: Canvas, cs: CharSet,
     col, x: int, y: int, w: int, h: int,
     use_ascii: bool,
+    section_style: str = "subgraph",
 ) -> None:
     """Draw a single kanban column with its cards."""
     tl = "+" if use_ascii else "╭"
@@ -78,22 +80,22 @@ def _draw_column(
     vt = "|" if use_ascii else "│"
 
     # Column border
-    canvas.put_text(y, x, tl + hz * (w - 2) + tr, style="subgraph")
-    canvas.put_text(y + h - 1, x, bl + hz * (w - 2) + br, style="subgraph")
+    canvas.put_text(y, x, tl + hz * (w - 2) + tr, style=section_style)
+    canvas.put_text(y + h - 1, x, bl + hz * (w - 2) + br, style=section_style)
     for r in range(y + 1, y + h - 1):
-        canvas.put(r, x, vt, merge=False, style="subgraph")
-        canvas.put(r, x + w - 1, vt, merge=False, style="subgraph")
+        canvas.put(r, x, vt, merge=False, style=section_style)
+        canvas.put(r, x + w - 1, vt, merge=False, style=section_style)
 
     # Column title (centered, bold)
     title = col.title
     if len(title) > w - 4:
         title = title[:w - 5] + "."
     title_x = x + (w - len(title)) // 2
-    canvas.put_text(y + 1, title_x, title, style="subgraph_label")
+    canvas.put_text(y + 1, title_x, title, style=section_style)
 
     # Separator under title
     sep = hz * (w - 2)
-    canvas.put_text(y + 2, x + 1, sep, style="subgraph")
+    canvas.put_text(y + 2, x + 1, sep, style=section_style)
 
     # Cards
     card_y = y + 3
