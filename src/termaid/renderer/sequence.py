@@ -9,6 +9,7 @@ from ..model.sequence import ActivateEvent, Block, BlockSection, DestroyEvent, M
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
 from .shapes import draw_rectangle, draw_cylinder
+from ..utils import display_width
 
 
 # ── layout constants ──────────────────────────────────────────────
@@ -112,7 +113,7 @@ def _compute_layout(
         return [], [], 0, 0, 0, []
 
     # Box widths based on label length
-    box_widths = [max(len(p.label) + padding_x, 12) for p in diagram.participants]
+    box_widths = [max(display_width(p.label) + padding_x, 12) for p in diagram.participants]
 
     # Header height: tallest participant kind
     header_height = max(_KIND_HEIGHT.get(p.kind, 3) for p in diagram.participants)
@@ -158,7 +159,7 @@ def _compute_layout(
         if isinstance(ev, Note):
             # Notes may need gap expansion
             lines = _note_lines(ev)
-            note_width = max(len(line) for line in lines) + 4
+            note_width = max(display_width(line) for line in lines) + 4
             for pid in ev.participants:
                 pi = _participant_index(diagram, pid)
                 if pi < 0:
@@ -206,7 +207,7 @@ def _compute_layout(
             si = _participant_index(diagram, ev.source)
             ti = _participant_index(diagram, ev.target)
             if si >= 0 and si == ti:
-                loop_width = max(len(ev.label) + 4, 8)
+                loop_width = max(display_width(ev.label) + 4, 8)
                 needed = col_centers[si] + loop_width + 1
                 max_right = max(max_right, needed)
         elif isinstance(ev, Note):
@@ -215,7 +216,7 @@ def _compute_layout(
                 pi = _participant_index(diagram, pid)
                 if pi >= 0 and ev.position == "rightof":
                     lines = _note_lines(ev)
-                    note_width = max(len(line) for line in lines) + 4
+                    note_width = max(display_width(line) for line in lines) + 4
                     needed = col_centers[pi] + 2 + note_width + 1
                     max_right = max(max_right, needed)
 
@@ -246,7 +247,7 @@ def _draw_actor(canvas: Canvas, cx: int, y: int, label: str, use_ascii: bool) ->
     canvas.put(y + 1, cx + 1, "\\", merge=False, style=style)
     canvas.put(y + 2, cx - 1, "/", merge=False, style=style)
     canvas.put(y + 2, cx + 1, "\\", merge=False, style=style)
-    label_col = cx - len(label) // 2
+    label_col = cx - display_width(label) // 2
     canvas.put_text(y + 4, label_col, label, style="label")
 
 
@@ -284,7 +285,7 @@ def _draw_queue(canvas: Canvas, cx: int, y: int, width: int, label: str, cs: Cha
             canvas.put(r, bx + width - 1, cs.vertical, style=style)
 
     # Label centered
-    label_col = bx + (width - len(label)) // 2
+    label_col = bx + (width - display_width(label)) // 2
     label_row = y + h // 2
     canvas.put_text(label_row, label_col, label, style="label")
 
@@ -315,7 +316,7 @@ def _draw_boundary(canvas: Canvas, cx: int, y: int, label: str, cs: CharSet, use
     canvas.put(y + 2, box_right, cs.bottom_right, style=style)
 
     # Label below
-    label_col = cx - len(label) // 2
+    label_col = cx - display_width(label) // 2
     canvas.put_text(y + 4, label_col, label, style="label")
 
 
@@ -337,7 +338,7 @@ def _draw_control(canvas: Canvas, cx: int, y: int, label: str, cs: CharSet, use_
     canvas.put(y + 2, cx + 1, cs.round_bottom_right if not use_ascii else cs.bottom_right, style=style)
 
     # Label below
-    label_col = cx - len(label) // 2
+    label_col = cx - display_width(label) // 2
     canvas.put_text(y + 4, label_col, label, style="label")
 
 
@@ -358,7 +359,7 @@ def _draw_entity(canvas: Canvas, cx: int, y: int, label: str, cs: CharSet, use_a
     canvas.put(y + 2, cx + 1, cs.horizontal, merge=False, style=style)
 
     # Label below
-    label_col = cx - len(label) // 2
+    label_col = cx - display_width(label) // 2
     canvas.put_text(y + 4, label_col, label, style="label")
 
 
@@ -403,7 +404,7 @@ def _draw_collections(canvas: Canvas, cx: int, y: int, width: int, label: str, c
     canvas.put(y + h - 1, bx + width - 1, cs.bottom_right, style=style)
 
     # Label centered in front rectangle
-    label_col = bx + (width - len(label)) // 2
+    label_col = bx + (width - display_width(label)) // 2
     label_row = y + 1 + (h - 1) // 2
     canvas.put_text(label_row, label_col, label, style="label")
 
@@ -691,7 +692,7 @@ def _draw_note(
 ) -> None:
     """Draw a note box at the given row."""
     lines = _note_lines(note)
-    note_width = max(len(line) for line in lines) + 4
+    note_width = max(display_width(line) for line in lines) + 4
     note_height = len(lines) + 2
 
     # Determine horizontal placement
@@ -817,7 +818,7 @@ def _draw_self_message(
     use_ascii: bool,
 ) -> None:
     """Draw a self-referencing message (loop to the right)."""
-    loop_width = max(len(display_label) + 4, 8)
+    loop_width = max(display_width(display_label) + 4, 8)
 
     if msg.line_type == "dotted":
         h_char = "." if use_ascii else "┄"

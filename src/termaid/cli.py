@@ -5,6 +5,7 @@ import argparse
 import os
 import shutil
 import sys
+from .utils import display_width
 
 
 def _get_version() -> str:
@@ -18,7 +19,7 @@ def _get_version() -> str:
 
 def _max_line_width(text: str) -> int:
     """Return the width of the longest line in text."""
-    return max((len(line) for line in text.split("\n")), default=0)
+    return max((display_width(line) for line in text.split("\n")), default=0)
 
 
 def _auto_fit(

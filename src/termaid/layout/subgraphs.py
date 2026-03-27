@@ -6,6 +6,7 @@ and computes subgraph bounding boxes after node placement.
 from __future__ import annotations
 
 from ..graph.model import Direction, Graph, Subgraph
+from ..utils import display_width
 from .grid import (
     SG_BORDER_PAD,
     SG_GAP_PER_LEVEL,
@@ -161,7 +162,7 @@ def compute_subgraph_bounds(
             return None
 
         content_width = int(max_x - min_x) + SG_BORDER_PAD * 2
-        label_width = len(sg.label) + 4
+        label_width = display_width(sg.label) + 4
         final_width = max(content_width, label_width)
 
         bounds = SubgraphBounds(

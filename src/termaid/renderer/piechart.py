@@ -8,6 +8,7 @@ from __future__ import annotations
 from ..model.piechart import PieChart
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
+from ..utils import display_width
 
 _FILL_CHARS = ["█", "▓", "░", "▒", "▞", "▚", "▖", "▗"]
 _FILL_CHARS_ASCII = ["#", "*", "+", "~", ":", ".", "o", "="]
@@ -31,7 +32,7 @@ def render_pie_chart(
     fills = _FILL_CHARS_ASCII if use_ascii else _FILL_CHARS
 
     # Compute label column width
-    max_label_len = max(len(s.label) for s in diagram.slices)
+    max_label_len = max(display_width(s.label) for s in diagram.slices)
     label_col_w = max_label_len + _MARGIN
 
     # Compute suffix (percentage + optional value)

@@ -17,6 +17,7 @@ from ..graph.shapes import NodeShape
 from ..layout.grid import GridLayout, NodePlacement, compute_layout
 from ..routing.router import AttachDir, RoutedEdge, route_edges
 from .canvas import Canvas
+from ..utils import display_width
 from .charset import ASCII, UNICODE, CharSet
 from .shapes import SHAPE_RENDERERS, draw_rectangle
 
@@ -199,7 +200,7 @@ def _draw_nodes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -
         # Overwrite label with styled text if markdown segments exist
         if node.label_segments:
             label_row = p.draw_y + p.draw_height // 2
-            total_len = sum(len(seg.text) for seg in node.label_segments)
+            total_len = sum(display_width(seg.text) for seg in node.label_segments)
             label_col = p.draw_x + (p.draw_width - total_len) // 2
             styled_segs: list[tuple[str, str]] = []
             for seg in node.label_segments:
@@ -487,7 +488,7 @@ def _try_place_label(
     placed: list[tuple[int, int, int]],
 ) -> bool:
     """Try to place a label at (row, col). Returns True if placed."""
-    col_end = col + len(label)
+    col_end = col + display_width(label)
     if col < 0 or row < 0:
         return False
     if _label_overlaps(row, col, col_end, placed):
@@ -538,7 +539,7 @@ def _try_place_on_segment(
     prefer_left: explicitly prefer the left side for vertical segments.
     bias_target: place closer to the target end (2/3) instead of midpoint.
     """
-    label_len = len(label)
+    label_len = display_width(label)
 
     if x1 == x2 and abs(y2 - y1) >= 2:
         # Vertical segment — place beside the line.
@@ -612,7 +613,7 @@ def _draw_edge_label(
     if not label:
         return
 
-    label_len = len(label)
+    label_len = display_width(label)
     path = re.draw_path
 
     # Build segment list ordered by preference: post-turn segments first,
@@ -669,7 +670,7 @@ def _draw_notes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -
         p = layout.placements[note.target]
 
         lines = note.text.split("\n")
-        note_width = max(len(line) for line in lines) + 4
+        note_width = max(display_width(line) for line in lines) + 4
         note_height = len(lines) + 2
 
         if note.position == "rightof":

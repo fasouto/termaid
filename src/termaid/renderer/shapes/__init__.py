@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from ..canvas import Canvas
+from ...utils import display_width
 from ..charset import CharSet
 from ...graph.shapes import NodeShape
 
@@ -398,7 +399,7 @@ def _draw_label(
     start_row = y + (height - len(lines)) // 2
     for i, line in enumerate(lines):
         row = start_row + i
-        col = x + (width - len(line)) // 2
+        col = x + (width - display_width(line)) // 2
         if 0 <= row < canvas.height:
             canvas.put_text(row, col, line, style=label_style)
 

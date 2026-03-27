@@ -9,6 +9,7 @@ from __future__ import annotations
 from ..model.treemap import Treemap, TreemapNode
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
+from ..utils import display_width
 
 _MIN_BOX_W = 4
 _MIN_BOX_H = 3
@@ -67,7 +68,7 @@ def _compute_min_width(nodes: list[TreemapNode]) -> int:
             node_w = child_w + 2
         else:
             # borders (2) + label padding
-            label_w = len(node.label) + _LABEL_PAD
+            label_w = display_width(node.label) + _LABEL_PAD
             node_w = max(_MIN_BOX_W, label_w + 2)
         total += node_w
 
@@ -220,9 +221,9 @@ def _draw_node(
     # Label — centered on the first inner row
     label = node.label
     inner_w = w - 2
-    if len(label) > inner_w:
+    if display_width(label) > inner_w:
         label = label[:inner_w - 1] + "…" if inner_w > 1 else label[:inner_w]
-    label_col = x + 1 + max(0, (inner_w - len(label)) // 2)
+    label_col = x + 1 + max(0, (inner_w - display_width(label)) // 2)
     canvas.put_text(y + 1, label_col, label, style="label")
 
     # Value (for leaves only)

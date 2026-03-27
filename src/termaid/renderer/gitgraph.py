@@ -8,6 +8,7 @@ from __future__ import annotations
 from ..model.gitgraph import Commit, GitGraph
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
+from ..utils import display_width
 
 # ── layout constants ──────────────────────────────────────────────
 _MIN_COMMIT_GAP = 6  # minimum horizontal gap between commit markers
@@ -222,12 +223,12 @@ def _draw_lr(
         canvas.put(row, col, marker, merge=False, style="node")
 
         label = c.id
-        label_col = col - len(label) // 2
+        label_col = col - display_width(label) // 2
         canvas.put_text(row + 1, label_col, label, style="label")
 
         if c.tag:
             tag_text = f"[{c.tag}]"
-            tag_col = col - len(tag_text) // 2
+            tag_col = col - display_width(tag_text) // 2
             canvas.put_text(row - 1, tag_col, tag_text, style="edge_label")
 
 
@@ -377,13 +378,13 @@ def _draw_tb(
             canvas.put_text(row - 1, label_col, c.id, style="label")
             if c.tag:
                 tag_text = f"[{c.tag}]"
-                tag_col = col - len(tag_text) // 2
+                tag_col = col - display_width(tag_text) // 2
                 canvas.put_text(row + 1, tag_col, tag_text, style="edge_label")
         else:
             canvas.put_text(row + 1, label_col, c.id, style="label")
             if c.tag:
                 tag_text = f"[{c.tag}]"
-                tag_col = col - len(tag_text) // 2
+                tag_col = col - display_width(tag_text) // 2
                 canvas.put_text(row - 1, tag_col, tag_text, style="edge_label")
 
 

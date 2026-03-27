@@ -7,6 +7,8 @@ and the correct junction character is derived from the combined directions.
 """
 from __future__ import annotations
 
+import unicodedata
+
 from .charset import CharSet, UNICODE
 
 
@@ -191,9 +193,23 @@ class Canvas:
             self._style_grid[row][col] = style
 
     def put_text(self, row: int, col: int, text: str, style: str = "") -> None:
-        """Place a string of characters starting at (row, col)."""
-        for i, ch in enumerate(text):
-            self.put(row, col + i, ch, merge=False, style=style)
+        """Place a string of characters starting at (row, col).
+
+        Wide (CJK) characters advance the column by 2 and leave a
+        placeholder space in the next cell so subsequent characters
+        don't overlap.
+        """
+        offset = 0
+        for ch in text:
+            self.put(row, col + offset, ch, merge=False, style=style)
+            if unicodedata.east_asian_width(ch) in ("F", "W"):
+                # Wide char occupies 2 columns; blank the shadow cell
+                if col + offset + 1 < self.width:
+                    self._grid[row][col + offset + 1] = ""
+                    self._style_grid[row][col + offset + 1] = style
+                offset += 2
+            else:
+                offset += 1
 
     def put_styled_text(self, row: int, col: int, segments: list[tuple[str, str]]) -> None:
         """Place text with per-segment style keys. Each segment is (text, style_key)."""
@@ -201,7 +217,13 @@ class Canvas:
         for text, style in segments:
             for ch in text:
                 self.put(row, col + offset, ch, merge=False, style=style)
-                offset += 1
+                if unicodedata.east_asian_width(ch) in ("F", "W"):
+                    if col + offset + 1 < self.width:
+                        self._grid[row][col + offset + 1] = ""
+                        self._style_grid[row][col + offset + 1] = style
+                    offset += 2
+                else:
+                    offset += 1
 
     def get_style(self, row: int, col: int) -> str:
         """Get the style key at a position."""

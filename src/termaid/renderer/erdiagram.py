@@ -10,6 +10,7 @@ from collections import deque
 from ..model.erdiagram import Entity, ERDiagram, Relationship
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
+from ..utils import display_width
 
 # ── layout constants ──────────────────────────────────────────────
 _PAD = 2             # horizontal padding inside entity box
@@ -193,7 +194,7 @@ def _compute_layout(
     for rel in diagram.relationships:
         s, t = rel.entity1, rel.entity2
         if s in layer_of and t in layer_of and layer_of[s] == layer_of[t]:
-            pair_g = len(rel.label) + 4 if rel.label else gap
+            pair_g = display_width(rel.label) + 4 if rel.label else gap
             pair_g = max(pair_g, gap)
             key = (min(s, t), max(s, t))
             pair_gap[key] = max(pair_gap.get(key, gap), pair_g)
@@ -208,7 +209,7 @@ def _compute_layout(
             card2_len = len(_card_text(rel.card2))
             needed = max(needed, card1_len + card2_len + 4)
             if rel.label:
-                needed = max(needed, len(rel.label) + 4)
+                needed = max(needed, display_width(rel.label) + 4)
             cross_layer_gap = max(cross_layer_gap, needed)
 
     is_lr = diagram.direction == "LR"
@@ -395,7 +396,7 @@ def _draw_relationship(
         if card1_text:
             canvas.put_text(start_row - 1, start_col + 1, card1_text, style="edge_label")
         if card2_text:
-            canvas.put_text(end_row - 1, end_col - len(card2_text), card2_text, style="edge_label")
+            canvas.put_text(end_row - 1, end_col - display_width(card2_text), card2_text, style="edge_label")
     else:
         # Vertical connection: cardinality to the right of endpoint
         if card1_text:
@@ -408,7 +409,7 @@ def _draw_relationship(
         if start_row == end_row:
             # Horizontal: label below the line, centered
             mid_c = (start_col + end_col) // 2
-            label_col = mid_c - len(rel.label) // 2
+            label_col = mid_c - display_width(rel.label) // 2
             canvas.put_text(start_row + 1, label_col, rel.label, style="edge_label")
         elif start_col == end_col:
             # Straight vertical: label to the right of midpoint
@@ -420,7 +421,7 @@ def _draw_relationship(
             if use_horizontal:
                 # Label below the horizontal bend
                 label_r = mid_r + 1
-                label_c = (start_col + end_col) // 2 - len(rel.label) // 2
+                label_c = (start_col + end_col) // 2 - display_width(rel.label) // 2
                 canvas.put_text(label_r, label_c, rel.label, style="edge_label")
             else:
                 # Label to the right of first vertical segment (near source)
@@ -474,7 +475,7 @@ def render_er_diagram(diagram: ERDiagram, *, use_ascii: bool = False, padding_x:
         tw, _ = sizes[rel.entity2]
         mid_c = (sx + sw // 2 + tx + tw // 2) // 2
         if rel.label:
-            label_end = mid_c + 2 + len(rel.label)
+            label_end = mid_c + 2 + display_width(rel.label)
             width = max(width, label_end + _MARGIN)
         # Cardinality text at endpoints
         for card in (rel.card1, rel.card2):

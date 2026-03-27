@@ -10,6 +10,7 @@ from collections import deque
 from ..model.classdiagram import ClassDef, ClassDiagram, Note, Relationship
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
+from ..utils import display_width
 
 # ── layout constants ──────────────────────────────────────────────
 _CLASS_PAD = 2       # horizontal padding inside class box
@@ -101,7 +102,7 @@ def _draw_class_box(
     row = y + 1
     if cls.annotation:
         ann_text = f"\u00ab{cls.annotation}\u00bb"
-        ann_col = x + (width - len(ann_text)) // 2
+        ann_col = x + (width - display_width(ann_text)) // 2
         canvas.put_text(row, ann_col, ann_text, style="label")
         row += 1
 
@@ -239,7 +240,7 @@ def _compute_layout(
     for rel in diagram.relationships:
         s, t = rel.source, rel.target
         if s in layer_of and t in layer_of and layer_of[s] == layer_of[t]:
-            pair_g = len(rel.label) + 4 if rel.label else gap
+            pair_g = display_width(rel.label) + 4 if rel.label else gap
             pair_g = max(pair_g, gap)
             key = (min(s, t), max(s, t))
             pair_gap[key] = max(pair_gap.get(key, gap), pair_g)
@@ -507,7 +508,7 @@ def _draw_relationship(
         mid_c = (start_col + end_col) // 2
         if start_row == end_row:
             # Horizontal: label above the line
-            label_col = mid_c - len(rel.label) // 2
+            label_col = mid_c - display_width(rel.label) // 2
             canvas.put_text(mid_r - 1, label_col, rel.label, style="edge_label")
         else:
             # Vertical or L-shaped: label to the right of midpoint
@@ -700,7 +701,7 @@ def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padd
         tx, ty = positions[rel.target]
         tw, _ = sizes[rel.target]
         mid_c = (sx + sw // 2 + tx + tw // 2) // 2
-        label_end = mid_c + 2 + len(rel.label)
+        label_end = mid_c + 2 + display_width(rel.label)
         width = max(width, label_end + _MARGIN)
 
     exit_offsets = _compute_exit_offsets(diagram, layer_of)

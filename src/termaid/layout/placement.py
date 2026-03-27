@@ -6,6 +6,7 @@ heights based on label content, and normalizing sizes within layers.
 from __future__ import annotations
 
 from ..graph.model import Direction, Graph
+from ..utils import display_width
 from .grid import (
     STRIDE,
     MAX_LABEL_WIDTH,
@@ -80,7 +81,7 @@ def _word_wrap(text: str, max_width: int) -> list[str]:
     current_line = words[0]
 
     for word in words[1:]:
-        if len(current_line) + 1 + len(word) <= max_width:
+        if display_width(current_line) + 1 + display_width(word) <= max_width:
             current_line += " " + word
         else:
             lines.append(current_line)
@@ -143,7 +144,7 @@ def compute_sizes(
         # Word-wrap lines that exceed max width
         wrapped_lines: list[str] = []
         for line in lines:
-            if len(line) <= MAX_LABEL_WIDTH:
+            if display_width(line) <= MAX_LABEL_WIDTH:
                 wrapped_lines.append(line)
             else:
                 wrapped_lines.extend(_word_wrap(line, MAX_LABEL_WIDTH))
@@ -152,7 +153,7 @@ def compute_sizes(
         if len(wrapped_lines) > 1 and wrapped_lines != lines:
             node.label = "\\n".join(wrapped_lines)
 
-        text_width = max(len(l) for l in wrapped_lines) if wrapped_lines else 0
+        text_width = max(display_width(l) for l in wrapped_lines) if wrapped_lines else 0
         text_height = len(wrapped_lines)
 
         content_width = text_width + padding_x  # padding on each side
@@ -217,7 +218,7 @@ def _expand_gaps_for_edge_labels(graph: Graph, layout: GridLayout) -> None:
     for edge in graph.edges:
         if not edge.label:
             continue
-        label_len = len(edge.label)
+        label_len = display_width(edge.label)
 
         src_p = layout.placements.get(edge.source)
         tgt_p = layout.placements.get(edge.target)

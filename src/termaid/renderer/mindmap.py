@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from ..model.mindmap import Mindmap, MindmapNode
 from .canvas import Canvas
+from ..utils import display_width
 
 # When root has more children than this, spill some to the left
 _OVERFLOW_THRESHOLD = 6
@@ -75,7 +76,7 @@ def render_mindmap(
         else:
             lines = _render_both_sides(root.label, left_children, right_children, ch)
 
-    width = max((len(line) for line in lines), default=1)
+    width = max((display_width(line) for line in lines), default=1)
     height = len(lines)
     canvas = Canvas(width + 1, height)
     for r, line in enumerate(lines):
@@ -183,7 +184,7 @@ def _render_subtree_left(node: MindmapNode, ch: _Chars) -> tuple[list[str], int]
         return [node.label], 0
 
     child_block, child_conn = _stack_left(node.children, ch)
-    child_width = max(len(line) for line in child_block)
+    child_width = max(display_width(line) for line in child_block)
     child_block = [line.rjust(child_width) for line in child_block]
 
     connector = ch.h + ch.h + " " + node.label
@@ -201,7 +202,7 @@ def _stack_left(children: list[MindmapNode], ch: _Chars) -> tuple[list[str], int
     """Stack child subtrees with branch chars on the right (mirrored)."""
     if len(children) == 1:
         sub, sc = _render_subtree_left(children[0], ch)
-        w = max(len(line) for line in sub)
+        w = max(display_width(line) for line in sub)
         result = []
         for i, line in enumerate(sub):
             if i == sc:
@@ -214,7 +215,7 @@ def _stack_left(children: list[MindmapNode], ch: _Chars) -> tuple[list[str], int
     for child in children:
         blocks.append(_render_subtree_left(child, ch))
 
-    max_w = max(max(len(line) for line in block) for block, _ in blocks)
+    max_w = max(max(display_width(line) for line in block) for block, _ in blocks)
     result: list[str] = []
     conn_rows: list[int] = []
 
@@ -270,7 +271,7 @@ def _render_both_sides(
     right_block, _ = _stack_right(right_children, ch)
     left_block, _ = _stack_left(left_children, ch)
 
-    left_width = max((len(line) for line in left_block), default=0)
+    left_width = max((display_width(line) for line in left_block), default=0)
     rh = len(right_block)
     lh = len(left_block)
     total = max(rh, lh)

@@ -9,6 +9,7 @@ from ..model.blockdiagram import Block, BlockDiagram, BlockLink
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
 from .shapes import SHAPE_RENDERERS
+from ..utils import display_width
 
 # Layout constants
 _BLOCK_PAD = 2
@@ -119,7 +120,7 @@ def _compute_block_size(block: Block, cs: CharSet, padding_x: int = _BLOCK_PAD, 
         return max(w, _MIN_BLOCK_W), max(h, _MIN_BLOCK_H)
 
     label = block.label or block.id
-    w = max(len(label) + padding_x * 2, _MIN_BLOCK_W)
+    w = max(display_width(label) + padding_x * 2, _MIN_BLOCK_W)
     h = _MIN_BLOCK_H
     return w, h
 
@@ -332,7 +333,7 @@ def _draw_groups(
 
         # Draw group label (skip for anonymous groups)
         if block.label:
-            label_col = x + (w - len(block.label)) // 2
+            label_col = x + (w - display_width(block.label)) // 2
             canvas.put_text(y + 1, label_col, block.label, style="label")
 
         # Recurse for nested groups within children
@@ -429,7 +430,7 @@ def _draw_link(
     if link.label:
         mid_r = (r1 + r2) // 2
         mid_c = (c1 + c2) // 2
-        label_col = mid_c - len(link.label) // 2
+        label_col = mid_c - display_width(link.label) // 2
         canvas.put_text(mid_r, label_col, link.label, style="edge_label")
 
 
