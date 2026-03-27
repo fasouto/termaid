@@ -16,6 +16,7 @@ import sys
 def json_to_mermaid(data: str, diagram_type: str) -> str:
     """Convert JSON string to Mermaid syntax for the given diagram type."""
     converters = {
+        "xychart": _to_xychart,
         "treemap": _to_treemap,
         "pie": _to_pie,
         "mindmap": _to_mindmap,
@@ -139,6 +140,45 @@ def _to_flowchart(data: object) -> str:
                 tgt = item.get("to") or item.get("target")
                 if src and tgt:
                     lines.append(f"    {src}-->{tgt}")
+
+    return "\n".join(lines)
+
+
+def _to_xychart(data: object) -> str:
+    """Convert JSON to xychart-beta syntax.
+
+    Accepts:
+        [10, 25, 18, 32]  -- simple array of numbers
+        {"Jan": 10, "Feb": 25}  -- object with categories
+        {"bar": [10, 25], "line": [8, 20]}  -- multiple datasets
+    """
+    lines = ["xychart-beta"]
+
+    if isinstance(data, list) and all(isinstance(v, (int, float)) for v in data):
+        cats = [str(i + 1) for i in range(len(data))]
+        lines.append(f"    x-axis [{', '.join(cats)}]")
+        vals = ", ".join(str(v) for v in data)
+        lines.append(f"    bar [{vals}]")
+
+    elif isinstance(data, dict):
+        # Check if keys are dataset types (bar/line)
+        if "bar" in data or "line" in data:
+            max_len = 0
+            for key in ("bar", "line"):
+                if key in data and isinstance(data[key], list):
+                    max_len = max(max_len, len(data[key]))
+            cats = [str(i + 1) for i in range(max_len)]
+            lines.append(f"    x-axis [{', '.join(cats)}]")
+            for key in ("bar", "line"):
+                if key in data and isinstance(data[key], list):
+                    vals = ", ".join(str(v) for v in data[key])
+                    lines.append(f"    {key} [{vals}]")
+        else:
+            # Keys are categories, values are numbers
+            cats = list(data.keys())
+            vals = [data[k] for k in cats if isinstance(data[k], (int, float))]
+            lines.append(f"    x-axis [{', '.join(cats)}]")
+            lines.append(f"    bar [{', '.join(str(v) for v in vals)}]")
 
     return "\n".join(lines)
 

@@ -18,3 +18,4 @@ demo/.DS_Store
 .coverage
 *.txt
 screenshot.png
+.plans/

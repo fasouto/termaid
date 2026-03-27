@@ -10,7 +10,7 @@
 
 ## Features
 
-- **13 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, mindmaps, timelines, kanban boards, and quadrant charts
+- **14 diagram types:** flowcharts, sequence, class, ER, state, block, git graphs, pie charts, treemaps, mindmaps, timelines, kanban boards, quadrant charts, and XY charts
 - **Zero dependencies:** pure Python, nothing to install beyond the package itself
 - **Terminal-aware:** auto-fits diagrams to terminal width with progressive compaction
 - **Rich and Textual integration:** colored output and TUI widgets with optional extras
@@ -399,6 +399,36 @@ Project ──├─ Development ──╭─ Frontend
 
 **Features:** indentation-based nesting, automatic overflow to the left when many children, rounded/sharp/ASCII branch characters, Mermaid shape markers stripped (`(round)`, `[square]`, `{{hexagon}}`, `)cloud(`)
 
+### XY Charts
+
+```mermaid
+xychart-beta
+    title "Monthly Revenue"
+    x-axis [Jan, Feb, Mar, Apr, May, Jun]
+    bar [12, 18, 25, 20, 30, 35]
+```
+
+```
+                 Monthly Revenue
+
+     35 │                              ████
+        │                              ████
+     28 │                        ████  ████
+        │            ▄▄▄▄        ████  ████
+     21 │            ████        ████  ████
+        │            ████  ▄▄▄▄  ████  ████
+        │      ████  ████  ████  ████  ████
+     14 │      ████  ████  ████  ████  ████
+        │████  ████  ████  ████  ████  ████
+      7 │████  ████  ████  ████  ████  ████
+        │████  ████  ████  ████  ████  ████
+        │████  ████  ████  ████  ████  ████
+      0 └──┬─────┬─────┬─────┬─────┬─────┬─
+          Jan   Feb   Mar   Apr   May   Jun
+```
+
+**Features:** bar charts, line charts, bar+line combos, horizontal orientation (`xychart horizontal`), axis labels, `xychart` and `xychart-beta` keywords, rounded/sharp line corners, JSON ingest
+
 ## CLI options
 
 | Flag | Description |
@@ -415,7 +445,7 @@ Project ──├─ Development ──╭─ Frontend
 | `--sharp-edges` | Sharp corners on edge turns instead of rounded |
 | `-o FILE` | Write output to file instead of stdout |
 | `--show-ids` | Show node IDs alongside labels for debugging (e.g. `myId: My Label`) |
-| `--json TYPE` | Pipe JSON/tabular data and render as `treemap`, `pie`, `mindmap`, or `flowchart` |
+| `--json TYPE` | Pipe JSON/tabular data and render as `treemap`, `pie`, `mindmap`, `flowchart`, or `xychart` |
 | `--tui` | Interactive TUI viewer (requires `pip install termaid[tui]`) |
 
 ## Python API

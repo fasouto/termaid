@@ -119,6 +119,12 @@ def render(
             diagram = parse_mindmap(text)
             return render_mindmap(diagram, use_ascii=use_ascii, rounded=rounded_edges).to_string()
 
+        if text.startswith("xychart"):
+            from .parser.xychart import parse_xychart
+            from .renderer.xychart import render_xychart
+            diagram = parse_xychart(text)
+            return render_xychart(diagram, use_ascii=use_ascii, rounded=rounded_edges).to_string()
+
         if text.startswith("timeline"):
             from .parser.timeline import parse_timeline
             from .renderer.timeline import render_timeline
@@ -235,6 +241,14 @@ def render_rich(
             from .output.rich import render_sequence_rich
             diagram = parse_mindmap(text)
             canvas = render_mindmap(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
+
+        if text.startswith("xychart"):
+            from .parser.xychart import parse_xychart
+            from .renderer.xychart import render_xychart
+            from .output.rich import render_sequence_rich
+            diagram = parse_xychart(text)
+            canvas = render_xychart(diagram, use_ascii=use_ascii)
             return render_sequence_rich(canvas, theme=theme)
 
         if text.startswith("timeline"):

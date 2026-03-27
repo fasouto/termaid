@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 (2026-03-27)
+
+### New diagram type
+- **XY Chart** (`xychart-beta` / `xychart` syntax): bar charts, line charts, and bar+line combos with labeled axes, horizontal orientation support, rounded/sharp line corners, half-block bar tops, and JSON ingest
+- 14 diagram types now supported
+
+### Improvements
+- CJK/wide character display width fix (merged from community PR)
+- Applied `display_width()` to timeline, kanban, and quadrant renderers
+
 ## 0.4.0 (2026-03-26)
 
 ### New diagram types
