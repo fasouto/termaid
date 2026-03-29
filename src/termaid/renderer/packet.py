@@ -92,24 +92,23 @@ def render_packet(
             if end_bit == start_bit:
                 continue
             end_label = str(end_bit)
-            ex = margin + (ce + 1) * _BITS_PER_COL - display_width(end_label) - 1  # -1 for gap before next field's start label
+            ex = margin + (ce + 1) * _BITS_PER_COL - display_width(end_label)
             # Shift left if overlapping a separator
             while any(p in placed_nums for p in range(ex, ex + display_width(end_label))):
                 ex -= 1
             if ex >= margin:
                 canvas.put_text(y_nums, ex, end_label, style="edge_label")
-                for px in range(ex, ex + display_width(end_label)):
+                for px in range(ex, ex + display_width(end_label) + 1):  # +1 reserves gap after
                     placed_nums.add(px)
 
-        # Pass 2: start labels (left-aligned, after separator)
+        # Pass 2: start labels. Non-first fields offset +1 for spacing after end labels.
         for fi, (cs, ce, _) in enumerate(row_fields):
             start_bit = row_start_bit + cs
             start_label = str(start_bit)
             sx = margin + cs * _BITS_PER_COL
-            # Skip past separator if there is one
-            if sx in separator_xs:
-                sx += 1
-            if not any(p in placed_nums for p in range(sx, sx + display_width(start_label) + 1)):
+            if fi > 0:
+                sx += 1  # 1 char gap after previous field's end label
+            if not any(p in placed_nums for p in range(sx, sx + display_width(start_label))):
                 canvas.put_text(y_nums, sx, start_label, style="edge_label")
                 for px in range(sx, sx + display_width(start_label)):
                     placed_nums.add(px)
@@ -165,5 +164,21 @@ def render_packet(
             if cs > 0:
                 x = margin + cs * _BITS_PER_COL
                 canvas.put(y_bottom, x, bj, merge=False, style="node")
+
+    # Legend for truncated labels
+    truncated: list[tuple[str, str]] = []
+    for field in diagram.fields:
+        avail = field.bits * _BITS_PER_COL - 2
+        if avail < display_width(field.label) and field.label:
+            short = field.label[:max(1, avail - 1)] + "."
+            truncated.append((short, field.label))
+
+    if truncated:
+        y_legend = y_bottom + 2
+        needed_h = y_legend + len(truncated) + 1
+        if needed_h > canvas.height:
+            canvas.resize(canvas.width, needed_h)
+        for i, (short, full) in enumerate(truncated):
+            canvas.put_text(y_legend + i, margin, f"{short} = {full}", style="edge_label")
 
     return canvas
