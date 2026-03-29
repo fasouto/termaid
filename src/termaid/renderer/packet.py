@@ -75,36 +75,49 @@ def render_packet(
         y_content = ri * row_h + 1 + (padding_y + 1) // 2  # center content in padding
         row_start_bit = ri * row_bits
 
-        # Bit numbers at field boundaries (start and end of each field)
-        # Two passes: first place all end labels (right-aligned), then start labels
-        placed_nums: set[int] = set()
+        # Field separators extended into the number row
+        separator_xs: set[int] = set()
+        for fi, (cs, ce, _) in enumerate(row_fields):
+            if cs > 0:
+                sep_x = margin + cs * _BITS_PER_COL
+                canvas.put(y_nums, sep_x, vt, merge=False, style="node")
+                separator_xs.add(sep_x)
 
-        # Pass 1: end labels (right-aligned at field end)
+        # Right edge │ on number row
+        if ri > 0:
+            canvas.put(y_nums, margin + cols_per_row, vt, merge=False, style="node")
+
+        # Bit numbers at field boundaries, avoiding separator positions
+        placed_nums: set[int] = set(separator_xs)
+
+        # Pass 1: end labels (right-aligned, before separator)
         for fi, (cs, ce, _) in enumerate(row_fields):
             end_bit = row_start_bit + ce
             start_bit = row_start_bit + cs
             if end_bit == start_bit:
-                continue  # single-bit field, start label is enough
+                continue
             end_label = str(end_bit)
-            ex = margin + (ce + 1) * _BITS_PER_COL - display_width(end_label) - 1  # -1 for gap
-            canvas.put_text(y_nums, max(0, ex), end_label, style="edge_label")
-            for px in range(ex, ex + display_width(end_label)):
-                placed_nums.add(px)
+            ex = margin + (ce + 1) * _BITS_PER_COL - display_width(end_label) - 1
+            # Shift left if overlapping a separator
+            while any(p in placed_nums for p in range(ex, ex + display_width(end_label))):
+                ex -= 1
+            if ex >= margin:
+                canvas.put_text(y_nums, ex, end_label, style="edge_label")
+                for px in range(ex, ex + display_width(end_label)):
+                    placed_nums.add(px)
 
-        # Pass 2: start labels (left-aligned at field start)
+        # Pass 2: start labels (left-aligned, after separator)
         for fi, (cs, ce, _) in enumerate(row_fields):
             start_bit = row_start_bit + cs
             start_label = str(start_bit)
             sx = margin + cs * _BITS_PER_COL
-            # Check overlap with already-placed end labels (need 1 char gap)
+            # Skip past separator if there is one
+            if sx in separator_xs:
+                sx += 1
             if not any(p in placed_nums for p in range(sx, sx + display_width(start_label) + 1)):
                 canvas.put_text(y_nums, sx, start_label, style="edge_label")
                 for px in range(sx, sx + display_width(start_label)):
                     placed_nums.add(px)
-
-        # Right edge │ on number row (aligns with content rows)
-        if ri > 0:
-            canvas.put(y_nums, margin + cols_per_row, vt, merge=False, style="node")
 
         # Top border
         for c in range(cols_per_row):
