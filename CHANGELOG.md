@@ -1,16 +1,18 @@
 # Changelog
 
-## 0.5.0 (2026-03-27)
+## 0.5.0 (2026-03-29)
 
 ### New diagram types
-- **XY Chart** (`xychart-beta` / `xychart` syntax): bar charts, line charts, and bar+line combos with labeled axes, horizontal orientation support, rounded/sharp line corners, half-block bar tops, and JSON ingest
-- **User Journey** (`journey` syntax): horizontal task timeline with sections, satisfaction emoji scores (😞-😄), multi-actor support with distinct symbols (●◆■▲), rounded/sharp/ASCII corners, CJK support
-- **Packet diagram** (`packet-beta` syntax): network packet field layouts as bit-aligned grids with ruler, field labels, auto-increment (`+N`) syntax, and multi-row wrapping
+- **XY Chart** (`xychart-beta` / `xychart`): bar charts, line charts, bar+line combos, horizontal orientation, rounded/sharp line corners, JSON ingest
+- **User Journey** (`journey`): horizontal task timeline with sections, satisfaction emoji scores, multi-actor symbols (●◆■▲), rounded/sharp/ASCII corners
+- **Packet diagram** (`packet` / `packet-beta`): bit-aligned network packet layouts with separated boxes per row, boundary numbers, auto-increment (`+N`) syntax, truncated label legend with bit ranges
 - 16 diagram types now supported
 
 ### Improvements
 - CJK/wide character display width fix (merged from community PR)
-- Applied `display_width()` to timeline, kanban, and quadrant renderers
+- Applied `display_width()` to all new renderers
+- XY chart: even y-axis proportions, rounded line corners
+- Packet: smart number placement (skip crowded single-bit fields)
 
 ## 0.4.0 (2026-03-26)
 

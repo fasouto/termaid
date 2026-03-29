@@ -83,32 +83,56 @@ def render_packet(
         # --- Bit numbers ---
         placed_nums: set[int] = set()
 
-        # End labels first (right-aligned)
-        for fi, (cs, ce, _) in enumerate(row_fields):
-            end_bit = row_start_bit + ce
-            start_bit = row_start_bit + cs
-            if end_bit == start_bit:
-                continue
-            end_label = str(end_bit)
-            ex = margin + (ce + 1) * _BITS_PER_COL - display_width(end_label)
-            while any(p in placed_nums for p in range(ex, ex + display_width(end_label))):
-                ex -= 1
-            if ex >= margin:
-                canvas.put_text(y_nums, ex, end_label, style="edge_label")
-                for px in range(ex, ex + display_width(end_label) + 1):
-                    placed_nums.add(px)
+        # Only show bit numbers for fields wide enough to display them
+        # without crowding. Skip intermediate numbers for narrow fields.
+        min_field_cols = 4  # minimum columns to show a number
 
-        # Start labels (offset +1 for non-first fields)
-        for fi, (cs, ce, _) in enumerate(row_fields):
-            start_bit = row_start_bit + cs
+        # End label of the entire row (right-aligned, always shown)
+        if row_fields:
+            last_ce = row_fields[-1][1]
+            end_bit = row_start_bit + last_ce
+            end_label = str(end_bit)
+            ex = margin + (last_ce + 1) * _BITS_PER_COL - display_width(end_label)
+            canvas.put_text(y_nums, ex, end_label, style="edge_label")
+            for px in range(ex, ex + display_width(end_label) + 1):
+                placed_nums.add(px)
+
+        # Start label of the entire row (left-aligned, always shown)
+        if row_fields:
+            first_cs = row_fields[0][0]
+            start_bit = row_start_bit + first_cs
             start_label = str(start_bit)
-            sx = margin + cs * _BITS_PER_COL
-            if fi > 0:
-                sx += 1
-            if not any(p in placed_nums for p in range(sx, sx + display_width(start_label))):
-                canvas.put_text(y_nums, sx, start_label, style="edge_label")
-                for px in range(sx, sx + display_width(start_label)):
-                    placed_nums.add(px)
+            sx = margin + first_cs * _BITS_PER_COL
+            canvas.put_text(y_nums, sx, start_label, style="edge_label")
+            for px in range(sx, sx + display_width(start_label)):
+                placed_nums.add(px)
+
+        # Intermediate boundary numbers (only when fields are wide enough)
+        for fi in range(1, len(row_fields)):
+            cs, ce, _ = row_fields[fi]
+            prev_cs, prev_ce, _ = row_fields[fi - 1]
+            prev_width = (prev_ce - prev_cs + 1) * _BITS_PER_COL
+            cur_width = (ce - cs + 1) * _BITS_PER_COL
+
+            # Show end of previous field
+            if prev_width >= min_field_cols:
+                end_bit = row_start_bit + prev_ce
+                end_label = str(end_bit)
+                ex = margin + (prev_ce + 1) * _BITS_PER_COL - display_width(end_label)
+                if not any(p in placed_nums for p in range(ex, ex + display_width(end_label) + 1)):
+                    canvas.put_text(y_nums, ex, end_label, style="edge_label")
+                    for px in range(ex, ex + display_width(end_label) + 1):
+                        placed_nums.add(px)
+
+            # Show start of current field
+            if cur_width >= min_field_cols:
+                start_bit = row_start_bit + cs
+                start_label = str(start_bit)
+                sx = margin + cs * _BITS_PER_COL + 1
+                if not any(p in placed_nums for p in range(sx, sx + display_width(start_label))):
+                    canvas.put_text(y_nums, sx, start_label, style="edge_label")
+                    for px in range(sx, sx + display_width(start_label)):
+                        placed_nums.add(px)
 
         # --- Top border ---
         canvas.put(y_top, margin, tl, merge=False, style="node")
