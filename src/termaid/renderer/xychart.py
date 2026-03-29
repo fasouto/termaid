@@ -9,7 +9,7 @@ from ..model.xychart import XYChart
 from ..utils import display_width
 from .canvas import Canvas
 
-_CHART_H = 12     # chart area height (rows for data) in vertical mode
+_CHART_H = 15     # chart area height (rows for data) in vertical mode
 _CHART_W = 50     # chart area width in horizontal mode
 _BAR_CHAR = "█"
 _BAR_HALF = "▄"
