@@ -101,6 +101,12 @@ def render(
             diagram = parse_git_graph(text)
             return render_git_graph(diagram, use_ascii=use_ascii).to_string()
 
+        if text.startswith("gantt"):
+            from .parser.gantt import parse_gantt
+            from .renderer.gantt import render_gantt
+            diagram = parse_gantt(text)
+            return render_gantt(diagram, use_ascii=use_ascii).to_string()
+
         if text.startswith("pie"):
             from .parser.piechart import parse_pie_chart
             from .renderer.piechart import render_pie_chart
@@ -232,6 +238,14 @@ def render_rich(
             from .output.rich import render_sequence_rich
             diagram = parse_git_graph(text)
             canvas = render_git_graph(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
+
+        if text.startswith("gantt"):
+            from .parser.gantt import parse_gantt
+            from .renderer.gantt import render_gantt
+            from .output.rich import render_sequence_rich
+            diagram = parse_gantt(text)
+            canvas = render_gantt(diagram, use_ascii=use_ascii)
             return render_sequence_rich(canvas, theme=theme)
 
         if text.startswith("pie"):
