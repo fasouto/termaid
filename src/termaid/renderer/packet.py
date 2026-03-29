@@ -98,6 +98,10 @@ def render_packet(
                     for px in range(ex, ex + display_width(end_label) + 1):
                         placed_nums.add(px)
 
+        # Right edge │ on number row (aligns with content rows)
+        if ri > 0:
+            canvas.put(y_nums, margin + cols_per_row, vt, merge=False, style="node")
+
         # Top border
         for c in range(cols_per_row):
             canvas.put(y_border, margin + c, hz, merge=False, style="node")
