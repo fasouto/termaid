@@ -76,27 +76,31 @@ def render_packet(
         row_start_bit = ri * row_bits
 
         # Bit numbers at field boundaries (start and end of each field)
-        placed_nums: set[int] = set()  # x positions already used
+        # Two passes: first place all end labels (right-aligned), then start labels
+        placed_nums: set[int] = set()
+
+        # Pass 1: end labels (right-aligned at field end)
         for fi, (cs, ce, _) in enumerate(row_fields):
-            # Start bit (left-aligned)
+            end_bit = row_start_bit + ce
+            start_bit = row_start_bit + cs
+            if end_bit == start_bit:
+                continue  # single-bit field, start label is enough
+            end_label = str(end_bit)
+            ex = margin + (ce + 1) * _BITS_PER_COL - display_width(end_label) - 1  # -1 for gap
+            canvas.put_text(y_nums, max(0, ex), end_label, style="edge_label")
+            for px in range(ex, ex + display_width(end_label)):
+                placed_nums.add(px)
+
+        # Pass 2: start labels (left-aligned at field start)
+        for fi, (cs, ce, _) in enumerate(row_fields):
             start_bit = row_start_bit + cs
             start_label = str(start_bit)
             sx = margin + cs * _BITS_PER_COL
+            # Check overlap with already-placed end labels (need 1 char gap)
             if not any(p in placed_nums for p in range(sx, sx + display_width(start_label) + 1)):
                 canvas.put_text(y_nums, sx, start_label, style="edge_label")
-                for px in range(sx, sx + display_width(start_label) + 1):  # +1 for gap
+                for px in range(sx, sx + display_width(start_label)):
                     placed_nums.add(px)
-
-            # End bit (right-aligned at field end)
-            end_bit = row_start_bit + ce
-            if end_bit != start_bit:  # skip if same as start (single bit)
-                end_label = str(end_bit)
-                ex = margin + (ce + 1) * _BITS_PER_COL - display_width(end_label)
-                # Only show if it doesn't overlap (with 1-char gap)
-                if not any(p in placed_nums for p in range(ex - 1, ex + display_width(end_label))):
-                    canvas.put_text(y_nums, max(0, ex), end_label, style="edge_label")
-                    for px in range(ex, ex + display_width(end_label) + 1):
-                        placed_nums.add(px)
 
         # Right edge │ on number row (aligns with content rows)
         if ri > 0:
