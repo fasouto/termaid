@@ -570,7 +570,7 @@ pip install termaid[textual]   # Textual TUI widget
 
 ## Gallery
 
-See [docs/gallery.md](docs/gallery.md) for rendered examples of all 78 supported diagram fixtures.
+See the [examples page](https://fasouto.github.io/termaid-web/examples.html) for rendered examples of all 18 supported diagram types.
 
 ## Acknowledgements
 
