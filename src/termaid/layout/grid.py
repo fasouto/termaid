@@ -128,6 +128,45 @@ class GridLayout:
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _layer_order_from_grid(graph: Graph) -> list[list[str]]:
+    """Build layer_order from precomputed grid_positions.
+
+    In LR mode, layers = columns, position = row.
+    In TB mode, layers = rows, position = column.
+    """
+    positions = graph.grid_positions
+    assert positions is not None
+    direction = graph.direction.normalized()
+
+    if direction.is_horizontal:
+        # layer = col, order within layer = row
+        key_layer = lambda nid: positions.get(nid, (0, 0))[0]
+        key_pos = lambda nid: positions.get(nid, (0, 0))[1]
+    else:
+        # layer = row, order within layer = col
+        key_layer = lambda nid: positions.get(nid, (0, 0))[1]
+        key_pos = lambda nid: positions.get(nid, (0, 0))[0]
+
+    # Group nodes by layer
+    from collections import defaultdict
+    by_layer: dict[int, list[str]] = defaultdict(list)
+    for nid in graph.node_order:
+        by_layer[key_layer(nid)].append(nid)
+
+    # Sort layers and nodes within each layer
+    result: list[list[str]] = []
+    for layer_idx in sorted(by_layer.keys()):
+        nodes = by_layer[layer_idx]
+        nodes.sort(key=key_pos)
+        result.append(nodes)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Layout orchestrator
 # ---------------------------------------------------------------------------
 
@@ -146,17 +185,23 @@ def compute_layout(graph: Graph, padding_x: int = 4, padding_y: int = 2, gap: in
     if not graph.node_order:
         return layout
 
-    # Step 1: Assign layers via BFS from roots
-    layers = assign_layers(graph)
+    # For architecture diagrams with precomputed grid positions,
+    # build layer_order directly from the positions instead of BFS.
+    if graph.grid_positions:
+        layer_order = _layer_order_from_grid(graph)
+        gap_expansions: dict[int, int] = {}
+    else:
+        # Step 1: Assign layers via BFS from roots
+        layers = assign_layers(graph)
 
-    # Step 1b: Fix overlapping subgraph layer ranges
-    layers = separate_subgraph_layers(graph, layers)
+        # Step 1b: Fix overlapping subgraph layer ranges
+        layers = separate_subgraph_layers(graph, layers)
 
-    # Step 2: Order nodes within layers (barycenter heuristic)
-    layer_order = order_layers(graph, layers)
+        # Step 2: Order nodes within layers (barycenter heuristic)
+        layer_order = order_layers(graph, layers)
 
-    # Step 2b: Compute extra gap cells for crossing edges
-    gap_expansions = compute_gap_expansions(graph, layer_order)
+        # Step 2b: Compute extra gap cells for crossing edges
+        gap_expansions = compute_gap_expansions(graph, layer_order)
 
     # Step 3: Place nodes on the grid (with expanded gaps for crossings)
     place_nodes(graph, layout, layer_order, direction, gap_expansions)

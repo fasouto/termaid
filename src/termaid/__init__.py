@@ -101,6 +101,18 @@ def render(
             diagram = parse_git_graph(text)
             return render_git_graph(diagram, use_ascii=use_ascii).to_string()
 
+        if text.startswith("gantt"):
+            from .parser.gantt import parse_gantt
+            from .renderer.gantt import render_gantt
+            diagram = parse_gantt(text)
+            return render_gantt(diagram, use_ascii=use_ascii).to_string()
+
+        if text.startswith("architecture"):
+            from .parser.architecture import parse_architecture
+            from .output.text import render_text
+            arch_graph = parse_architecture(text)
+            return render_text(arch_graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges, gap=gap)
+
         if text.startswith("pie"):
             from .parser.piechart import parse_pie_chart
             from .renderer.piechart import render_pie_chart
@@ -233,6 +245,20 @@ def render_rich(
             diagram = parse_git_graph(text)
             canvas = render_git_graph(diagram, use_ascii=use_ascii)
             return render_sequence_rich(canvas, theme=theme)
+
+        if text.startswith("gantt"):
+            from .parser.gantt import parse_gantt
+            from .renderer.gantt import render_gantt
+            from .output.rich import render_sequence_rich
+            diagram = parse_gantt(text)
+            canvas = render_gantt(diagram, use_ascii=use_ascii)
+            return render_sequence_rich(canvas, theme=theme)
+
+        if text.startswith("architecture"):
+            from .parser.architecture import parse_architecture
+            from .output.rich import render_rich as _render_rich
+            arch_graph = parse_architecture(text)
+            return _render_rich(arch_graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges, theme=theme)
 
         if text.startswith("pie"):
             from .parser.piechart import parse_pie_chart

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 (2026-03-30)
+
+### New diagram types
+- **Gantt chart** (`gantt`): horizontal bar chart with sections, task tags (done/active/crit/milestone), `after` dependencies, duration syntax, auto-chaining, vertical markers, today marker
+- **Architecture diagram** (`architecture-beta`): service/group/junction layout with L/R/T/B direction hints for 2D grid positioning, icon prefixes, invisible junction elimination
+- 18 diagram types now supported
+
 ## 0.5.0 (2026-03-29)
 
 ### New diagram types

@@ -6,6 +6,7 @@ heights based on label content, and normalizing sizes within layers.
 from __future__ import annotations
 
 from ..graph.model import Direction, Graph
+from ..graph.shapes import NodeShape
 from ..utils import display_width
 from .grid import (
     STRIDE,
@@ -101,7 +102,11 @@ def normalize_sizes(graph: Graph, layout: GridLayout) -> None:
 
     # Group placements by layer
     layer_groups: dict[int, list[NodePlacement]] = {}
-    for p in layout.placements.values():
+    for nid, p in layout.placements.items():
+        # Skip junctions from normalization
+        node = graph.nodes.get(nid)
+        if node and node.shape == NodeShape.JUNCTION:
+            continue
         if direction.is_vertical:
             layer_key = p.grid.row  # same row = same layer in TD
         else:
@@ -138,6 +143,15 @@ def compute_sizes(
     """Compute column widths and row heights based on node content."""
     for nid, placement in layout.placements.items():
         node = graph.nodes[nid]
+
+        # Minimal-size nodes (junctions) -- just 1x1
+        if node.shape == NodeShape.JUNCTION:
+            col = placement.grid.col
+            row = placement.grid.row
+            layout.col_widths[col] = max(layout.col_widths.get(col, 1), 1)
+            layout.row_heights[row] = max(layout.row_heights.get(row, 1), 1)
+            continue
+
         label = node.label
         lines = label.split("\\n") if "\\n" in label else [label]
 

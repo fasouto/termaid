@@ -20,3 +20,4 @@ class NodeShape(Enum):
     START_STATE = auto()    # [*] start (filled circle ●)
     END_STATE = auto()      # [*] end (bullseye ◉)
     FORK_JOIN = auto()      # <<fork>>/<<join>> (thick bar ━━━)
+    JUNCTION = auto()       # invisible routing point (architecture junctions)

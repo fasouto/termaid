@@ -454,4 +454,5 @@ SHAPE_RENDERERS = {
     NodeShape.START_STATE: draw_start_state,
     NodeShape.END_STATE: draw_end_state,
     NodeShape.FORK_JOIN: draw_fork_join,
+    NodeShape.JUNCTION: lambda canvas, x, y, width, height, label, cs, style="": None,
 }

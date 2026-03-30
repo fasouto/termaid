@@ -127,6 +127,7 @@ class Graph:
     link_styles: dict[int, dict[str, str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     notes: list[GraphNote] = field(default_factory=list)
+    grid_positions: dict[str, tuple[int, int]] | None = None  # precomputed (col, row) for architecture diagrams
 
     def add_node(self, node: Node) -> None:
         if node.id not in self.nodes:
