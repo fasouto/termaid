@@ -185,8 +185,9 @@ class TestPieChartRendering:
             '    "Small" : 10'
         )
         lines = output.split("\n")
-        big_line = next(l for l in lines if "Big" in l)
-        small_line = next(l for l in lines if "Small" in l)
+        # Find the individual bar lines (contain ┃)
+        big_line = next(l for l in lines if "Big" in l and "┃" in l)
+        small_line = next(l for l in lines if "Small" in l and "┃" in l)
         big_bar_len = big_line.count("█")
         small_bar_len = small_line.count("▓")
         assert big_bar_len > small_bar_len
@@ -247,6 +248,6 @@ class TestPieChartRendering:
         )
         lines = output.split("\n")
         short_line = next(l for l in lines if "Short" in l and "┃" in l)
-        long_line = next(l for l in lines if "Very Long Label" in l)
+        long_line = next(l for l in lines if "Very Long Label" in l and "┃" in l)
         # The bar separator ┃ should be at the same column
         assert short_line.index("┃") == long_line.index("┃")
