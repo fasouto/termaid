@@ -312,12 +312,12 @@ def _draw_routed_line(
                 corner1 = "┘" if c2 < c1 else "└"
             else:
                 corner1 = "┐" if c2 < c1 else "┌"
-            canvas.put(mid_row, c1, corner1, style=style)
+            canvas.put(mid_row, c1, corner1, merge=False, style=style)
             if r2 > mid_row:
                 corner2 = "┌" if c2 < c1 else "┐"
             else:
                 corner2 = "└" if c2 < c1 else "┘"
-            canvas.put(mid_row, c2, corner2, style=style)
+            canvas.put(mid_row, c2, corner2, merge=False, style=style)
 
 
 def _draw_relationship(

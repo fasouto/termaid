@@ -355,21 +355,19 @@ def _draw_routed_line(
         for c in range(min(mid_row, r2), max(mid_row, r2) + 1):
             canvas.put(c, c2, v_char, style=style)
 
-        # Draw corners (junction merging handles most cases, but explicit is cleaner)
+        # Draw corners after lines so they aren't merged with crossing edges
         if not use_ascii:
-            # Corner at (mid_row, c1): where vertical meets horizontal
             if r1 < mid_row:
                 corner1 = "┘" if c2 < c1 else "└"
             else:
                 corner1 = "┐" if c2 < c1 else "┌"
-            canvas.put(mid_row, c1, corner1, style=style)
+            canvas.put(mid_row, c1, corner1, merge=False, style=style)
 
-            # Corner at (mid_row, c2): where horizontal meets vertical
             if r2 > mid_row:
                 corner2 = "┌" if c2 < c1 else "┐"
             else:
                 corner2 = "└" if c2 < c1 else "┘"
-            canvas.put(mid_row, c2, corner2, style=style)
+            canvas.put(mid_row, c2, corner2, merge=False, style=style)
 
 
 def _marker_char(marker: str, direction: str) -> str:
