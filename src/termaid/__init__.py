@@ -8,7 +8,7 @@ from .parser.flowchart import parse_flowchart
 from .parser.statediagram import parse_state_diagram
 
 
-__version__ = "0.1.0"
+__version__ = "0.6.1"
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 
