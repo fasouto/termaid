@@ -155,6 +155,12 @@ def _compute_layout(
 
     # Compute per-gap minimum widths based on message labels between adjacent pairs
     gap_mins = [min_gap] * (n - 1) if n > 1 else []
+
+    # Ensure gaps are wide enough that participant boxes don't overlap
+    for i in range(n - 1):
+        box_gap_need = (box_widths[i] + box_widths[i + 1]) // 2 + 2
+        gap_mins[i] = max(gap_mins[i], box_gap_need)
+
     for ev_idx, ev in enumerate(flat_events):
         if isinstance(ev, Note):
             # Notes may need gap expansion
