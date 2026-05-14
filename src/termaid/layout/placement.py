@@ -175,7 +175,7 @@ def compute_sizes(
 
         # Ensure minimum sizes
         content_width = max(content_width, 3)
-        content_height = max(content_height, 3)
+        content_height = max(content_height, 1)
 
         col = placement.grid.col
         row = placement.grid.row

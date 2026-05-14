@@ -113,7 +113,7 @@ def _compute_layout(
         return [], [], 0, 0, 0, []
 
     # Box widths based on label length
-    box_widths = [max(display_width(p.label) + padding_x, 12) for p in diagram.participants]
+    box_widths = [display_width(p.label) + padding_x + 2 for p in diagram.participants]  # +2 for borders
 
     # Header height: tallest participant kind
     header_height = max(_KIND_HEIGHT.get(p.kind, 3) for p in diagram.participants)
