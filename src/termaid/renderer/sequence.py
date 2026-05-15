@@ -225,6 +225,26 @@ def _compute_layout(
                     note_width = max(display_width(line) for line in lines) + 4
                     needed = col_centers[pi] + 2 + note_width + 1
                     max_right = max(max_right, needed)
+            # "over" notes on a single participant or spanning participants
+            if ev.position == "over":
+                lines = _note_lines(ev)
+                note_width = max(display_width(line) for line in lines) + 4
+                if len(ev.participants) == 2:
+                    p1i = _participant_index(diagram, ev.participants[0])
+                    p2i = _participant_index(diagram, ev.participants[1])
+                    if p1i >= 0 and p2i >= 0:
+                        center = (col_centers[p1i] + col_centers[p2i]) // 2
+                        span_width = abs(col_centers[p1i] - col_centers[p2i]) + 4
+                        note_width = max(note_width, span_width)
+                        note_x = center - note_width // 2
+                        needed = note_x + note_width + 1
+                        max_right = max(max_right, needed)
+                elif len(ev.participants) == 1:
+                    pi = _participant_index(diagram, ev.participants[0])
+                    if pi >= 0:
+                        note_x = col_centers[pi] - note_width // 2
+                        needed = note_x + note_width + 1
+                        max_right = max(max_right, needed)
 
     # Compute row offsets (cumulative event heights)
     lifeline_start = _TOP_MARGIN + header_height
