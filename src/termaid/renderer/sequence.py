@@ -113,7 +113,7 @@ def _compute_layout(
         return [], [], 0, 0, 0, []
 
     # Box widths based on label length
-    box_widths = [max(display_width(p.label) + padding_x, 12) for p in diagram.participants]
+    box_widths = [display_width(p.label) + padding_x + 2 for p in diagram.participants]  # +2 for borders
 
     # Header height: tallest participant kind
     header_height = max(_KIND_HEIGHT.get(p.kind, 3) for p in diagram.participants)
@@ -155,6 +155,12 @@ def _compute_layout(
 
     # Compute per-gap minimum widths based on message labels between adjacent pairs
     gap_mins = [min_gap] * (n - 1) if n > 1 else []
+
+    # Ensure gaps are wide enough that participant boxes don't overlap
+    for i in range(n - 1):
+        box_gap_need = (box_widths[i] + box_widths[i + 1]) // 2 + 2
+        gap_mins[i] = max(gap_mins[i], box_gap_need)
+
     for ev_idx, ev in enumerate(flat_events):
         if isinstance(ev, Note):
             # Notes may need gap expansion
@@ -219,6 +225,34 @@ def _compute_layout(
                     note_width = max(display_width(line) for line in lines) + 4
                     needed = col_centers[pi] + 2 + note_width + 1
                     max_right = max(max_right, needed)
+            # "over" notes on a single participant or spanning participants
+            if ev.position == "over":
+                lines = _note_lines(ev)
+                note_width = max(display_width(line) for line in lines) + 4
+                if len(ev.participants) == 2:
+                    p1i = _participant_index(diagram, ev.participants[0])
+                    p2i = _participant_index(diagram, ev.participants[1])
+                    if p1i >= 0 and p2i >= 0:
+                        center = (col_centers[p1i] + col_centers[p2i]) // 2
+                        span_width = abs(col_centers[p1i] - col_centers[p2i]) + 4
+                        note_width = max(note_width, span_width)
+                        # _draw_note clamps note_x to >= 0, which shifts a
+                        # left-overflowing box right; mirror that here so the
+                        # reserved width covers the drawn box.
+                        note_x = max(0, center - note_width // 2)
+                        needed = note_x + note_width + 1
+                        max_right = max(max_right, needed)
+                elif len(ev.participants) == 1:
+                    pi = _participant_index(diagram, ev.participants[0])
+                    if pi >= 0:
+                        note_x = max(0, col_centers[pi] - note_width // 2)
+                        needed = note_x + note_width + 1
+                        max_right = max(max_right, needed)
+        elif isinstance(ev, _BlockStart):
+            # Block frames (loop/alt/opt) extend a fixed margin beyond the
+            # outermost lifelines; ensure the canvas covers their right edge.
+            _, right = _block_frame_bounds(col_centers, ev.depth)
+            max_right = max(max_right, right + 1)
 
     # Compute row offsets (cumulative event heights)
     lifeline_start = _TOP_MARGIN + header_height
@@ -598,7 +632,10 @@ def render_sequence(diagram: SequenceDiagram, *, use_ascii: bool = False, paddin
 def _block_frame_bounds(col_centers: list[int], depth: int) -> tuple[int, int]:
     """Compute left and right columns for block frame at given nesting depth."""
     indent = depth * 2
-    left = max(0, col_centers[0] - 6 + indent) if col_centers else indent
+    # Clamp only the depth-0 base to the canvas edge, then add the per-depth
+    # indent on top so nesting stays visible even when tight participant boxes
+    # would push the base column to 0.
+    left = (max(0, col_centers[0] - 6) + indent) if col_centers else indent
     right = (col_centers[-1] + 6 - indent) if col_centers else 20 - indent
     return left, right
 
