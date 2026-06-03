@@ -236,15 +236,23 @@ def _compute_layout(
                         center = (col_centers[p1i] + col_centers[p2i]) // 2
                         span_width = abs(col_centers[p1i] - col_centers[p2i]) + 4
                         note_width = max(note_width, span_width)
-                        note_x = center - note_width // 2
+                        # _draw_note clamps note_x to >= 0, which shifts a
+                        # left-overflowing box right; mirror that here so the
+                        # reserved width covers the drawn box.
+                        note_x = max(0, center - note_width // 2)
                         needed = note_x + note_width + 1
                         max_right = max(max_right, needed)
                 elif len(ev.participants) == 1:
                     pi = _participant_index(diagram, ev.participants[0])
                     if pi >= 0:
-                        note_x = col_centers[pi] - note_width // 2
+                        note_x = max(0, col_centers[pi] - note_width // 2)
                         needed = note_x + note_width + 1
                         max_right = max(max_right, needed)
+        elif isinstance(ev, _BlockStart):
+            # Block frames (loop/alt/opt) extend a fixed margin beyond the
+            # outermost lifelines; ensure the canvas covers their right edge.
+            _, right = _block_frame_bounds(col_centers, ev.depth)
+            max_right = max(max_right, right + 1)
 
     # Compute row offsets (cumulative event heights)
     lifeline_start = _TOP_MARGIN + header_height
@@ -624,7 +632,10 @@ def render_sequence(diagram: SequenceDiagram, *, use_ascii: bool = False, paddin
 def _block_frame_bounds(col_centers: list[int], depth: int) -> tuple[int, int]:
     """Compute left and right columns for block frame at given nesting depth."""
     indent = depth * 2
-    left = max(0, col_centers[0] - 6 + indent) if col_centers else indent
+    # Clamp only the depth-0 base to the canvas edge, then add the per-depth
+    # indent on top so nesting stays visible even when tight participant boxes
+    # would push the base column to 0.
+    left = (max(0, col_centers[0] - 6) + indent) if col_centers else indent
     right = (col_centers[-1] + 6 - indent) if col_centers else 20 - indent
     return left, right
 
