@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 (2026-06-11)
+
+### Behavior changes
+- `render()` and `render_rich()` now raise exceptions on failure instead of returning an error string; the CLI reports errors on stderr and exits with code 1 (previously it exited 0 with the error in stdout or the `-o` file)
+- `render_rich()` accepts a `gap` parameter
+
+### Fixes
+- `--theme` no longer silently ignores `-o` (ANSI output is written to the file), `--show-ids`, `--gap`, and `--width`/auto-fit
+- Missing `rich` with `--theme` now prints the install hint instead of a raw ImportError
+- Flowchart: semicolons inside quoted labels (`A["a;b"]`) no longer split the statement
+- Sequence: inline `-` activation marker deactivates the sender, not the receiver, matching Mermaid semantics
+- Gantt: the `dateFormat` directive is honored (e.g. `DD-MM-YYYY`); non-ISO dates no longer silently drop task bars
+- Kanban: `id[Title]` syntax is supported for columns and cards
+- Quadrant/XY chart: malformed numbers like `0.1.2` no longer crash the parser
+- State diagram: notes and redeclarations no longer reset `<<choice>>`/`<<fork>>`/`<<join>>` shapes
+- Canvas: wide (CJK) characters at out-of-bounds positions no longer crash or corrupt rows
+- Layout: orthogonal subgraphs containing a cycle no longer drop or duplicate nodes
+- File I/O uses explicit UTF-8 encoding
+- `--version` fallback no longer reports a stale version
+
 ## 0.6.1 (2026-03-30)
 
 ### Fixes

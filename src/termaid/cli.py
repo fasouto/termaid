@@ -9,12 +9,13 @@ from .utils import display_width
 
 
 def _get_version() -> str:
-    """Get version from package metadata, with hardcoded fallback."""
+    """Get version from package metadata, falling back to the source version."""
     try:
         from importlib.metadata import version
         return version("termaid")
     except Exception:
-        return "0.2.1"
+        from termaid import __version__
+        return __version__
 
 
 def _max_line_width(text: str) -> int:
