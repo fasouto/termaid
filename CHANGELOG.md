@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.1 (2026-06-11)
+
+### Fixes
+- Gantt: the widest task label is no longer truncated (the margin was sized 2 columns short of its own content)
+- Kanban: the widest card is no longer truncated (same off-by-two in column sizing); `id[Title]` cards with trailing `@metadata` now unwrap correctly
+- CJK/emoji labels no longer overflow boxes or destroy borders in class, ER, gantt, kanban, packet, and treemap renderers; new shared `truncate_to_width()` helper never splits a wide character
+- Sequence: self-messages reserve the rows they draw, so the next message's label no longer overwrites the loop's return arrow; CJK message labels are no longer clipped
+- Block diagrams: blocks nested two or more groups deep are rendered instead of silently dropped
+
 ## 0.7.0 (2026-06-11)
 
 ### Behavior changes
