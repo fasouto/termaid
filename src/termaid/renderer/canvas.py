@@ -204,9 +204,7 @@ class Canvas:
             self.put(row, col + offset, ch, merge=False, style=style)
             if unicodedata.east_asian_width(ch) in ("F", "W"):
                 # Wide char occupies 2 columns; blank the shadow cell
-                if col + offset + 1 < self.width:
-                    self._grid[row][col + offset + 1] = ""
-                    self._style_grid[row][col + offset + 1] = style
+                self._blank_shadow_cell(row, col + offset + 1, style)
                 offset += 2
             else:
                 offset += 1
@@ -218,12 +216,17 @@ class Canvas:
             for ch in text:
                 self.put(row, col + offset, ch, merge=False, style=style)
                 if unicodedata.east_asian_width(ch) in ("F", "W"):
-                    if col + offset + 1 < self.width:
-                        self._grid[row][col + offset + 1] = ""
-                        self._style_grid[row][col + offset + 1] = style
+                    self._blank_shadow_cell(row, col + offset + 1, style)
                     offset += 2
                 else:
                     offset += 1
+
+    def _blank_shadow_cell(self, row: int, col: int, style: str) -> None:
+        """Blank the cell after a wide char, only when both the wide char's
+        cell and the shadow cell are inside the canvas."""
+        if 0 <= row < self.height and 1 <= col < self.width:
+            self._grid[row][col] = ""
+            self._style_grid[row][col] = style
 
     def get_style(self, row: int, col: int) -> str:
         """Get the style key at a position."""
