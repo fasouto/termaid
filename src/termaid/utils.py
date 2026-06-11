@@ -30,3 +30,29 @@ def display_width(text: str) -> int:
     for ch in text:
         w += 2 if _is_wide(ch) else 1
     return w
+
+
+def truncate_to_width(text: str, width: int, ellipsis: str = ".") -> str:
+    """Truncate *text* so its display width fits in *width* columns.
+
+    Appends *ellipsis* when truncation happens. Never splits a wide
+    character: the result's display width is always <= width.
+    """
+    if display_width(text) <= width:
+        return text
+
+    def clip(s: str, cols: int) -> str:
+        out: list[str] = []
+        w = 0
+        for ch in s:
+            cw = 2 if _is_wide(ch) else 1
+            if w + cw > cols:
+                break
+            out.append(ch)
+            w += cw
+        return "".join(out)
+
+    ell_w = display_width(ellipsis)
+    if width <= ell_w:
+        return clip(ellipsis, width)
+    return clip(text, width - ell_w) + ellipsis

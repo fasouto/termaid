@@ -8,7 +8,7 @@ its own top/bottom borders.
 from __future__ import annotations
 
 from ..model.packet import Packet
-from ..utils import display_width
+from ..utils import display_width, truncate_to_width
 from .canvas import Canvas
 
 
@@ -162,9 +162,7 @@ def render_packet(
 
             if label:
                 avail = field_w - 2
-                disp_label = label
-                if display_width(disp_label) > avail:
-                    disp_label = label[:max(1, avail - 1)] + "."
+                disp_label = truncate_to_width(label, avail)
                 lx = x_start + 1 + (avail - display_width(disp_label)) // 2
                 canvas.put_text(y_content, lx, disp_label, style="label")
 
@@ -184,7 +182,7 @@ def render_packet(
     for field in diagram.fields:
         avail = field.bits * _BITS_PER_COL - 2
         if avail < display_width(field.label) and field.label:
-            short = field.label[:max(1, avail - 1)] + "."
+            short = truncate_to_width(field.label, avail)
             truncated.append((short, field.label, field.start, field.end))
 
     if truncated:

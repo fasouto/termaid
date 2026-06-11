@@ -219,3 +219,16 @@ class TestERDiagramRendering:
         assert "B" in output
         # Dashed lines rendered with lifeline-style connector
         assert "┆" in output, "Dashed relationship should use ┆ character"
+
+
+class TestWideCharBoxes:
+    def test_cjk_entity_box_borders_intact(self):
+        from termaid.utils import display_width
+        output = render(
+            "erDiagram\n"
+            "  客户表 {\n"
+            "    string 名字字段\n"
+            "  }"
+        )
+        widths = {display_width(line) for line in output.split("\n") if line.strip()}
+        assert len(widths) == 1

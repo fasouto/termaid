@@ -252,3 +252,18 @@ class TestClassDiagramRendering:
             "  }"
         )
         assert "interface" in output
+
+
+class TestWideCharBoxes:
+    def test_cjk_class_box_borders_intact(self):
+        from termaid.utils import display_width
+        output = render(
+            "classDiagram\n"
+            "  class 动物类型 {\n"
+            "    +名字字符串 名字\n"
+            "    +makeSound()\n"
+            "  }"
+        )
+        widths = {display_width(line) for line in output.split("\n") if line.strip()}
+        # A single box: every row must be exactly as wide as the borders
+        assert len(widths) == 1

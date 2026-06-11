@@ -53,7 +53,7 @@ def _compute_box_size(cls: ClassDef, padding_x: int = _CLASS_PAD) -> tuple[int, 
         member_lines.append(_format_member(m))
 
     all_lines = lines + member_lines
-    max_text = max((len(l) for l in all_lines), default=0)
+    max_text = max((display_width(l) for l in all_lines), default=0)
     width = max(max_text + padding_x * 2, _MIN_BOX_WIDTH)
 
     # Height: top border + name rows + dividers + member rows + bottom border
@@ -106,7 +106,7 @@ def _draw_class_box(
         canvas.put_text(row, ann_col, ann_text, style="label")
         row += 1
 
-    name_col = x + (width - len(cls.name)) // 2
+    name_col = x + (width - display_width(cls.name)) // 2
     canvas.put_text(row, name_col, cls.name, style="label")
     row += 1
 
@@ -564,7 +564,7 @@ def _note_lines(note: Note) -> list[str]:
 def _note_box_size(note: Note) -> tuple[int, int]:
     """Return (width, height) for a note box."""
     lines = _note_lines(note)
-    max_line = max((len(l) for l in lines), default=0)
+    max_line = max((display_width(l) for l in lines), default=0)
     width = max(max_line + 4, _MIN_BOX_WIDTH)  # 2 padding each side
     height = len(lines) + 2  # top + bottom borders
     return width, height

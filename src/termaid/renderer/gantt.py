@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from ..model.gantt import Gantt
-from ..utils import display_width
+from ..utils import display_width, truncate_to_width
 from .canvas import Canvas
 
 
@@ -83,8 +83,8 @@ def render_gantt(
         total_days = 1
         max_date = min_date + timedelta(days=1)
 
-    # Layout
-    margin_l = max_label_width + 2
+    # Layout: labels start at column 3 and need a blank column before the axis
+    margin_l = max_label_width + 4
     chart_w = width - margin_l - 1
     if chart_w < 10:
         chart_w = 10
@@ -119,7 +119,7 @@ def render_gantt(
         for title, start, end, style in tasks:
             # Task label (indented, truncated if needed)
             avail = margin_l - 4
-            disp = title if display_width(title) <= avail else title[:avail - 1] + "."
+            disp = truncate_to_width(title, avail)
             canvas.put_text(row, 3, disp, style="edge_label")
 
             if start and end:

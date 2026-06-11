@@ -55,3 +55,21 @@ class TestKanbanBracketIds:
         kb = parse_kanban("kanban\n  Todo\n    Fix bug")
         assert kb.columns[0].title == "Todo"
         assert kb.columns[0].cards[0].title == "Fix bug"
+
+
+class TestKanbanWideChars:
+    def test_widest_card_not_truncated(self):
+        output = render("kanban\n  Todo\n    Create Documentation\n    short")
+        assert "Create Documentation" in output
+
+    def test_cjk_card_does_not_overflow_column(self):
+        from termaid.utils import display_width
+        output = render(
+            "kanban\n"
+            "  Todo\n"
+            "    这是一个非常长的中文卡片标题测试内容\n"
+            "    short"
+        )
+        lines = output.split("\n")
+        border_w = max(display_width(l) for l in lines if "╭" in l or "┌" in l)
+        assert all(display_width(l) <= border_w for l in lines)

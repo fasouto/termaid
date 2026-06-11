@@ -9,7 +9,7 @@ from __future__ import annotations
 from ..model.treemap import Treemap, TreemapNode
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
-from ..utils import display_width
+from ..utils import display_width, truncate_to_width
 
 _MIN_BOX_W = 4
 _MIN_BOX_H = 3
@@ -221,8 +221,7 @@ def _draw_node(
     # Label — centered on the first inner row
     label = node.label
     inner_w = w - 2
-    if display_width(label) > inner_w:
-        label = label[:inner_w - 1] + "…" if inner_w > 1 else label[:inner_w]
+    label = truncate_to_width(label, inner_w, ellipsis="…")
     label_col = x + 1 + max(0, (inner_w - display_width(label)) // 2)
     canvas.put_text(y + 1, label_col, label, style="label")
 

@@ -6,7 +6,7 @@ each column, using box-drawing characters for borders.
 from __future__ import annotations
 
 from ..model.kanban import Kanban
-from ..utils import display_width
+from ..utils import display_width, truncate_to_width
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
 
@@ -30,14 +30,17 @@ def render_kanban(
     if not diagram.columns:
         return Canvas(1, 1)
 
-    # Compute column widths (based on widest card or column title)
+    # Compute column widths (based on widest card or column title).
+    # Card text sits inside card borders, inset _COL_PAD from each column
+    # edge; the centered title needs the column borders plus a space each
+    # side. padding_x beyond the default adds extra slack.
     col_widths: list[int] = []
     for col in diagram.columns:
-        title_w = len(col.title)
+        title_w = display_width(col.title)
         card_w = max((display_width(card.title) + (display_width(card.metadata) + 1 if card.metadata else 0)
                       for card in col.cards), default=0)
-        inner_w = max(title_w, card_w) + padding_x * 2
-        col_widths.append(max(inner_w + 2, 10))  # +2 for card borders, min 10
+        need = max(title_w + 4, card_w + 2 + 2 * _COL_PAD)
+        col_widths.append(max(need + (padding_x - _CARD_PAD) * 2, 10))
 
     # Compute column heights (title + cards)
     col_heights: list[int] = []
@@ -94,9 +97,7 @@ def _draw_column(
         canvas.put(r, x + w - 1, vt, merge=False, style=section_style)
 
     # Column title (centered, bold)
-    title = col.title
-    if display_width(title) > w - 4:
-        title = title[:w - 5] + "."
+    title = truncate_to_width(col.title, w - 4)
     title_x = x + (w - display_width(title)) // 2
     canvas.put_text(y + 1, title_x, title, style=section_style)
 
@@ -131,8 +132,7 @@ def _draw_column(
         text = card.title
         if card.metadata:
             text += " " + card.metadata
-        if display_width(text) > cw - 2:
-            text = text[:cw - 3] + "."
+        text = truncate_to_width(text, cw - 2)
         canvas.put_text(card_y + 1, cx + 1, text, style=card_style)
 
         card_y += 3 + _CARD_GAP

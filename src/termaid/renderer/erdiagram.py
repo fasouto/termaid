@@ -58,7 +58,7 @@ def _compute_box_size(entity: Entity, padding_x: int = _PAD) -> tuple[int, int]:
         attr_lines.append(_format_attribute(attr))
 
     all_lines = lines + attr_lines
-    max_text = max((len(l) for l in all_lines), default=0)
+    max_text = max((display_width(l) for l in all_lines), default=0)
     width = max(max_text + padding_x * 2, _MIN_BOX_WIDTH)
 
     # Height: top border + name row + [divider + attr rows] + bottom border
@@ -97,7 +97,7 @@ def _draw_entity_box(
     # Name (centered)
     row = y + 1
     name = entity.display_name
-    name_col = x + (width - len(name)) // 2
+    name_col = x + (width - display_width(name)) // 2
     canvas.put_text(row, name_col, name, style="label")
     row += 1
 

@@ -115,3 +115,22 @@ class TestGanttDateFormat:
         t = g.sections[0].tasks[0]
         assert t.start == date(2024, 1, 1)
         assert t.end == date(2024, 1, 5)
+
+
+class TestGanttLabelWidth:
+    def test_longest_label_not_truncated(self):
+        output = render(
+            "gantt\n"
+            "  section Build\n"
+            "    Implement feature :t1, 2024-01-01, 2024-01-10\n"
+            "    Test :t2, 2024-01-05, 2024-01-12"
+        )
+        assert "Implement feature" in output
+
+    def test_single_task_label_not_truncated(self):
+        output = render(
+            "gantt\n"
+            "  section S\n"
+            "    Design :d1, 2024-02-01, 2024-02-04"
+        )
+        assert "Design" in output

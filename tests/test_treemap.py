@@ -238,3 +238,17 @@ class TestTreemapRendering:
         )
         assert "A" in output
         assert "B" in output
+
+
+class TestTreemapWideChars:
+    def test_cjk_label_does_not_overflow_box(self):
+        from termaid.utils import display_width
+        output = render(
+            'treemap-beta\n'
+            '  "中文很长的标签名称测试"\n'
+            '    "甲": 40\n'
+            '    "乙": 10'
+        )
+        lines = output.split("\n")
+        border_w = max(display_width(l) for l in lines if "┌" in l or "┄" in l)
+        assert all(display_width(l) <= border_w for l in lines)
