@@ -59,6 +59,7 @@ def render_rich(
     padding_y: int = 2,
     rounded_edges: bool = True,
     theme: str = "default",
+    gap: int = 4,
 ) -> Text:
     """Render a graph as a Rich Text object with colors.
 
@@ -72,7 +73,7 @@ def render_rich(
             "Install it with: pip install termaid[rich]"
         )
 
-    canvas = render_graph_canvas(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges)
+    canvas = render_graph_canvas(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges, gap=gap)
     if canvas is None:
         return Text("")
 

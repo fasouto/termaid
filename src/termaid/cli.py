@@ -22,13 +22,18 @@ def _max_line_width(text: str) -> int:
     return max((display_width(line) for line in text.split("\n")), default=0)
 
 
+def _plain(result) -> str:
+    """Plain-text view of a render result (str or rich.text.Text)."""
+    return getattr(result, "plain", result)
+
+
 def _auto_fit(
-    result: str,
+    result,
     source: str,
     args: argparse.Namespace,
     render_fn,
     target_width: int | None = None,
-) -> str:
+):
     """Re-render with smaller gap/padding if the diagram exceeds target width.
 
     target_width: explicit width limit (from --width), or None to use
@@ -40,7 +45,7 @@ def _auto_fit(
             return result
         target_width = shutil.get_terminal_size().columns
 
-    if _max_line_width(result) <= target_width:
+    if _max_line_width(_plain(result)) <= target_width:
         return result
 
     # Progressively compact: reduce gap, then padding
@@ -64,13 +69,13 @@ def _auto_fit(
             rounded_edges=not args.sharp_edges,
             gap=gap,
         )
-        if _max_line_width(candidate) <= target_width:
+        if _max_line_width(_plain(candidate)) <= target_width:
             return candidate
         result = candidate
 
-    if _max_line_width(result) > target_width:
+    if _max_line_width(_plain(result)) > target_width:
         print(
-            f"Warning: diagram is {_max_line_width(result)} cols wide "
+            f"Warning: diagram is {_max_line_width(_plain(result))} cols wide "
             f"but target is {target_width}. "
             f"Try: less -S, or use 'graph TD' for vertical layout.",
             file=sys.stderr,
@@ -83,12 +88,12 @@ def _read_source(args: argparse.Namespace) -> str | None:
     """Read diagram source from file or stdin. Returns None on error."""
     if args.file:
         try:
-            with open(args.file) as f:
+            with open(args.file, encoding="utf-8") as f:
                 return f.read()
         except FileNotFoundError:
             print(f"Error: File not found: {args.file}", file=sys.stderr)
             return None
-        except OSError as e:
+        except (OSError, UnicodeDecodeError) as e:
             print(f"Error reading file: {e}", file=sys.stderr)
             return None
     elif not sys.stdin.isatty():
@@ -240,40 +245,55 @@ def main(argv: list[str] | None = None) -> int:
         return _run_tui(source, args)
 
     # Render
-    try:
-        from termaid import render, render_rich
-    except ImportError:
-        _src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        sys.path.insert(0, _src_dir)
+    from termaid import render, render_rich
+
+    use_color = _use_color(args)
+    if use_color:
         try:
-            from termaid import render, render_rich
+            from rich import print as rprint
+            from rich.console import Console
         except ImportError:
-            print("Error: termaid package not found. Install with: pip install -e .", file=sys.stderr)
+            print("Error: 'rich' package required for --theme. Install with: pip install termaid[rich]", file=sys.stderr)
             return 1
 
+    # --show-ids: patch node labels before rendering
+    render_source = source
+    if args.show_ids:
+        render_source = _apply_show_ids(source)
+
     try:
-        use_color = _use_color(args)
         if use_color:
-            rich_result = render_rich(
-                source,
+            def render_color(src: str, **kwargs):
+                return render_rich(src, theme=args.theme or "default", **kwargs)
+
+            rich_result = render_color(
+                render_source,
                 use_ascii=args.ascii,
                 padding_x=args.padding_x,
                 padding_y=args.padding_y,
                 rounded_edges=not args.sharp_edges,
-                theme=args.theme or "default",
+                gap=args.gap,
             )
-            try:
-                from rich import print as rprint
+            rich_result = _auto_fit(
+                rich_result, render_source, args,
+                render_fn=render_color,
+                target_width=args.width,
+            )
+            if args.output:
+                try:
+                    with open(args.output, "w", encoding="utf-8") as f:
+                        console = Console(
+                            file=f,
+                            force_terminal=True,
+                            width=max(_max_line_width(_plain(rich_result)), 80),
+                        )
+                        console.print(rich_result)
+                except OSError as e:
+                    print(f"Error writing to {args.output}: {e}", file=sys.stderr)
+                    return 1
+            else:
                 rprint(rich_result)
-            except ImportError:
-                print("Error: 'rich' package required for --theme. Install with: pip install termaid[rich]", file=sys.stderr)
-                return 1
         else:
-            # --show-ids: patch node labels before rendering
-            render_source = source
-            if args.show_ids:
-                render_source = _apply_show_ids(source)
-
             result = render(
                 render_source,
                 use_ascii=args.ascii,
@@ -289,7 +309,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             if args.output:
                 try:
-                    with open(args.output, "w") as f:
+                    with open(args.output, "w", encoding="utf-8") as f:
                         f.write(result + "\n")
                 except OSError as e:
                     print(f"Error writing to {args.output}: {e}", file=sys.stderr)
