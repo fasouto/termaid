@@ -148,7 +148,11 @@ def _compute_layout(
             msg_counter += 1
             eff = _effective_label(ev, msg_counter if autonumber else None)
             effective_labels.append(eff)
-            event_heights.append(_EVENT_ROW_H)
+            if ev.source == ev.target:
+                # Self-messages draw a 2-row loop below the label row
+                event_heights.append(_EVENT_ROW_H + 1)
+            else:
+                event_heights.append(_EVENT_ROW_H)
         else:
             event_heights.append(0)
             effective_labels.append("")
@@ -194,7 +198,7 @@ def _compute_layout(
         if si < 0 or ti < 0 or si == ti:
             continue
         lo, hi = min(si, ti), max(si, ti)
-        label_need = len(eff) + 6  # padding for arrow + spacing
+        label_need = display_width(eff) + 6  # padding for arrow + spacing
         spans = hi - lo
         per_gap = (label_need + spans - 1) // spans
         for g in range(lo, hi):

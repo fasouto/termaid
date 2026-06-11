@@ -727,3 +727,25 @@ class TestSequenceBlockRendering:
         assert "Line 3" in output
         # <br/> should not appear literally
         assert "<br/>" not in output
+
+
+class TestSelfMessageLayout:
+    def test_next_label_does_not_overwrite_self_loop(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  A->>A: think\n"
+            "  A->>B: hello"
+        )
+        assert "think" in output
+        assert "hello" in output
+        # The self-loop's return row (ends with the loop corner) must not
+        # carry the next message's label
+        for line in output.split("\n"):
+            assert not ("hello" in line and "┘" in line)
+
+    def test_cjk_message_label_fully_rendered(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  A->>B: 这是一个很长的中文标签测试"
+        )
+        assert "这是一个很长的中文标签测试" in output
