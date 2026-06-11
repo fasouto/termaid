@@ -177,3 +177,20 @@ class TestBlockDiagramRendering:
         assert "Source" in output
         assert "Target" in output
         assert "►" in output or ">" in output, "Arrow should be rendered between blocks"
+
+
+class TestNestedGroups:
+    def test_doubly_nested_blocks_are_rendered(self):
+        output = render(
+            "block-beta\n"
+            "  block:outer\n"
+            "    block:inner\n"
+            "      a\n"
+            "      b\n"
+            "    end\n"
+            "    c\n"
+            "  end"
+        )
+        assert "a" in output
+        assert "b" in output
+        assert "c" in output

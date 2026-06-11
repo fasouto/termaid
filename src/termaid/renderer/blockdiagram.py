@@ -264,6 +264,10 @@ def _position_children(
             sizes[block.id] = (bw, bh)
             positions[block.id] = (bx, by)
 
+            # Recurse into nested groups
+            if block.children:
+                _position_children(block, bx, by, bw, bh, sizes, positions, col_gap=col_gap)
+
 
 def _draw_blocks(
     canvas: Canvas,
