@@ -73,3 +73,15 @@ class TestKanbanWideChars:
         lines = output.split("\n")
         border_w = max(display_width(l) for l in lines if "╭" in l or "┌" in l)
         assert all(display_width(l) <= border_w for l in lines)
+
+
+class TestKanbanBracketIdsWithMetadata:
+    def test_id_bracket_label_with_trailing_metadata(self):
+        kb = parse_kanban(
+            "kanban\n"
+            "  todo[To Do]\n"
+            "    spike[Research vector DB options] @alice"
+        )
+        card = kb.columns[0].cards[0]
+        assert card.title == "Research vector DB options"
+        assert card.metadata == "@alice"

@@ -56,12 +56,9 @@ def parse_kanban(text: str) -> Kanban:
     current_column: KanbanColumn | None = None
 
     for indent, text in body_lines:
-        # Strip id[Title] wrappers and quotes from card/column names
-        clean = _clean_title(text)
-
         if indent <= min_indent:
             # Column header
-            current_column = KanbanColumn(title=clean)
+            current_column = KanbanColumn(title=_clean_title(text))
             kb.columns.append(current_column)
         else:
             # Card
@@ -69,13 +66,15 @@ def parse_kanban(text: str) -> Kanban:
                 current_column = KanbanColumn(title="")
                 kb.columns.append(current_column)
 
-            # Check for metadata: "card title @tag" or "card title [tag]"
+            # Extract metadata ("card title @tag") before unwrapping id[Title]
             metadata = ""
-            if "@" in clean:
-                parts = clean.rsplit("@", 1)
-                clean = parts[0].strip()
+            if "@" in text:
+                parts = text.rsplit("@", 1)
+                text = parts[0].strip()
                 metadata = "@" + parts[1].strip()
 
-            current_column.cards.append(KanbanCard(title=clean, metadata=metadata))
+            current_column.cards.append(
+                KanbanCard(title=_clean_title(text), metadata=metadata)
+            )
 
     return kb
