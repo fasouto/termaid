@@ -14,9 +14,19 @@ Syntax:
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from ..model.gantt import Gantt, GanttSection, GanttTask
+
+# Mermaid (dayjs) date format tokens -> strptime directives
+_FORMAT_TOKENS = {
+    "YYYY": "%Y", "YY": "%y",
+    "MM": "%m", "M": "%m",
+    "DD": "%d", "D": "%d",
+    "HH": "%H", "H": "%H",
+    "mm": "%M", "ss": "%S",
+}
+_FORMAT_TOKEN_RE = re.compile("|".join(sorted(_FORMAT_TOKENS, key=len, reverse=True)))
 
 
 def parse_gantt(text: str) -> Gantt:
@@ -183,9 +193,16 @@ def _parse_task(line: str, tasks_by_id: dict[str, GanttTask], date_format: str) 
 
 
 def _parse_date(text: str, date_format: str) -> date | None:
-    """Parse a date string."""
+    """Parse a date string, honoring the diagram's dateFormat directive."""
     text = text.strip()
-    # Try ISO format first
+    # Try the declared dateFormat first (Mermaid/dayjs tokens)
+    if date_format:
+        fmt = _FORMAT_TOKEN_RE.sub(lambda m: _FORMAT_TOKENS[m.group(0)], date_format)
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            pass
+    # Try ISO format
     m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})$', text)
     if m:
         try:

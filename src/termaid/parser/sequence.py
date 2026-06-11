@@ -204,22 +204,17 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         if m:
             raw_source, arrow, raw_target, label = m.group(1), m.group(2), m.group(3), m.group(4)
 
-            # Detect inline activation markers (+/-) on source/target
-            source_activate = None
-            target_activate = None
-
+            # Detect inline activation markers (+/-) after the arrow
             source = raw_source
-            if source.startswith("+") or source.startswith("-"):
-                source_activate = source[0] == "+"
+            source_marker = ""
+            if source[:1] in ("+", "-"):
+                source_marker = source[0]
                 source = source[1:]
             target = raw_target
-            if target.startswith("+") or target.startswith("-"):
-                target_activate = target[0] == "+"
+            target_marker = ""
+            if target[:1] in ("+", "-"):
+                target_marker = target[0]
                 target = target[1:]
-            # Also check trailing +/- on target (Mermaid supports Alice->>+Bob)
-            if target.endswith("+") or target.endswith("-"):
-                target_activate = target[-1] == "+"
-                target = target[:-1]
 
             _ensure_participant(diagram, source)
             _ensure_participant(diagram, target)
@@ -232,14 +227,19 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
                 arrow_type=arrow_type,
             ))
 
-            # Emit ActivateEvents for inline markers
-            if source_activate is not None:
+            # Emit ActivateEvents for inline markers. Mermaid semantics:
+            # '+' activates the receiver, '-' deactivates the sender.
+            if source_marker:
                 event_stack[-1].append(ActivateEvent(
-                    participant=source, active=source_activate,
+                    participant=source, active=source_marker == "+",
                 ))
-            if target_activate is not None:
+            if target_marker == "+":
                 event_stack[-1].append(ActivateEvent(
-                    participant=target, active=target_activate,
+                    participant=target, active=True,
+                ))
+            elif target_marker == "-":
+                event_stack[-1].append(ActivateEvent(
+                    participant=source, active=False,
                 ))
             continue
 

@@ -39,3 +39,19 @@ class TestKanbanRendering:
         assert "In Progress" in output
         assert "Done" in output
         assert "╭" in output  # rounded column border
+
+
+class TestKanbanBracketIds:
+    def test_id_bracket_label_on_column_and_card(self):
+        kb = parse_kanban(
+            "kanban\n"
+            "  id1[In progress]\n"
+            "    docs[Create Documentation]"
+        )
+        assert kb.columns[0].title == "In progress"
+        assert kb.columns[0].cards[0].title == "Create Documentation"
+
+    def test_plain_titles_unchanged(self):
+        kb = parse_kanban("kanban\n  Todo\n    Fix bug")
+        assert kb.columns[0].title == "Todo"
+        assert kb.columns[0].cards[0].title == "Fix bug"

@@ -57,7 +57,7 @@ def parse_quadrant(text: str) -> QuadrantChart:
             qc.quadrant_4 = stripped[11:].strip()
         else:
             # Try to parse as a point: "Label: [x, y]"
-            m = re.match(r'^(.+?):\s*\[\s*([0-9.]+)\s*,\s*([0-9.]+)\s*\]', stripped)
+            m = re.match(r'^(.+?):\s*\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]', stripped)
             if m:
                 label = m.group(1).strip()
                 x = float(m.group(2))

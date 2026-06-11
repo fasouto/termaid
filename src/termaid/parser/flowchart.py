@@ -228,6 +228,24 @@ def _strip_quotes(text: str) -> str:
     return text
 
 
+def _split_on_semicolons(line: str) -> list[str]:
+    """Split a line into statements at semicolons outside double quotes."""
+    parts: list[str] = []
+    buf: list[str] = []
+    in_quote = False
+    for ch in line:
+        if ch == '"':
+            in_quote = not in_quote
+            buf.append(ch)
+        elif ch == ";" and not in_quote:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf))
+    return parts
+
+
 class _FlowchartParser:
     def __init__(self, text: str) -> None:
         self.text = text
@@ -257,10 +275,8 @@ class _FlowchartParser:
         """Split into lines, handle semicolons, strip comments."""
         raw_lines: list[str] = []
         for line in text.split("\n"):
-            # Expand semicolons into separate lines
-            parts = line.split(";")
-            for part in parts:
-                raw_lines.append(part)
+            # Expand semicolons into separate lines (quoted labels excluded)
+            raw_lines.extend(_split_on_semicolons(line))
 
         result: list[str] = []
         for line in raw_lines:

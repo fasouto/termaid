@@ -299,3 +299,22 @@ class TestStateDiagramRendering:
             assert label in output
         assert "●" in output
         assert "◉" in output
+
+
+class TestShapePreservation:
+    def test_note_preserves_choice_shape(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "    state if_state <<choice>>\n"
+            "    note right of if_state : check\n"
+            "    [*] --> if_state"
+        )
+        assert g.nodes["if_state"].shape == NodeShape.DIAMOND
+
+    def test_plain_redeclaration_preserves_fork_shape(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "    state f <<fork>>\n"
+            "    f"
+        )
+        assert g.nodes["f"].shape == NodeShape.FORK_JOIN

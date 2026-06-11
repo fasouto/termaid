@@ -345,3 +345,16 @@ class TestEdgeCases:
     def test_node_label_updated_on_redeclaration(self):
         g = parse_flowchart("graph LR\n  A --> B\n  A[Custom]")
         assert g.nodes["A"].label == "Custom"
+
+
+class TestSemicolonStatements:
+    def test_semicolon_inside_quoted_label_not_split(self):
+        g = parse_flowchart('graph LR\n  A["a;b"] --> B')
+        assert set(g.nodes) == {"A", "B"}
+        assert g.nodes["A"].label == "a;b"
+        assert len(g.edges) == 1
+
+    def test_semicolon_still_splits_statements(self):
+        g = parse_flowchart("graph LR; A --> B; B --> C")
+        assert set(g.nodes) == {"A", "B", "C"}
+        assert len(g.edges) == 2

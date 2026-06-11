@@ -88,7 +88,8 @@ class _StateDiagramParser:
             position = note_match.group(1).lower().replace(" ", "")  # "rightof"/"leftof"
             target = note_match.group(2)
             text = re.sub(r'<br\s*/?>', '\n', note_match.group(3).strip(), flags=re.IGNORECASE)
-            self._ensure_node(target, self._aliases.get(target, target), NodeShape.ROUNDED)
+            if target not in self.graph.nodes:
+                self._ensure_node(target, self._aliases.get(target, target), NodeShape.ROUNDED)
             self.graph.notes.append(GraphNote(text=text, position=position, target=target))
             return
         # Skip other note variants we don't handle yet
@@ -160,7 +161,8 @@ class _StateDiagramParser:
         # Plain state declaration (just a name on a line)
         if re.match(r'^[a-zA-Z_]\w*$', line.strip()):
             state_id = line.strip()
-            self._ensure_node(state_id, state_id, NodeShape.ROUNDED)
+            if state_id not in self.graph.nodes:
+                self._ensure_node(state_id, state_id, NodeShape.ROUNDED)
 
     def _resolve_state(self, raw: str, is_source: bool) -> str:
         """Resolve [*] to start/end nodes, or ensure a regular state exists."""

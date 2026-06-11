@@ -514,12 +514,31 @@ class TestSequenceBlockParser:
         )
         activations = [e for e in d.events if isinstance(e, ActivateEvent)]
         assert len(activations) == 2
-        # First: +Bob activates Bob
+        # First: '+' activates the receiver (Bob)
         assert activations[0].participant == "Bob"
         assert activations[0].active is True
-        # Second: -Alice deactivates Alice
-        assert activations[1].participant == "Alice"
+        # Second: '-' deactivates the sender (Bob), per Mermaid semantics
+        assert activations[1].participant == "Bob"
         assert activations[1].active is False
+
+    def test_inline_activation_stacked(self):
+        d = parse_sequence_diagram(
+            "sequenceDiagram\n"
+            "  Alice->>+John: a\n"
+            "  Alice->>+John: b\n"
+            "  John-->>-Alice: c\n"
+            "  John-->>-Alice: d"
+        )
+        activations = [
+            (e.participant, e.active)
+            for e in d.events if isinstance(e, ActivateEvent)
+        ]
+        assert activations == [
+            ("John", True), ("John", True), ("John", False), ("John", False),
+        ]
+        messages = [e for e in d.events if isinstance(e, Message)]
+        assert all(m.source in ("Alice", "John") for m in messages)
+        assert all(m.target in ("Alice", "John") for m in messages)
 
 
 class TestSequenceDestroyAndRect:

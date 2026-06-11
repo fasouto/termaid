@@ -92,3 +92,13 @@ class TestXYChartRendering:
         )
         assert "Jan" in output
         assert "█" in output
+
+
+class TestMalformedXYChartInput:
+    def test_invalid_titled_range_does_not_crash(self):
+        chart = parse_xychart('xychart-beta\n    x-axis "t" 0.1.2 --> 10\n    bar [1, 2]')
+        assert chart.x_range is None
+
+    def test_invalid_bare_range_does_not_crash(self):
+        chart = parse_xychart("xychart-beta\n    y-axis 0.1.2 --> 10")
+        assert chart.y_range is None

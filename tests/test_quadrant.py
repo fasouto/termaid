@@ -59,3 +59,13 @@ class TestQuadrantRendering:
         assert "Cache" in output
         assert "DB" in output
         assert "●" in output  # data point marker
+
+
+class TestMalformedQuadrantInput:
+    def test_invalid_coordinate_does_not_crash(self):
+        qc = parse_quadrant(
+            "quadrantChart\n"
+            "    Bad: [0.1.2, 0.5]\n"
+            "    Good: [0.2, 0.3]"
+        )
+        assert [p.label for p in qc.points] == ["Good"]

@@ -17,6 +17,9 @@ import re
 
 from ..model.xychart import XYChart, XYDataset
 
+# A number that float() is guaranteed to accept (rejects e.g. "0.1.2")
+_NUM = r"-?\d+(?:\.\d+)?"
+
 
 def parse_xychart(text: str) -> XYChart:
     """Parse a mermaid XY chart definition."""
@@ -80,7 +83,7 @@ def _parse_axis(rest: str, chart: XYChart, is_x: bool) -> None:
         return
 
     # Try: title min --> max  or  "title" min --> max
-    m = re.match(r'^(?:"([^"]+)"|(\S+))\s+(-?[\d.]+)\s*-->\s*(-?[\d.]+)', rest)
+    m = re.match(rf'^(?:"([^"]+)"|(\S+))\s+({_NUM})\s*-->\s*({_NUM})', rest)
     if m:
         label = m.group(1) or m.group(2)
         lo, hi = float(m.group(3)), float(m.group(4))
@@ -93,7 +96,7 @@ def _parse_axis(rest: str, chart: XYChart, is_x: bool) -> None:
         return
 
     # Try: min --> max (no title)
-    m = re.match(r'^(-?[\d.]+)\s*-->\s*(-?[\d.]+)', rest)
+    m = re.match(rf'^({_NUM})\s*-->\s*({_NUM})', rest)
     if m:
         lo, hi = float(m.group(1)), float(m.group(2))
         if is_x:

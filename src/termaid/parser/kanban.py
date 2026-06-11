@@ -12,7 +12,17 @@ Syntax:
 """
 from __future__ import annotations
 
+import re
+
 from ..model.kanban import Kanban, KanbanColumn, KanbanCard
+
+
+def _clean_title(text: str) -> str:
+    """Extract the display title, handling the id[Title] form."""
+    m = re.match(r'^[\w-]*\[(.+)\]$', text)
+    if m:
+        text = m.group(1)
+    return text.strip().strip("\"'")
 
 
 def parse_kanban(text: str) -> Kanban:
@@ -46,8 +56,8 @@ def parse_kanban(text: str) -> Kanban:
     current_column: KanbanColumn | None = None
 
     for indent, text in body_lines:
-        # Strip brackets/quotes from card/column names
-        clean = text.strip("[]\"'")
+        # Strip id[Title] wrappers and quotes from card/column names
+        clean = _clean_title(text)
 
         if indent <= min_indent:
             # Column header

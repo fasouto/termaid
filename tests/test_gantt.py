@@ -92,3 +92,26 @@ class TestGanttRendering:
         assert "░" in output  # done char
         assert "▓" in output  # active char
         assert "█" in output  # crit/normal char
+
+
+class TestGanttDateFormat:
+    def test_custom_date_format_is_honored(self):
+        g = parse_gantt(
+            "gantt\n"
+            "  dateFormat DD-MM-YYYY\n"
+            "  section S\n"
+            "    Task :t1, 01-02-2024, 05-02-2024"
+        )
+        t = g.sections[0].tasks[0]
+        assert t.start == date(2024, 2, 1)
+        assert t.end == date(2024, 2, 5)
+
+    def test_default_iso_format_still_works(self):
+        g = parse_gantt(
+            "gantt\n"
+            "  section S\n"
+            "    Task :t1, 2024-01-01, 2024-01-05"
+        )
+        t = g.sections[0].tasks[0]
+        assert t.start == date(2024, 1, 1)
+        assert t.end == date(2024, 1, 5)
