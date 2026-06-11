@@ -371,10 +371,12 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
                         in_degree[succ] -= 1
                         if in_degree[succ] == 0:
                             kahn_queue.append(succ)
-                # Replace in-layer positions: find positions of sg nodes, fill with topo order
+                # Replace in-layer positions: find positions of sg nodes, fill with topo order.
+                # A cycle leaves topo incomplete; rewriting then duplicates
+                # some nodes and drops others, so keep the original order.
                 positions = [i for i, n in enumerate(layer) if n in internal]
-                for idx, pos in enumerate(positions):
-                    if idx < len(topo):
+                if len(topo) == len(positions):
+                    for idx, pos in enumerate(positions):
                         layer[pos] = topo[idx]
 
     return layer_lists

@@ -141,3 +141,25 @@ class TestLargeGraph:
         assert len(layout.placements) == 13  # A-M
         assert layout.canvas_width > 0
         assert layout.canvas_height > 0
+
+
+class TestOrthogonalSubgraphOrdering:
+    def test_cyclic_subgraph_keeps_all_nodes(self):
+        from termaid.layout.layers import assign_layers, order_layers
+
+        src = (
+            "flowchart TD\n"
+            "subgraph S\n"
+            "direction LR\n"
+            "B\n"
+            "A\n"
+            "C\n"
+            "A --> B\n"
+            "B --> C\n"
+            "C --> B\n"
+            "end\n"
+        )
+        graph = parse_flowchart(src)
+        ordered = order_layers(graph, assign_layers(graph))
+        flat = [n for layer in ordered for n in layer]
+        assert sorted(flat) == sorted(graph.nodes)
