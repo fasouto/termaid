@@ -7,8 +7,48 @@ from __future__ import annotations
 
 from collections import deque
 
-from ..graph.model import Graph, Subgraph
+from ..graph.model import Edge, Graph, Subgraph
 from .grid import STRIDE, GridLayout
+
+
+def expand_subgraph_edges(graph: Graph) -> list[Edge]:
+    """Create virtual node-to-node edges for edges with subgraph endpoints.
+
+    An edge like ``A --> B`` where A and B are subgraphs constrains every
+    node of B to a layer below every node of A. Layer assignment only
+    understands node-to-node edges, so expand each subgraph endpoint into
+    its member nodes (recursively) and emit one virtual edge per pair.
+    The virtual edges are used for layer assignment only and never drawn.
+    """
+    def _members(sg: Subgraph, result: set[str]) -> None:
+        result.update(sg.node_ids)
+        for child in sg.children:
+            _members(child, result)
+
+    virtual: list[Edge] = []
+    for e in graph.edges:
+        if not (e.source_is_subgraph or e.target_is_subgraph):
+            continue
+        sources: set[str] = set()
+        targets: set[str] = set()
+        for endpoint, is_sg, bucket in (
+            (e.source, e.source_is_subgraph, sources),
+            (e.target, e.target_is_subgraph, targets),
+        ):
+            if is_sg:
+                sg = graph.find_subgraph_by_id(endpoint)
+                if sg:
+                    _members(sg, bucket)
+            else:
+                bucket.add(endpoint)
+        if not sources or not targets or sources & targets:
+            # Empty subgraph, self-edge, or nested endpoints: the
+            # constraint is unsatisfiable, so skip it.
+            continue
+        for s in sources:
+            for t in targets:
+                virtual.append(Edge(source=s, target=t, min_length=e.min_length))
+    return virtual
 
 
 def assign_layers(graph: Graph) -> dict[str, int]:

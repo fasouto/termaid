@@ -47,9 +47,12 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
     for sb in layout.subgraph_bounds:
         sg_bounds[sb.subgraph.id] = sb
 
+    # Grid regions of each subgraph box: edges that neither start nor end
+    # in a subgraph should avoid routing through its box.
+    sg_regions = _compute_sg_regions(layout, sg_bounds)
+
     for i, edge in enumerate(graph.edges):
-        src = _resolve_placement(edge.source, edge.source_is_subgraph, layout, sg_bounds)
-        tgt = _resolve_placement(edge.target, edge.target_is_subgraph, layout, sg_bounds)
+        src, tgt = _resolve_endpoints(edge, layout, sg_bounds)
 
         if src is None or tgt is None:
             continue
@@ -60,9 +63,18 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
             routed.append(re)
             continue
 
-        re = _route_edge(edge, src, tgt, layout, direction, soft_obstacles)
+        forbidden = _foreign_sg_cells(edge, graph, sg_regions)
+        re = _route_edge(edge, src, tgt, layout, direction, soft_obstacles | forbidden)
         re.index = i
         soft_obstacles.update(re.occupied_cells)
+
+        # Snap subgraph-endpoint edges onto the subgraph border so they
+        # attach to the box, not to the inner node used for routing.
+        if edge.source_is_subgraph and edge.source in sg_bounds:
+            _clip_endpoint_to_box(re.draw_path, sg_bounds[edge.source], from_start=True)
+        if edge.target_is_subgraph and edge.target in sg_bounds:
+            _clip_endpoint_to_box(re.draw_path, sg_bounds[edge.target], from_start=False)
+
         routed.append(re)
 
     # Post-process: spread edges that share the same target endpoint so
@@ -70,12 +82,16 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
     # because edges diverge naturally from a shared T-junction, and
     # spreading the start creates jog segments at the border that produce
     # ┼ artifacts when the jog crosses the node border characters.
-    _spread_shared_endpoints(routed, layout)
+    _spread_shared_endpoints(routed, layout, sg_bounds)
 
     return routed
 
 
-def _spread_shared_endpoints(routed: list[RoutedEdge], layout: GridLayout) -> None:
+def _spread_shared_endpoints(
+    routed: list[RoutedEdge],
+    layout: GridLayout,
+    sg_bounds: dict[str, SubgraphBounds],
+) -> None:
     """Spread edges that share the same draw-path end point.
 
     When multiple edges converge on the same cell (e.g. two edges arriving
@@ -94,6 +110,13 @@ def _spread_shared_endpoints(routed: list[RoutedEdge], layout: GridLayout) -> No
             continue
         tgt_id = edges[0].edge.target
         tgt = layout.placements.get(tgt_id)
+        if not tgt and tgt_id in sg_bounds:
+            sb = sg_bounds[tgt_id]
+            from ..layout.grid import GridCoord
+            tgt = NodePlacement(
+                node_id=tgt_id, grid=GridCoord(0, 0),
+                draw_x=sb.x, draw_y=sb.y, draw_width=sb.width, draw_height=sb.height,
+            )
         if not tgt:
             continue
         _apply_spread(edges, point, tgt, is_start=False)
@@ -163,45 +186,226 @@ def _apply_spread(
             re.draw_path.insert(-1, (adj_x, new_y))
 
 
-def _resolve_placement(
-    node_id: str,
-    is_subgraph: bool,
+def _sg_member_placements(
+    sb: SubgraphBounds, layout: GridLayout,
+) -> list[NodePlacement]:
+    """Placements of all nodes inside a subgraph (recursively)."""
+    member_ids: set[str] = set()
+
+    def _gather(sg) -> None:
+        member_ids.update(sg.node_ids)
+        for child in sg.children:
+            _gather(child)
+
+    _gather(sb.subgraph)
+    return [layout.placements[m] for m in member_ids if m in layout.placements]
+
+
+def _resolve_endpoints(
+    edge: Edge,
     layout: GridLayout,
     sg_bounds: dict[str, SubgraphBounds],
-) -> NodePlacement | None:
-    """Resolve a node or subgraph ID to a NodePlacement."""
-    if not is_subgraph:
-        return layout.placements.get(node_id)
+) -> tuple[NodePlacement | None, NodePlacement | None]:
+    """Resolve edge endpoints to placements.
 
-    sb = sg_bounds.get(node_id)
-    if sb is None:
-        return None
+    For a subgraph endpoint, synthesize a virtual placement: the draw box
+    is the subgraph's bounding box, and the grid cell is borrowed from a
+    member node. When a subgraph is involved, the source and target cells
+    are chosen jointly (closest member pair) so the edge crosses the box
+    border on the facing side without jogs. The routed path is later
+    clipped to the box border by ``_clip_endpoint_to_box``.
+    """
+    if not edge.source_is_subgraph and not edge.target_is_subgraph:
+        return layout.placements.get(edge.source), layout.placements.get(edge.target)
 
-    # Synthesize a virtual placement at the subgraph center
-    cx = sb.x + sb.width // 2
-    cy = sb.y + sb.height // 2
-    # Find the closest grid cell to the subgraph center
-    best_col = 0
-    best_row = 0
-    best_dist = float("inf")
-    for p in layout.placements.values():
-        dx = p.draw_x + p.draw_width // 2 - cx
-        dy = p.draw_y + p.draw_height // 2 - cy
-        dist = abs(dx) + abs(dy)
-        if dist < best_dist:
-            best_dist = dist
-            best_col = p.grid.col
-            best_row = p.grid.row
+    def _candidates(node_id: str, is_sg: bool) -> list[NodePlacement]:
+        if not is_sg:
+            p = layout.placements.get(node_id)
+            return [p] if p else []
+        sb = sg_bounds.get(node_id)
+        if sb is None:
+            return []
+        return _sg_member_placements(sb, layout)
+
+    src_cands = _candidates(edge.source, edge.source_is_subgraph)
+    tgt_cands = _candidates(edge.target, edge.target_is_subgraph)
+    if not src_cands or not tgt_cands:
+        return None, None
+
+    def _center(p: NodePlacement) -> tuple[int, int]:
+        return (p.draw_x + p.draw_width // 2, p.draw_y + p.draw_height // 2)
+
+    best_s, best_t = min(
+        ((s, t) for s in src_cands for t in tgt_cands),
+        key=lambda pair: (
+            abs(_center(pair[0])[0] - _center(pair[1])[0])
+            + abs(_center(pair[0])[1] - _center(pair[1])[1]),
+            pair[0].node_id,
+            pair[1].node_id,
+        ),
+    )
 
     from ..layout.grid import GridCoord
-    return NodePlacement(
-        node_id=node_id,
-        grid=GridCoord(col=best_col, row=best_row),
-        draw_x=sb.x,
-        draw_y=sb.y,
-        draw_width=sb.width,
-        draw_height=sb.height,
+
+    def _virtualize(node_id: str, is_sg: bool, member: NodePlacement) -> NodePlacement:
+        if not is_sg:
+            return member
+        sb = sg_bounds[node_id]
+        return NodePlacement(
+            node_id=node_id,
+            grid=GridCoord(col=member.grid.col, row=member.grid.row),
+            draw_x=sb.x,
+            draw_y=sb.y,
+            draw_width=sb.width,
+            draw_height=sb.height,
+        )
+
+    return (
+        _virtualize(edge.source, edge.source_is_subgraph, best_s),
+        _virtualize(edge.target, edge.target_is_subgraph, best_t),
     )
+
+
+def _clip_endpoint_to_box(
+    draw_path: list[tuple[int, int]],
+    sb: SubgraphBounds,
+    from_start: bool,
+) -> None:
+    """Snap one end of a draw path onto a subgraph's border rectangle.
+
+    The path was routed from a member node inside the box; drop the part
+    inside the box and move the terminal point to where the path crosses
+    the border, so the edge visually attaches to the subgraph itself.
+    """
+    if len(draw_path) < 2:
+        return
+
+    pts = draw_path if from_start else draw_path[::-1]
+    x0, y0 = sb.x, sb.y
+    x1, y1 = sb.x + sb.width - 1, sb.y + sb.height - 1
+
+    def strictly_inside(p: tuple[int, int]) -> bool:
+        return x0 < p[0] < x1 and y0 < p[1] < y1
+
+    k = 0
+    while k < len(pts) and strictly_inside(pts[k]):
+        k += 1
+    if k >= len(pts):
+        return  # path never leaves the box; keep as-is
+
+    if k == 0:
+        # Terminal point is already on/outside the border: pull it back
+        # onto the box edge along the first segment's axis.
+        ax, ay = pts[0]
+        bx, by = pts[1]
+        if ax == bx:
+            new = [(ax, min(max(ay, y0), y1))] + pts[1:]
+        else:
+            new = [(min(max(ax, x0), x1), ay)] + pts[1:]
+    else:
+        # Crossing point on the segment pts[k-1] (inside) -> pts[k] (outside).
+        px, py = pts[k - 1]
+        qx, qy = pts[k]
+        if px == qx:
+            cross = (px, y1 if qy > py else y0)
+        else:
+            cross = (x1 if qx > px else x0, py)
+        new = [cross] + pts[k:]
+
+    if len(new) >= 2 and new[0] == new[1]:
+        new = new[1:]
+    if len(new) < 2:
+        return  # degenerate; keep the original path
+
+    # If the last turn sits right next to the border, the terminal segment
+    # has no room for the arrowhead/tee plus a line cell. Shift the turn
+    # segment away from the border to open up the approach.
+    if len(new) >= 4:
+        (cx, cy), (nx, ny), (mx, my) = new[0], new[1], new[2]
+        px, py = new[3]
+        if cx == nx and ny == my and abs(cy - ny) < 3:
+            # Perpendicular jog before a vertical approach
+            sign = 1 if cy > ny else -1
+            new_y = cy - 3 * sign
+            if (sign > 0 and py < new_y) or (sign < 0 and py > new_y):
+                new[1] = (nx, new_y)
+                new[2] = (mx, new_y)
+        elif cy == ny and nx == mx and abs(cx - nx) < 3:
+            # Perpendicular jog before a horizontal approach
+            sign = 1 if cx > nx else -1
+            new_x = cx - 3 * sign
+            if (sign > 0 and px < new_x) or (sign < 0 and px > new_x):
+                new[1] = (new_x, ny)
+                new[2] = (new_x, my)
+
+    if not from_start:
+        new = new[::-1]
+    draw_path[:] = new
+
+
+def _compute_sg_regions(
+    layout: GridLayout,
+    sg_bounds: dict[str, SubgraphBounds],
+) -> dict[str, set[tuple[int, int]]]:
+    """Grid cells covered by each subgraph box (member blocks + border channels)."""
+    regions: dict[str, set[tuple[int, int]]] = {}
+    for sg_id, sb in sg_bounds.items():
+        members = _sg_member_placements(sb, layout)
+        if not members:
+            continue
+        min_col = min(p.grid.col for p in members) - 1
+        max_col = max(p.grid.col for p in members) + 1
+        min_row = min(p.grid.row for p in members) - 1
+        max_row = max(p.grid.row for p in members) + 1
+        regions[sg_id] = {
+            (c, r)
+            for c in range(min_col, max_col + 1)
+            for r in range(min_row, max_row + 1)
+        }
+    return regions
+
+
+def _foreign_sg_cells(
+    edge: Edge,
+    graph: Graph,
+    sg_regions: dict[str, set[tuple[int, int]]],
+) -> set[tuple[int, int]]:
+    """Cells of subgraph boxes this edge should avoid routing through.
+
+    A subgraph is off-limits unless one of the edge's endpoints lives in it
+    (or in a subgraph nested inside/around it).
+    """
+    if not sg_regions:
+        return set()
+
+    allowed: set[str] = set()
+    for endpoint, is_sg in (
+        (edge.source, edge.source_is_subgraph),
+        (edge.target, edge.target_is_subgraph),
+    ):
+        if is_sg:
+            sg = graph.find_subgraph_by_id(endpoint)
+            # The subgraph itself, its ancestors, and its descendants: the
+            # borrowed attachment cell may sit inside a nested child box.
+            stack = [sg] if sg else []
+            while stack:
+                cur = stack.pop()
+                allowed.add(cur.id)
+                stack.extend(cur.children)
+            while sg:
+                allowed.add(sg.id)
+                sg = sg.parent
+        else:
+            sg = graph.find_subgraph_for_node(endpoint)
+            while sg:
+                allowed.add(sg.id)
+                sg = sg.parent
+
+    cells: set[tuple[int, int]] = set()
+    for sg_id, region in sg_regions.items():
+        if sg_id not in allowed:
+            cells |= region
+    return cells
 
 
 def _get_attach_point(

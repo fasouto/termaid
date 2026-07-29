@@ -23,16 +23,16 @@ def expand_gaps_for_subgraphs(
     if not graph.subgraphs:
         return
 
-    # Compute nesting depth for each node
-    def _get_depth(nid: str) -> int:
-        depth = 0
+    # Ancestor subgraph chain for each node
+    def _get_chain(nid: str) -> frozenset[str]:
+        chain: set[str] = set()
         sg = graph.find_subgraph_for_node(nid)
         while sg:
-            depth += 1
+            chain.add(sg.id)
             sg = sg.parent
-        return depth
+        return frozenset(chain)
 
-    node_depths = {nid: _get_depth(nid) for nid in graph.node_order}
+    node_chains = {nid: _get_chain(nid) for nid in graph.node_order}
 
     is_vertical = direction in (Direction.TB, Direction.TD)
 
@@ -53,25 +53,18 @@ def expand_gaps_for_subgraphs(
         pos1 = sorted_flow[i]
         pos2 = sorted_flow[i + 1]
 
-        min_depth1 = min(node_depths[nid] for nid in flow_groups[pos1])
-        max_depth2 = max(node_depths[nid] for nid in flow_groups[pos2])
-        entering = max(0, max_depth2 - min_depth1)
-
-        min_depth2 = min(node_depths[nid] for nid in flow_groups[pos2])
-        max_depth1 = max(node_depths[nid] for nid in flow_groups[pos1])
-        exiting = max(0, max_depth1 - min_depth2)
-
-        depth_change = max(entering, exiting)
-
-        # Detect sibling subgraph transitions: when adjacent layers are in
-        # different subgraphs at the same depth, we need to exit one and
-        # enter the other (2 boundary crossings, not 0).
-        if depth_change == 0:
-            sg_ids1 = {sg.id for nid in flow_groups[pos1] if (sg := graph.find_subgraph_for_node(nid))}
-            sg_ids2 = {sg.id for nid in flow_groups[pos2] if (sg := graph.find_subgraph_for_node(nid))}
-            if sg_ids1 and sg_ids2 and sg_ids1 != sg_ids2:
-                # Exiting one subgraph and entering another at same depth
-                depth_change = 2
+        # Count subgraph borders that live in this gap: a subgraph
+        # containing nodes on one side but not the other has a border
+        # (bottom or top) between the two layers. The symmetric difference
+        # of the ancestor sets counts exactly those borders, covering
+        # nesting transitions and sibling subgraphs alike.
+        sgs1: set[str] = set()
+        for nid in flow_groups[pos1]:
+            sgs1 |= node_chains[nid]
+        sgs2: set[str] = set()
+        for nid in flow_groups[pos2]:
+            sgs2 |= node_chains[nid]
+        depth_change = len(sgs1 ^ sgs2)
 
         if depth_change > 0:
             extra = depth_change * SG_GAP_PER_LEVEL

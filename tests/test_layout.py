@@ -163,3 +163,63 @@ class TestOrthogonalSubgraphOrdering:
         ordered = order_layers(graph, assign_layers(graph))
         flat = [n for layer in ordered for n in layer]
         assert sorted(flat) == sorted(graph.nodes)
+
+
+class TestSubgraphEdgeLayers:
+    """Edges with subgraph endpoints constrain layer assignment (issue #6)."""
+
+    def test_direct_subgraph_link_separates_layers(self):
+        from termaid.layout.layers import assign_layers, expand_subgraph_edges
+
+        src = (
+            "flowchart TD\n"
+            "subgraph A\n  A1\n  A2\nend\n"
+            "subgraph B\n  B1\n  B2\nend\n"
+            "A --> B\n"
+        )
+        g = parse_flowchart(src)
+        virtual = expand_subgraph_edges(g)
+        assert len(virtual) == 4  # 2 members x 2 members
+        g.edges.extend(virtual)
+        layers = assign_layers(g)
+        assert max(layers["A1"], layers["A2"]) < min(layers["B1"], layers["B2"])
+
+    def test_chain_through_standalone_node(self):
+        from termaid.layout.layers import assign_layers, expand_subgraph_edges
+
+        src = (
+            "flowchart TD\n"
+            "subgraph A\n  A1\n  A2\nend\n"
+            "subgraph B\n  B1\n  B2\nend\n"
+            "A --> C --> B\n"
+        )
+        g = parse_flowchart(src)
+        g.edges.extend(expand_subgraph_edges(g))
+        layers = assign_layers(g)
+        assert max(layers["A1"], layers["A2"]) < layers["C"]
+        assert layers["C"] < min(layers["B1"], layers["B2"])
+
+    def test_boxes_do_not_touch(self):
+        src = (
+            "flowchart TD\n"
+            "subgraph A\n  A1\n  A2\nend\n"
+            "subgraph B\n  B1\n  B2\nend\n"
+            "A --> C\n"
+        )
+        g = parse_flowchart(src)
+        layout = compute_layout(g)
+        bounds = {sb.subgraph.id: sb for sb in layout.subgraph_bounds}
+        box_a, box_b = bounds["A"], bounds["B"]
+        # A is above B with a real gap between the borders
+        assert box_a.y + box_a.height < box_b.y
+
+    def test_self_and_empty_subgraph_edges_skipped(self):
+        from termaid.layout.layers import expand_subgraph_edges
+
+        src = (
+            "flowchart TD\n"
+            "subgraph A\n  A1\nend\n"
+            "A --> A\n"
+        )
+        g = parse_flowchart(src)
+        assert expand_subgraph_edges(g) == []

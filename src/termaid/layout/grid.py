@@ -174,7 +174,13 @@ def compute_layout(graph: Graph, padding_x: int = 4, padding_y: int = 2, gap: in
     gap = max(gap, 1)  # minimum 1 for arrow visibility
     """Compute the grid layout for a graph."""
     # Lazy imports to avoid circular references at module load time
-    from .layers import assign_layers, separate_subgraph_layers, order_layers, compute_gap_expansions
+    from .layers import (
+        assign_layers,
+        compute_gap_expansions,
+        expand_subgraph_edges,
+        order_layers,
+        separate_subgraph_layers,
+    )
     from .placement import place_nodes, compute_sizes, normalize_sizes
     from .subgraphs import expand_gaps_for_subgraphs, compute_subgraph_bounds
     from .coordinates import compute_draw_coords, adjust_for_negative_bounds
@@ -191,11 +197,19 @@ def compute_layout(graph: Graph, padding_x: int = 4, padding_y: int = 2, gap: in
         layer_order = _layer_order_from_grid(graph)
         gap_expansions: dict[int, int] = {}
     else:
-        # Step 1: Assign layers via BFS from roots
-        layers = assign_layers(graph)
+        # Step 1: Assign layers via BFS from roots. Edges with subgraph
+        # endpoints (A --> B where A/B are subgraphs) are temporarily
+        # expanded into member-to-member edges so they constrain layering.
+        virtual_edges = expand_subgraph_edges(graph)
+        graph.edges.extend(virtual_edges)
+        try:
+            layers = assign_layers(graph)
 
-        # Step 1b: Fix overlapping subgraph layer ranges
-        layers = separate_subgraph_layers(graph, layers)
+            # Step 1b: Fix overlapping subgraph layer ranges
+            layers = separate_subgraph_layers(graph, layers)
+        finally:
+            if virtual_edges:
+                del graph.edges[len(graph.edges) - len(virtual_edges):]
 
         # Step 2: Order nodes within layers (barycenter heuristic)
         layer_order = order_layers(graph, layers)

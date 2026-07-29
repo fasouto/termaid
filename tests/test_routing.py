@@ -141,3 +141,84 @@ class TestEdgeRouting:
         paths = [tuple(re.grid_path) for re in routed]
         # Not all paths should be identical
         assert len(set(paths)) > 1
+
+
+class TestSubgraphEdgeRouting:
+    """Edges to/from subgraph IDs attach to the subgraph border (issue #6)."""
+
+    SIMPLE = (
+        "flowchart TD\n"
+        "subgraph A\n  A1\n  A2\nend\n"
+        "subgraph B\n  B1\n  B2\nend\n"
+        "A --> B\n"
+    )
+
+    def _sg_box(self, layout, sg_id):
+        for sb in layout.subgraph_bounds:
+            if sb.subgraph.id == sg_id:
+                return sb
+        raise AssertionError(f"no bounds for subgraph {sg_id}")
+
+    def test_endpoints_on_subgraph_borders(self):
+        g = parse_flowchart(self.SIMPLE)
+        layout = compute_layout(g)
+        routed = route_edges(g, layout)
+        assert len(routed) == 1
+        path = routed[0].draw_path
+        assert len(path) >= 2
+
+        box_a = self._sg_box(layout, "A")
+        box_b = self._sg_box(layout, "B")
+
+        # Start point sits on A's border rectangle
+        sx, sy = path[0]
+        assert sy == box_a.y + box_a.height - 1
+        assert box_a.x <= sx <= box_a.x + box_a.width - 1
+
+        # End point sits on B's border rectangle
+        ex, ey = path[-1]
+        assert ey == box_b.y
+        assert box_b.x <= ex <= box_b.x + box_b.width - 1
+
+    def test_endpoints_not_inside_boxes(self):
+        """No visible path point may fall strictly inside either subgraph box."""
+        g = parse_flowchart(self.SIMPLE)
+        layout = compute_layout(g)
+        routed = route_edges(g, layout)
+        box_a = self._sg_box(layout, "A")
+        box_b = self._sg_box(layout, "B")
+        for x, y in routed[0].draw_path:
+            for box in (box_a, box_b):
+                inside = (
+                    box.x < x < box.x + box.width - 1
+                    and box.y < y < box.y + box.height - 1
+                )
+                assert not inside, f"path point ({x},{y}) inside subgraph box"
+
+    def test_all_mixed_edges_routed(self):
+        src = (
+            "flowchart TD\n"
+            "subgraph A\n  A1\n  A2\nend\n"
+            "subgraph B\n  B1\n  B2\nend\n"
+            "A --> C --> B\n"
+            "A --> B\n"
+            "A --> B1\n"
+            "A1 --> A2\n"
+            "A1 --> B1\n"
+            "A1 --> B\n"
+            "A1 --> C\n"
+            "C --> B1\n"
+        )
+        g = parse_flowchart(src)
+        layout = compute_layout(g)
+        routed = route_edges(g, layout)
+        assert len(routed) == len(g.edges) == 9
+        # Every routed edge has a drawable path
+        for re in routed:
+            assert len(re.draw_path) >= 2
+
+    def test_subgraph_self_edge_does_not_crash(self):
+        src = "flowchart TD\nsubgraph A\n  A1\nend\nA --> A\n"
+        g = parse_flowchart(src)
+        layout = compute_layout(g)
+        route_edges(g, layout)  # must not raise
