@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0 (2026-07-29)
+
+### New
+- Flowchart: edges can link subgraphs directly (`A --> B` where A and B are subgraphs), matching Mermaid semantics. All mixed forms work too: subgraph to node, node to subgraph, and links across subgraphs. Edges attach to the subgraph border with a proper tee and arrowhead instead of grabbing an inner node (#6)
+
+### Fixes
+- Flowchart layout: edges with subgraph endpoints now constrain layer assignment, so chains like `A --> C --> B` stack vertically instead of piling into overlapping rows
+- Flowchart layout: the space between subgraph boxes is sized by counting the actual borders in each gap; sibling boxes no longer touch when a standalone node shares a row, and the workaround of passing a large `--gap` is no longer needed
+- Flowchart routing: edges no longer cut through unrelated subgraph boxes when a route around them exists
+
 ## 0.7.1 (2026-06-11)
 
 ### Fixes
