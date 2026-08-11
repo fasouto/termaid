@@ -45,6 +45,24 @@ class TestBasicRendering:
         assert isinstance(result, str)
         assert len(result) > 0
 
+    def test_inline_edge_labels_are_visibly_attached(self):
+        output = render(
+            "graph LR\n  A -->|edge label| B",
+            gap=16,
+            inline_edge_labels=True,
+        )
+
+        assert "─edge label─" in output
+
+    def test_inline_edge_labels_preserve_dotted_style(self):
+        output = render(
+            "graph LR\n  A -. dotted label .-> B",
+            gap=16,
+            inline_edge_labels=True,
+        )
+
+        assert "┄dotted label┄" in output
+
 
 class TestAllDirections:
     def test_lr(self):

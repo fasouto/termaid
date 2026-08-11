@@ -43,6 +43,7 @@ def render(
     padding_y: int = 2,
     rounded_edges: bool = True,
     gap: int = 4,
+    inline_edge_labels: bool = False,
 ) -> str:
     """Render mermaid syntax as Unicode (or ASCII) art.
 
@@ -52,6 +53,7 @@ def render(
         padding_x: Horizontal padding inside node boxes
         padding_y: Vertical padding inside node boxes
         gap: Space between nodes (default: 4)
+        inline_edge_labels: Attach flowchart labels directly to their edges
 
     Returns:
         Rendered diagram as a string
@@ -171,7 +173,15 @@ def render(
 
     graph = parse(text)
     from .output.text import render_text
-    return render_text(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges, gap=gap)
+    return render_text(
+        graph,
+        use_ascii=use_ascii,
+        padding_x=padding_x,
+        padding_y=padding_y,
+        rounded_edges=rounded_edges,
+        gap=gap,
+        inline_edge_labels=inline_edge_labels,
+    )
 
 
 def render_rich(
@@ -183,6 +193,7 @@ def render_rich(
     rounded_edges: bool = True,
     theme: str = "default",
     gap: int = 4,
+    inline_edge_labels: bool = False,
 ):
     """Render mermaid syntax as a Rich Text object with colors.
 
@@ -195,6 +206,7 @@ def render_rich(
         padding_y: Vertical padding inside node boxes
         theme: Color theme name (default, terra, neon, mono, amber, phosphor)
         gap: Space between nodes (default: 4)
+        inline_edge_labels: Attach flowchart labels directly to their edges
 
     Returns:
         rich.text.Text object
@@ -334,7 +346,16 @@ def render_rich(
 
     graph = parse(text)
     from .output.rich import render_rich as _render_rich
-    return _render_rich(graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y, rounded_edges=rounded_edges, theme=theme, gap=gap)
+    return _render_rich(
+        graph,
+        use_ascii=use_ascii,
+        padding_x=padding_x,
+        padding_y=padding_y,
+        rounded_edges=rounded_edges,
+        theme=theme,
+        gap=gap,
+        inline_edge_labels=inline_edge_labels,
+    )
 
 
 # Lazy import for MermaidWidget

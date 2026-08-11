@@ -500,6 +500,7 @@ packet
 | `--padding-x N` | Horizontal padding inside boxes (default: 4) |
 | `--padding-y N` | Vertical padding inside boxes (default: 2) |
 | `--gap N` | Space between nodes (default: 4). Use `1` or `2` for compact diagrams |
+| `--inline-edge-labels` | Attach flowchart labels directly to their edges |
 | `--width N` | Max output width. Re-renders with smaller gap/padding if exceeded |
 | `--no-auto-fit` | Disable automatic compaction when diagram exceeds terminal width |
 | `--sharp-edges` | Sharp corners on edge turns instead of rounded |
