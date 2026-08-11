@@ -1,0 +1,86 @@
+# Fork-only: repackages the release's compiled binaries as npm packages under @tayomi/termaid-bin.
+# Deliberately a separate workflow from publish.yml, which stays clean for an upstream PR.
+#
+# It compiles NOTHING: the binaries job (publish.yml) uploads the assets to the release, and this
+# waits for the five of them, stages the packages (scripts/stage-npm.mjs), smokes one, publishes.
+# Needs the NPM_TOKEN secret (npm automation token with publish rights on the @tayomi scope).
+
+name: Publish npm binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (vX.Y.Z) whose assets to package"
+        required: true
+
+permissions:
+  contents: read
+  id-token: write # npm --provenance
+
+env:
+  ASSET_COUNT: 5
+  WAIT_TRIES: 40
+  WAIT_SECONDS: 30
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        run: echo "TAG=${{ github.event.inputs.tag || github.event.release.tag_name }}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Wait for the release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in $(seq 1 "$WAIT_TRIES"); do
+            count=$(gh release view "$TAG" --json assets --jq '[.assets[] | select(.name | startswith("termaid-"))] | length')
+            echo "assets: ${count}/${ASSET_COUNT} (try ${i}/${WAIT_TRIES})"
+            [ "$count" -ge "$ASSET_COUNT" ] && exit 0
+            sleep "$WAIT_SECONDS"
+          done
+          echo "the binaries job never delivered ${ASSET_COUNT} assets" >&2
+          exit 1
+
+      - name: Download the assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$TAG" --pattern 'termaid-*' --dir assets
+
+      - name: Stage the packages
+        run: node scripts/stage-npm.mjs "${TAG#v}" assets dist-npm
+
+      - name: Smoke the binary this runner can execute
+        run: |
+          chmod +x dist-npm/termaid-bin-linux-x64/termaid
+          printf 'flowchart TD\n    A[Stage] --> B[Publish]\n' > _smoke.mmd
+          LC_ALL=C dist-npm/termaid-bin-linux-x64/termaid _smoke.mmd | grep -q Stage
+
+      - name: Publish, platforms first, meta last
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version="${TAG#v}"
+          for dir in dist-npm/termaid-bin-*; do
+            name=$(node -p "require('./$dir/package.json').name")
+            if npm view "${name}@${version}" version >/dev/null 2>&1; then
+              echo "${name}@${version} already published, skipping"
+              continue
+            fi
+            npm publish --access public --provenance "./$dir"
+          done
+          if npm view "@tayomi/termaid-bin@${version}" version >/dev/null 2>&1; then
+            echo "meta already published, skipping"
+          else
+            npm publish --access public --provenance ./dist-npm/termaid-bin
+          fi
