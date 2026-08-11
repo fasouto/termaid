@@ -192,7 +192,14 @@ class Canvas:
         if style:
             self._style_grid[row][col] = style
 
-    def put_text(self, row: int, col: int, text: str, style: str = "") -> None:
+    def put_text(
+        self,
+        row: int,
+        col: int,
+        text: str,
+        style: str = "",
+        overwrite_spaces: bool = False,
+    ) -> None:
         """Place a string of characters starting at (row, col).
 
         Wide (CJK) characters advance the column by 2 and leave a
@@ -201,10 +208,22 @@ class Canvas:
         """
         offset = 0
         for ch in text:
-            self.put(row, col + offset, ch, merge=False, style=style)
+            target_col = col + offset
+            if (
+                ch == " "
+                and overwrite_spaces
+                and 0 <= row < self.height
+                and 0 <= target_col < self.width
+                and not self._protected[row][target_col]
+            ):
+                self._grid[row][target_col] = " "
+                self._directions[row][target_col] = 0
+                self._style_grid[row][target_col] = style or "default"
+            else:
+                self.put(row, target_col, ch, merge=False, style=style)
             if unicodedata.east_asian_width(ch) in ("F", "W"):
                 # Wide char occupies 2 columns; blank the shadow cell
-                self._blank_shadow_cell(row, col + offset + 1, style)
+                self._blank_shadow_cell(row, target_col + 1, style)
                 offset += 2
             else:
                 offset += 1

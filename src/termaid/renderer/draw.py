@@ -482,25 +482,38 @@ def _label_overlaps(
     return False
 
 
-def _try_place_label(
+def _place_label(
     canvas: Canvas,
     row: int, col: int, label: str,
     placed: list[tuple[int, int, int]],
 ) -> bool:
-    """Try to place a label at (row, col). Returns True if placed."""
+    """Place a complete label when every character can be written."""
     col_end = col + display_width(label)
     if col < 0 or row < 0:
         return False
-    if _label_overlaps(row, col, col_end, placed):
-        return False
+    for target_col in range(col, col_end):
+        if canvas.is_protected(row, target_col) and canvas.get(row, target_col) != " ":
+            return False
     # Ensure canvas is large enough for the label
     needed_w = col_end + 1
     needed_h = row + 1
     if needed_w > canvas.width or needed_h > canvas.height:
         canvas.resize(max(canvas.width, needed_w), max(canvas.height, needed_h))
-    canvas.put_text(row, col, label, style="edge_label")
+    canvas.put_text(row, col, label, style="edge_label", overwrite_spaces=True)
     placed.append((row, col, col_end))
     return True
+
+
+def _try_place_label(
+    canvas: Canvas,
+    row: int, col: int, label: str,
+    placed: list[tuple[int, int, int]],
+) -> bool:
+    """Try to place a non-overlapping label at (row, col)."""
+    col_end = col + display_width(label)
+    if _label_overlaps(row, col, col_end, placed):
+        return False
+    return _place_label(canvas, row, col, label, placed)
 
 
 def _find_last_turn(path: list[tuple[int, int]]) -> int:
@@ -613,7 +626,6 @@ def _draw_edge_label(
     if not label:
         return
 
-    label_len = display_width(label)
     path = re.draw_path
 
     # Build segment list ordered by preference: post-turn segments first,
@@ -658,8 +670,7 @@ def _draw_edge_label(
     # Force place at midpoint of path
     mid_idx = len(path) // 2
     mx, my = path[mid_idx]
-    canvas.put_text(my - 1, mx + 1, label, style="edge_label")
-    placed_labels.append((my - 1, mx + 1, mx + 1 + label_len))
+    _place_label(canvas, my - 1, mx + 1, label, placed_labels)
 
 
 def _draw_notes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -> None:

@@ -155,6 +155,50 @@ class TestEdgeLabels:
         assert "No" in output
         assert "Maybe" in output
 
+    def test_labels_avoid_protected_nodes_and_routed_edges(self):
+        """Labels must move intact instead of leaving fragments over protected cells."""
+        output = render(
+            "flowchart LR\n"
+            "    User[User question] --> Model[Model]\n"
+            "    Model -->|search_web queries| Search[Internal search_web path]\n"
+            "    Search -->|results and reference IDs| Model\n"
+            "    Model -->|open ref_id list| Open[open runtime]\n"
+            "    Model -->|open direct URL| Open\n"
+            "    Open -->|page content with source identity| Model\n"
+            "    Model --> Answer[Grounded answer]",
+            padding_x=2,
+            padding_y=0,
+            gap=4,
+        )
+
+        for label in (
+            "search_web queries",
+            "results and reference IDs",
+            "open ref_id list",
+            "open direct URL",
+            "page content with source identity",
+        ):
+            assert label in output
+
+    def test_dotted_labels_avoid_crossing_routes(self):
+        """Dotted edge labels must remain intact around dense crossing routes."""
+        output = render(
+            "flowchart LR\n"
+            "    Search[Internal search_web] --> Grounding[Conversation grounding and citations]\n"
+            "    Grounding -. missing bridge .-> LuminaState[Lumina page-context state]\n"
+            "    Outputs[IToolExecutionOutputCollection] -. currently null on EDTI .-> Open[WebOpenToolExecutor]\n"
+            "    LuminaState --> Open\n"
+            "    Open --> Result[WebOpenResult]\n"
+            "    Result -. missing EDTI citation stage .-> CitationState[Registered citation state]",
+            padding_x=2,
+            padding_y=0,
+            gap=4,
+        )
+
+        assert "missing bridge" in output
+        assert "currently null on EDTI" in output
+        assert "missing EDTI citation stage" in output
+
 
 class TestSubgraphs:
     def test_basic_subgraph(self):
