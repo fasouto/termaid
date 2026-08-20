@@ -1,0 +1,24 @@
+{
+  "name": "@tayomi/termaid-bin",
+  "version": "0.0.0",
+  "description": "Unofficial prebuilt binaries of termaid (Mermaid diagrams as Unicode art in the terminal). termaid is by Fabio Souto; this package only redistributes compiled binaries.",
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "optionalDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mopi1402/termaid.git"
+  },
+  "homepage": "https://github.com/fasouto/termaid",
+  "keywords": [
+    "termaid",
+    "mermaid",
+    "terminal",
+    "diagram",
+    "prebuilt",
+    "binary"
+  ]
+}
