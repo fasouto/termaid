@@ -69,6 +69,7 @@ def _auto_fit(
             padding_y=args.padding_y,
             rounded_edges=not args.sharp_edges,
             gap=gap,
+            inline_edge_labels=args.inline_edge_labels,
         )
         if _max_line_width(_plain(candidate)) <= target_width:
             return candidate
@@ -178,6 +179,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Disable automatic compaction when diagram exceeds terminal width",
     )
     parser.add_argument(
+        "--inline-edge-labels",
+        action="store_true",
+        help="Attach labels directly to their edges",
+    )
+    parser.add_argument(
         "-o", "--output",
         default=None,
         metavar="FILE",
@@ -274,6 +280,7 @@ def main(argv: list[str] | None = None) -> int:
                 padding_y=args.padding_y,
                 rounded_edges=not args.sharp_edges,
                 gap=args.gap,
+                inline_edge_labels=args.inline_edge_labels,
             )
             rich_result = _auto_fit(
                 rich_result, render_source, args,
@@ -302,6 +309,7 @@ def main(argv: list[str] | None = None) -> int:
                 padding_y=args.padding_y,
                 rounded_edges=not args.sharp_edges,
                 gap=args.gap,
+                inline_edge_labels=args.inline_edge_labels,
             )
             result = _auto_fit(
                 result, render_source, args,

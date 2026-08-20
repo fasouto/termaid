@@ -29,6 +29,7 @@ def render_graph(
     padding_y: int = 2,
     rounded_edges: bool = True,
     gap: int = 4,
+    inline_edge_labels: bool = False,
 ) -> str:
     """Render a graph to a string.
 
@@ -39,6 +40,7 @@ def render_graph(
         padding_y: Vertical padding inside node boxes
         rounded_edges: Use rounded corners on edge turns (╭╮╰╯ vs ┌┐└┘)
         gap: Space between nodes (default: 4)
+        inline_edge_labels: Attach labels directly to their edge segments
 
     Returns:
         The rendered diagram as a string
@@ -46,6 +48,7 @@ def render_graph(
     canvas = render_graph_canvas(
         graph, use_ascii=use_ascii, padding_x=padding_x, padding_y=padding_y,
         rounded_edges=rounded_edges, gap=gap,
+        inline_edge_labels=inline_edge_labels,
     )
     if canvas is None:
         return ""
@@ -59,6 +62,7 @@ def render_graph_canvas(
     padding_y: int = 2,
     rounded_edges: bool = True,
     gap: int = 4,
+    inline_edge_labels: bool = False,
 ) -> Canvas | None:
     """Render a graph and return the Canvas (with style info).
 
@@ -104,7 +108,11 @@ def render_graph_canvas(
     _draw_nodes(canvas, graph, layout, cs)
 
     # 3. Draw edges
-    _draw_edges(canvas, graph, layout, routed, cs, rounded_edges=rounded_edges)
+    _draw_edges(
+        canvas, graph, layout, routed, cs,
+        rounded_edges=rounded_edges,
+        inline_edge_labels=inline_edge_labels,
+    )
 
     # 4. Draw subgraph labels (on top of everything else)
     _draw_subgraph_labels(canvas, layout, cs)
@@ -217,6 +225,7 @@ def _draw_nodes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -
 def _draw_edges(
     canvas: Canvas, graph: Graph, layout: GridLayout, routed: list[RoutedEdge], cs: CharSet,
     rounded_edges: bool = True,
+    inline_edge_labels: bool = False,
 ) -> None:
     """Draw all edge lines, corners, arrows, and labels.
 
@@ -322,7 +331,11 @@ def _draw_edges(
     placed_labels: list[tuple[int, int, int]] = []  # (row, col_start, col_end)
     for re in routed:
         if re.label and len(re.draw_path) >= 2:
-            _draw_edge_label(canvas, re, placed_labels)
+            _draw_edge_label(
+                canvas, re, placed_labels,
+                inline=inline_edge_labels,
+                use_ascii=cs is ASCII,
+            )
 
 
 def _edge_line_chars(style: EdgeStyle, cs: CharSet) -> tuple[str, str]:
@@ -482,25 +495,38 @@ def _label_overlaps(
     return False
 
 
-def _try_place_label(
+def _place_label(
     canvas: Canvas,
     row: int, col: int, label: str,
     placed: list[tuple[int, int, int]],
 ) -> bool:
-    """Try to place a label at (row, col). Returns True if placed."""
+    """Place a complete label when every character can be written."""
     col_end = col + display_width(label)
     if col < 0 or row < 0:
         return False
-    if _label_overlaps(row, col, col_end, placed):
-        return False
+    for target_col in range(col, col_end):
+        if canvas.is_protected(row, target_col) and canvas.get(row, target_col) != " ":
+            return False
     # Ensure canvas is large enough for the label
     needed_w = col_end + 1
     needed_h = row + 1
     if needed_w > canvas.width or needed_h > canvas.height:
         canvas.resize(max(canvas.width, needed_w), max(canvas.height, needed_h))
-    canvas.put_text(row, col, label, style="edge_label")
+    canvas.put_text(row, col, label, style="edge_label", overwrite_spaces=True)
     placed.append((row, col, col_end))
     return True
+
+
+def _try_place_label(
+    canvas: Canvas,
+    row: int, col: int, label: str,
+    placed: list[tuple[int, int, int]],
+) -> bool:
+    """Try to place a non-overlapping label at (row, col)."""
+    col_end = col + display_width(label)
+    if _label_overlaps(row, col, col_end, placed):
+        return False
+    return _place_label(canvas, row, col, label, placed)
 
 
 def _find_last_turn(path: list[tuple[int, int]]) -> int:
@@ -531,6 +557,9 @@ def _try_place_on_segment(
     prev_point: tuple[int, int] | None = None,
     prefer_left: bool = False,
     bias_target: bool = False,
+    inline: bool = False,
+    use_ascii: bool = False,
+    leader_char: str = "─",
 ) -> bool:
     """Try to place a label on a specific segment. Returns True if placed.
 
@@ -562,6 +591,33 @@ def _try_place_on_segment(
                 # Place label on the side the turn came from (inner side of the branch)
                 prefer_left = px > x1  # came from right → prefer left
 
+        if inline:
+            right_label = f"+-{label}" if use_ascii else f"├{leader_char}{label}"
+            left_label = f"{label}-+" if use_ascii else f"{label}{leader_char}┤"
+            sides = [
+                (mid_y, x1, right_label),
+                (mid_y, x1 - display_width(left_label) + 1, left_label),
+            ]
+            if prefer_left:
+                sides.reverse()
+
+            for row, col, anchored_label in sides:
+                if _try_place_label(
+                    canvas, row, col, anchored_label, placed_labels,
+                ):
+                    return True
+            for offset in range(1, 4):
+                for row, col, anchored_label in sides:
+                    if _try_place_label(
+                        canvas, row - offset, col, anchored_label, placed_labels,
+                    ):
+                        return True
+                    if _try_place_label(
+                        canvas, row + offset, col, anchored_label, placed_labels,
+                    ):
+                        return True
+            return False
+
         if prefer_left:
             sides = [
                 (mid_y, x1 - label_len),       # left
@@ -585,11 +641,16 @@ def _try_place_on_segment(
         return False
 
     if y1 == y2:
-        # Horizontal segment — center label above/below
+        # Horizontal segment — center inline labels on the edge, otherwise
+        # place labels above or below it.
         seg_len = abs(x2 - x1)
         if seg_len >= label_len + 2:
             mid = (min(x1, x2) + max(x1, x2)) // 2
             start = mid - label_len // 2
+            if inline:
+                return _try_place_label(
+                    canvas, y1, start, label, placed_labels,
+                )
             if _try_place_label(canvas, y1 - 1, start, label, placed_labels):
                 return True
             if _try_place_label(canvas, y1 + 1, start, label, placed_labels):
@@ -602,6 +663,9 @@ def _try_place_on_segment(
 def _draw_edge_label(
     canvas: Canvas, re: RoutedEdge,
     placed_labels: list[tuple[int, int, int]],
+    *,
+    inline: bool = False,
+    use_ascii: bool = False,
 ) -> None:
     """Draw an edge label on the best segment of the path.
 
@@ -613,8 +677,10 @@ def _draw_edge_label(
     if not label:
         return
 
-    label_len = display_width(label)
     path = re.draw_path
+    leader_char = _edge_line_chars(
+        re.edge.style, ASCII if use_ascii else UNICODE,
+    )[0]
 
     # Build segment list ordered by preference: post-turn segments first,
     # then remaining segments in reverse order (end segments are more unique)
@@ -652,14 +718,24 @@ def _draw_edge_label(
             prev_point=prev,
             prefer_left=is_straight,
             bias_target=is_straight,
+            inline=inline,
+            use_ascii=use_ascii,
+            leader_char=leader_char,
         ):
             return
+
+    if inline:
+        _draw_edge_label(
+            canvas, re, placed_labels,
+            inline=False,
+            use_ascii=use_ascii,
+        )
+        return
 
     # Force place at midpoint of path
     mid_idx = len(path) // 2
     mx, my = path[mid_idx]
-    canvas.put_text(my - 1, mx + 1, label, style="edge_label")
-    placed_labels.append((my - 1, mx + 1, mx + 1 + label_len))
+    _place_label(canvas, my - 1, mx + 1, label, placed_labels)
 
 
 def _draw_notes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -> None:
