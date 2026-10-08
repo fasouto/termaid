@@ -51,6 +51,8 @@ termaid diagram.mmd
 echo "graph LR; A-->B-->C" | termaid
 termaid diagram.mmd --theme neon
 termaid diagram.mmd --ascii
+termaid --markdown README.md          # draw every ```mermaid block in a document
+gh pr view 42 | termaid --markdown
 ```
 
 ### Python
@@ -515,6 +517,7 @@ packet
 | `-o FILE` | Write output to file instead of stdout |
 | `--show-ids` | Show node IDs alongside labels for debugging (e.g. `myId: My Label`) |
 | `--json TYPE` | Pipe JSON/tabular data and render as `treemap`, `pie`, `mindmap`, `flowchart`, or `xychart` |
+| `--markdown` | Read a Markdown document and draw each `mermaid` code block in place; other text passes through. A block that cannot be drawn is kept as source, with a warning |
 | `--tui` | Interactive TUI viewer (requires `pip install termaid[tui]`) |
 
 ## Python API
