@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### New
+- `--markdown`: read a Markdown document (a README, a PR description, an LLM's reply) and draw each ```` ```mermaid ```` block in place, passing the rest of the text through. Diagrams inside list items keep their indentation, mermaid examples quoted inside a longer code fence are left alone, and a block that cannot be drawn is kept as source with a warning on stderr
+
 ## 0.9.0 (2026-09-15)
 
 ### New

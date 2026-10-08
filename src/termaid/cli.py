@@ -202,6 +202,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Read JSON/tabular data from stdin and render as TYPE (treemap, pie, mindmap, flowchart).",
     )
     parser.add_argument(
+        "--markdown",
+        action="store_true",
+        help="Read a Markdown document and render each ```mermaid block in place.",
+    )
+    parser.add_argument(
         "--themes",
         action="store_true",
         help="List available color themes and exit.",
@@ -233,9 +238,14 @@ def main(argv: list[str] | None = None) -> int:
     if source is None:
         return 1
 
-    source = source.strip()
-    if not source:
+    # Markdown keeps its leading lines, so warnings report true line numbers.
+    source = source.rstrip() if args.markdown else source.strip()
+    if not source.strip():
         print("Error: Empty input.", file=sys.stderr)
+        return 1
+
+    if args.markdown and (args.json or args.tui):
+        print("Error: --markdown cannot be combined with --json or --tui.", file=sys.stderr)
         return 1
 
     # JSON ingest: convert structured data to Mermaid syntax
@@ -263,30 +273,20 @@ def main(argv: list[str] | None = None) -> int:
             print("Error: 'rich' package required for --theme. Install with: pip install termaid[rich]", file=sys.stderr)
             return 1
 
-    # --show-ids: patch node labels before rendering
-    render_source = source
-    if args.show_ids:
-        render_source = _apply_show_ids(source)
+    if use_color:
+        def render_fn(src: str, **kwargs):
+            return render_rich(src, theme=args.theme or "default", **kwargs)
+    else:
+        render_fn = render
 
     try:
-        if use_color:
-            def render_color(src: str, **kwargs):
-                return render_rich(src, theme=args.theme or "default", **kwargs)
+        if args.markdown:
+            result = _render_markdown(source, args, render_fn, use_color)
+        else:
+            result = _render_one(source, args, render_fn, target_width=args.width)
 
-            rich_result = render_color(
-                render_source,
-                use_ascii=args.ascii,
-                padding_x=args.padding_x,
-                padding_y=args.padding_y,
-                rounded_edges=not args.sharp_edges,
-                gap=args.gap,
-                inline_edge_labels=args.inline_edge_labels,
-            )
-            rich_result = _auto_fit(
-                rich_result, render_source, args,
-                render_fn=render_color,
-                target_width=args.width,
-            )
+        if use_color:
+            rich_result = result
             if args.output:
                 try:
                     with open(args.output, "w", encoding="utf-8") as f:
@@ -302,20 +302,6 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 rprint(rich_result)
         else:
-            result = render(
-                render_source,
-                use_ascii=args.ascii,
-                padding_x=args.padding_x,
-                padding_y=args.padding_y,
-                rounded_edges=not args.sharp_edges,
-                gap=args.gap,
-                inline_edge_labels=args.inline_edge_labels,
-            )
-            result = _auto_fit(
-                result, render_source, args,
-                render_fn=render,
-                target_width=args.width,
-            )
             if args.output:
                 try:
                     with open(args.output, "w", encoding="utf-8") as f:
@@ -330,6 +316,72 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     return 0
+
+
+def _render_one(source: str, args: argparse.Namespace, render_fn, target_width: int | None):
+    """Render one diagram with the CLI's options, fitted to target_width."""
+    if args.show_ids:
+        source = _apply_show_ids(source)
+    result = render_fn(
+        source,
+        use_ascii=args.ascii,
+        padding_x=args.padding_x,
+        padding_y=args.padding_y,
+        rounded_edges=not args.sharp_edges,
+        gap=args.gap,
+        inline_edge_labels=args.inline_edge_labels,
+    )
+    return _auto_fit(result, source, args, render_fn=render_fn, target_width=target_width)
+
+
+def _render_markdown(text: str, args: argparse.Namespace, render_fn, use_color: bool):
+    """Render every Mermaid block in a Markdown document, in place.
+
+    Text outside the blocks is passed through unchanged. A diagram nested in
+    a list item keeps the item's indentation. A block that fails to render is
+    shown as its original source, with a warning on stderr, so one bad
+    diagram does not lose the rest of the document. That includes a block
+    that renders to nothing, which is what unrecognised input produces.
+    """
+    from .markdown import split_markdown
+
+    if args.width is not None:
+        width = args.width
+    elif args.no_auto_fit or not sys.stdout.isatty():
+        width = None
+    else:
+        width = shutil.get_terminal_size().columns
+
+    pieces = []
+    for seg in split_markdown(text):
+        if not seg.is_mermaid:
+            pieces.append(seg.text)
+            continue
+        target = None if width is None else max(width - display_width(seg.indent), 1)
+        try:
+            drawn = _render_one(seg.text, args, render_fn, target)
+            if not _plain(drawn).strip():
+                raise ValueError("nothing to draw")
+            pieces.append(_indent(drawn, seg.indent))
+        except Exception as e:
+            print(f"Warning: could not render the diagram at line {seg.line}: {e}", file=sys.stderr)
+            pieces.append(seg.raw)
+
+    if not use_color:
+        return "\n".join(pieces)
+
+    from rich.text import Text
+    return Text("\n").join(p if isinstance(p, Text) else Text(p) for p in pieces)
+
+
+def _indent(result, indent: str):
+    """Prefix every line of a render result (str or rich.text.Text)."""
+    if not indent:
+        return result
+    if isinstance(result, str):
+        return "\n".join(indent + line for line in result.split("\n"))
+    from rich.text import Text
+    return Text("\n").join(Text(indent) + line for line in result.split("\n", allow_blank=True))
 
 
 def _run_tui(source: str, args: argparse.Namespace) -> int:
