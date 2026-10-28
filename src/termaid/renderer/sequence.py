@@ -871,7 +871,7 @@ def _draw_note(
 def _put_label_above(canvas: Canvas, row: int, col: int, lines: list[str]) -> None:
     """Stack label lines so the last one sits directly above ``row``."""
     for offset, line in enumerate(lines):
-        canvas.put_text(row - len(lines) + offset, col, line, style="edge_label")
+        canvas.put_text(row - len(lines) + offset, col, line, style="edge_label", overwrite_spaces=True)
 
 
 def _draw_message(

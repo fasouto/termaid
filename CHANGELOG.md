@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- Sequence: a message label keeps its spaces where it crosses another participant's lifeline, so the lifeline no longer shows through a gap between two words (`no opening┆hours`)
+
 ## 0.10.0 (2026-10-25)
 
 ### New
