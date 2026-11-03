@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from termaid import render, parse
+from termaid import parse, render, render_styled
 from termaid.parser.flowchart import parse_flowchart
 from termaid.parser.sequence import parse_sequence_diagram
 from termaid.parser.classdiagram import parse_class_diagram
@@ -816,3 +816,51 @@ class TestAllDiagramTypesNoCrash:
         out = render(source)
         assert isinstance(out, str)
         assert len(out) > 0
+
+
+class TestControlCharacters:
+    """Control characters in the source must not reach the terminal (#16)."""
+
+    ESC = chr(27)
+    BEL = chr(7)
+
+    @staticmethod
+    def _control_chars(text: str) -> list[str]:
+        return [hex(ord(c)) for c in text if c != "\n" and (ord(c) < 32 or 0x7f <= ord(c) <= 0x9f)]
+
+    @pytest.mark.parametrize("template", [
+        'flowchart LR\n  A["{0}[31mX"] --> B',
+        'flowchart LR\n  A -->|"{0}]0;title{1}"| B',
+        'flowchart LR\n  subgraph S["{0}[2Jtitle"]\n    A\n  end',
+        "sequenceDiagram\n  A->>B: {0}[2Jhello",
+        "classDiagram\n  class A {{\n    +{0}[31mfoo()\n  }}",
+        "stateDiagram-v2\n  [*] --> A : {0}[31mgo",
+        'pie\n  "{0}[31mslice" : 3\n  "b" : 4',
+        "mindmap\n  Root\n    {0}[31mA",
+    ])
+    def test_render_output_has_no_control_chars(self, template):
+        source = template.format(self.ESC, self.BEL)
+        assert self._control_chars(render(source)) == []
+
+    def test_backspace_and_c1_csi_removed_from_label(self):
+        out = render('flowchart LR\n  A["a' + chr(8) + "b" + chr(0x9b) + 'c"] --> B')
+        assert self._control_chars(out) == []
+        assert "abc" in out
+
+    def test_carriage_return_in_label_does_not_reach_output(self):
+        out = render('flowchart LR\n  A["a' + chr(13) + 'b"] --> B')
+        assert self._control_chars(out) == []
+
+    def test_styled_output_has_no_control_chars(self):
+        doc = render_styled('flowchart LR\n  A["' + self.ESC + '[31mX"] --> B')
+        text = "".join(chunk["text"] for line in doc["lines"] for chunk in line)
+        assert self._control_chars(text) == []
+
+    def test_parse_drops_control_chars_from_labels(self):
+        graph = parse('flowchart LR\n  A["' + self.ESC + '[31mX"] --> B')
+        assert graph.nodes["A"].label == "[31mX"
+
+    @pytest.mark.parametrize("line_end", ["\r\n", "\r"])
+    def test_other_line_endings_render_like_newlines(self, line_end):
+        lines = ["flowchart LR", '  A["one"] --> B["two"]']
+        assert render(line_end.join(lines)) == render("\n".join(lines))
