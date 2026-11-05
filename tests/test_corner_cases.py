@@ -845,6 +845,7 @@ class TestLeadingDirectives:
         "init": '%%{init: {"theme": "dark"}}%%\n',
         "multiline-init": '%%{\n  init: {"theme": "dark"}\n}%%\n',
         "comment": "%% a comment\n",
+        "bom": "\ufeff",
     }
 
     @pytest.mark.parametrize("prefix", list(PREFIXES.values()), ids=list(PREFIXES))
