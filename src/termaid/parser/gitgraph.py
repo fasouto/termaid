@@ -17,6 +17,8 @@ def parse_git_graph(text: str) -> GitGraph:
     return parser.parse()
 
 
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
 class _GitGraphParser:
     def __init__(self, text: str) -> None:
         self.text = text
@@ -93,7 +95,9 @@ class _GitGraphParser:
                 return
         git_config = config.get("gitGraph", config)
         if "mainBranchName" in git_config:
-            self.diagram.main_branch_name = git_config["mainBranchName"]
+            # JSON escapes such as \u001b decode here, after the source's own
+            # control characters were removed, so remove them again.
+            self.diagram.main_branch_name = _CONTROL_CHARS.sub("", str(git_config["mainBranchName"]))
         if "mainBranchOrder" in git_config:
             # Will be applied when we create the main branch
             pass

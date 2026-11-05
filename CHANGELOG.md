@@ -17,7 +17,7 @@
 - Sequence: a message label keeps its spaces where it crosses another participant's lifeline, so the lifeline no longer shows through a gap between two words (`no opening┆hours`)
 - Block diagrams: groups nested many levels deep render in milliseconds. Each level sized its children twice, so every level doubled the work and 20 levels took 1.5 seconds
 - Block diagrams: a grid is capped at 64 columns, already wider than any terminal, and so is a block's `:N` span and `space:N`. A grid with no `columns` line whose spans add up past 64 wraps into rows. A diagram that would still need more than a million characters, such as dozens of nested 64-column groups, is refused with an error. `columns 1000000` took 9 seconds and over 3 GB of memory to draw a single block (#15)
-- Control characters in a diagram, such as ESC or a raw carriage return, no longer reach the terminal. The source is filtered before parsing (#19, thanks @TheeCoderAhmed), and a flowchart entity code such as `#13;` that decodes to a control character becomes a space if it is whitespace and is dropped otherwise (#16)
+- Control characters in diagram text, such as ESC or a raw carriage return, no longer reach a drawn diagram (tabs are kept). The source is filtered before parsing (#19, thanks @TheeCoderAhmed). A flowchart entity code such as `#13;` that decodes to a control character becomes a space if it is whitespace and is dropped otherwise. A control character written as a JSON escape in a gitGraph `%%{init}%%` branch name is dropped too (#16)
 
 ## 0.10.0 (2026-10-25)
 
