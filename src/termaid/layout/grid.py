@@ -41,7 +41,6 @@ STRIDE = 4  # Grid distance between node centers
 # Node sizing constants
 MAX_LABEL_WIDTH = 20       # Characters before wrapping
 MAX_NORMALIZED_WIDTH = 25  # Cap for per-layer column normalization
-MAX_NORMALIZED_HEIGHT = 7  # Cap for per-layer row normalization
 
 # Subgraph layout constants
 SG_BORDER_PAD = 2    # Padding between content and subgraph border

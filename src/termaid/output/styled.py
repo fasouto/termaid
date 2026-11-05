@@ -18,6 +18,8 @@ Style keys:
 - ``class:<name>``: a flowchart node using ``classDef <name>``
   (``class:default`` when the diagram defines a default class).
 - ``nodestyle:<id>``: a flowchart node with its own ``style <id>`` line.
+- ``class:<name>:text``, ``nodestyle:<id>:text``: the label of such a node,
+  for its ``color:``. Without one, draw it as ``label``.
 - ``linkstyle:<index>``: a flowchart edge covered by ``linkStyle``.
 
 The ``class:``, ``nodestyle:`` and ``linkstyle:`` keys let a consumer apply

@@ -235,6 +235,11 @@ def _decode_entities(text: str) -> str:
     return _ENTITY_CODE.sub(decode, text)
 
 
+def _line_breaks(label: str) -> str:
+    """Turn Mermaid's <br>, <br/> and <br /> into the \\n line breaks the layout uses."""
+    return re.sub(r"<br\s*/?>", r"\\n", label, flags=re.IGNORECASE)
+
+
 def _strip_quotes(text: str) -> str:
     """Remove surrounding quotes from text."""
     if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
@@ -289,6 +294,9 @@ class _FlowchartParser:
         """Split into lines, handle semicolons, strip comments."""
         raw_lines: list[str] = []
         for line in text.split("\n"):
+            # A comment is the whole line, semicolons included
+            if line.lstrip().startswith("%%"):
+                continue
             # Expand semicolons into separate lines (quoted labels excluded)
             raw_lines.extend(_split_on_semicolons(line))
 
@@ -779,7 +787,7 @@ class _FlowchartParser:
             body = at_match.group(2)
             props = _parse_at_shape_props(body)
             shape_name = props.get("shape", "rect")
-            label = _decode_entities(props.get("label", node_id))
+            label = _decode_entities(_line_breaks(props.get("label", node_id)))
             shape = _AT_SHAPE_MAP.get(shape_name, NodeShape.RECTANGLE)
             self._shaped_node_ids.add(node_id)
             return Node(
@@ -813,7 +821,7 @@ class _FlowchartParser:
                             style_class=style_class,
                             label_segments=segments,
                         )
-                    label = _decode_entities(_strip_quotes(raw_label))
+                    label = _decode_entities(_line_breaks(_strip_quotes(raw_label)))
                     return Node(
                         id=node_id,
                         label=label,

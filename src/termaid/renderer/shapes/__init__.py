@@ -388,7 +388,10 @@ def _draw_label(
     style: str = "",
 ) -> None:
     """Draw centered label text inside a shape."""
-    label_style = "label" if style else ""
+    if style.startswith(("class:", "nodestyle:")):
+        label_style = f"{style}:text"  # lets classDef color: tint the label
+    else:
+        label_style = "label" if style else ""
     # Split on real newlines (from notes) or literal \n (from flowchart wrapping)
     if "\n" in label:
         lines = label.split("\n")

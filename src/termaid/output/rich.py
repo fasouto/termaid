@@ -51,6 +51,12 @@ def _css_to_rich_style(props: dict[str, str]) -> str | None:
     return " ".join(parts) if parts else None
 
 
+def _css_to_rich_text_style(props: dict[str, str]) -> str | None:
+    """Rich style for a node's label text: Mermaid's `color` property."""
+    color = props.get("color")
+    return _hex_to_rich_color(color) if color else None
+
+
 def render_graph_rich(
     canvas: Canvas | None,
     graph: Graph,
@@ -88,17 +94,20 @@ def render_graph_rich(
         "italic_label": f"italic {th.label}",
     }
 
-    # Add class-based styles
+    # Add class-based styles. Label text uses `color` when set, otherwise
+    # the theme's label style.
     for class_name, props in graph.class_defs.items():
         rich_style = _css_to_rich_style(props)
         if rich_style:
             style_map[f"class:{class_name}"] = rich_style
+        style_map[f"class:{class_name}:text"] = _css_to_rich_text_style(props) or th.label
 
     # Add per-node inline styles
     for nid, props in graph.node_styles.items():
         rich_style = _css_to_rich_style(props)
         if rich_style:
             style_map[f"nodestyle:{nid}"] = rich_style
+        style_map[f"nodestyle:{nid}:text"] = _css_to_rich_text_style(props) or th.label
 
     # Add per-edge link styles
     default_link_props = graph.link_styles.get(-1)

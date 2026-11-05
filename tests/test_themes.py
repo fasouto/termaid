@@ -118,3 +118,23 @@ class TestRichRendering:
         result = render_rich("graph LR\n  A --> B", theme=theme)
         assert "A" in result.plain
         assert "B" in result.plain
+
+    def test_class_color_tints_the_label(self):
+        from termaid import render_rich
+        source = (
+            "graph LR\n  A[alpha] --> B[bravo]\n"
+            "  classDef bad stroke:#ff0000,color:#ff0000\n  class B bad"
+        )
+        result = render_rich(source, theme="mono")
+        assert _styles_at(result, result.plain.index("bravo")) == ["#ff0000"]
+        assert _styles_at(result, result.plain.index("alpha")) == ["white"]
+
+    def test_class_without_color_keeps_the_theme_label(self):
+        from termaid import render_rich
+        source = "graph LR\n  A[alpha] --> B[bravo]\n  classDef bad stroke:#ff0000\n  class B bad"
+        result = render_rich(source, theme="mono")
+        assert _styles_at(result, result.plain.index("bravo")) == ["white"]
+
+
+def _styles_at(text, index: int) -> list[str]:
+    return [str(span.style) for span in text.spans if span.start <= index < span.end]

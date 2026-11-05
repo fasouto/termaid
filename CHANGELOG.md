@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### New
+- Colored output: `classDef` and `style` now color a node's label with `color:`, as in Mermaid (`stroke:` colors the border). Labels without `color:` keep the theme's label style. In `--format styled-json` such a label carries the new key `class:<name>:text` or `nodestyle:<id>:text` instead of `label`
+- Flowchart: `<br>`, `<br/>` and `<br />` break a node label into lines, as in Mermaid
+
+### Behavior changes
+- Flowchart LR/RL: nodes stacked in the same column keep the height of their own label instead of all growing to the tallest one, as in Mermaid. Diagrams with a mix of short and long labels get much shorter
+
+### Fixes
+- Flowchart: a `;` inside a `%%` comment line no longer splits the comment, so the text after it isn't parsed as nodes and edges
+
 ## 0.10.0 (2026-10-25)
 
 ### New

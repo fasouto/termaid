@@ -12,7 +12,6 @@ from .grid import (
     STRIDE,
     MAX_LABEL_WIDTH,
     MAX_NORMALIZED_WIDTH,
-    MAX_NORMALIZED_HEIGHT,
     GridCoord,
     GridLayout,
     NodePlacement,
@@ -144,12 +143,16 @@ def _can_place(layout: GridLayout, gc: GridCoord) -> bool:
 
 
 def normalize_sizes(graph: Graph, layout: GridLayout) -> None:
-    """Normalize node dimensions within the same layer, capped at a maximum.
+    """Normalize node widths within the same layer of a TD/BT graph, capped at a maximum.
 
-    Nodes at the same flow level (same layer) are normalized to the same
-    perpendicular dimension so side-by-side nodes look consistent.
+    Nodes at the same flow level sit side by side in TD, so they get the same
+    width. In LR they are stacked, and each keeps the height of its own label,
+    as in Mermaid: padding every box in a column to the tallest one makes
+    the whole diagram much taller.
     """
     direction = graph.direction.normalized()
+    if not direction.is_vertical:
+        return
 
     # Group placements by layer
     layer_groups: dict[int, list[NodePlacement]] = {}
@@ -158,30 +161,17 @@ def normalize_sizes(graph: Graph, layout: GridLayout) -> None:
         node = graph.nodes.get(nid)
         if node and node.shape == NodeShape.JUNCTION:
             continue
-        if direction.is_vertical:
-            layer_key = p.grid.row  # same row = same layer in TD
-        else:
-            layer_key = p.grid.col  # same col = same layer in LR
-        layer_groups.setdefault(layer_key, []).append(p)
+        layer_groups.setdefault(p.grid.row, []).append(p)  # same row = same layer
 
     for placements in layer_groups.values():
         if len(placements) < 2:
             continue  # single node in layer, nothing to normalize
 
-        if direction.is_vertical:
-            # TD: normalize column widths within same layer
-            cols = {p.grid.col for p in placements}
-            max_w = max(layout.col_widths.get(c, 1) for c in cols)
-            target = min(max_w, MAX_NORMALIZED_WIDTH)
-            for c in cols:
-                layout.col_widths[c] = max(layout.col_widths.get(c, 1), target)
-        else:
-            # LR: normalize row heights within same layer
-            rows = {p.grid.row for p in placements}
-            max_h = max(layout.row_heights.get(r, 1) for r in rows)
-            target = min(max_h, MAX_NORMALIZED_HEIGHT)
-            for r in rows:
-                layout.row_heights[r] = max(layout.row_heights.get(r, 1), target)
+        cols = {p.grid.col for p in placements}
+        max_w = max(layout.col_widths.get(c, 1) for c in cols)
+        target = min(max_w, MAX_NORMALIZED_WIDTH)
+        for c in cols:
+            layout.col_widths[c] = max(layout.col_widths.get(c, 1), target)
 
 
 def compute_sizes(

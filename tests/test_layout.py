@@ -100,6 +100,12 @@ class TestDrawCoordinates:
             assert p.draw_width >= 3
             assert p.draw_height >= 3
 
+    def test_lr_boxes_in_a_column_keep_their_own_height(self):
+        """Stacked LR nodes aren't padded to the tallest one in their column."""
+        g = parse_flowchart('graph LR\n  A --> B["1<br>2<br>3<br>4"] & C')
+        layout = compute_layout(g)
+        assert layout.placements["C"].draw_height < layout.placements["B"].draw_height
+
     def test_canvas_size(self):
         """Canvas should be large enough to contain all nodes."""
         g = parse_flowchart("graph LR\n  A --> B --> C")

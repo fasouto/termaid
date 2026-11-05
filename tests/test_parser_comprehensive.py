@@ -298,6 +298,11 @@ class TestComments:
         )
         assert len(g.edges) == 2
 
+    def test_semicolon_inside_a_comment_stays_in_the_comment(self):
+        g = parse_flowchart("graph LR\n  %% retry; then X --> Y\n  A --> B")
+        assert list(g.nodes) == ["A", "B"]
+        assert len(g.edges) == 1
+
 
 # ── Semicolons ────────────────────────────────────────────────────────────────
 
@@ -325,6 +330,12 @@ class TestEdgeCases:
     def test_quoted_label_with_special_chars(self):
         g = parse_flowchart('graph LR\n  A["Hello (world)"]')
         assert g.nodes["A"].label == "Hello (world)"
+
+    @pytest.mark.parametrize("br", ["<br>", "<br/>", "<br />", "<BR>"])
+    def test_br_breaks_a_label_into_lines(self, br):
+        g = parse_flowchart(f'graph LR\n  A["one{br}two"]\n  B@{{ shape: rect, label: "x{br}y" }}')
+        assert g.nodes["A"].label == "one\\ntwo"
+        assert g.nodes["B"].label == "x\\ny"
 
     def test_unicode_label(self):
         g = parse_flowchart('graph LR\n  A["日本語"]')
