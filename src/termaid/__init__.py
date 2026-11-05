@@ -32,8 +32,8 @@ def _strip_frontmatter(text: str) -> str:
 
 
 def _prepare_source(source: str) -> str:
-    """Normalize line endings, drop control characters and strip frontmatter."""
-    text = _CONTROL_CHARS_RE.sub("", _CARRIAGE_RETURN_RE.sub("\n", source))
+    """Normalize line endings, drop control characters, a byte order mark and frontmatter."""
+    text = _CONTROL_CHARS_RE.sub("", _CARRIAGE_RETURN_RE.sub("\n", source.lstrip("\ufeff")))
     return _strip_frontmatter(text.strip())
 
 
