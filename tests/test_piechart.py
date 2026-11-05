@@ -326,3 +326,15 @@ class TestWideText:
     def test_title_wider_than_the_bars_is_whole(self):
         title = "A title that is a good deal wider than the forty-cell bar and its labels"
         assert title in render(f'pie title {title}\n    "A" : 1\n    "B" : 1')
+
+
+class TestManySlicesAndHugeValues:
+    def test_more_slices_than_cells_widen_the_bar(self):
+        for n in (41, 60):
+            source = "pie\n" + "\n".join(f'    "S{i}" : 1' for i in range(n))
+            assert len(_stacked_bar(render(source))) == n
+
+    def test_value_too_large_for_a_float_is_skipped(self):
+        output = render('pie\n    "Huge" : ' + "9" * 400 + '\n    "A" : 1')
+        assert "A┃" in output
+        assert "Huge" not in output
