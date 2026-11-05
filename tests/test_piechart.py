@@ -144,6 +144,23 @@ class TestPieChartRendering:
         )
         assert "Pets adopted" in output
 
+    def test_title_on_pie_line_displayed(self):
+        output = render(
+            'pie title Pets adopted by volunteers\n'
+            '    "Dogs" : 386\n'
+            '    "Cats" : 85'
+        )
+        assert "Pets adopted by volunteers" in output
+
+    def test_show_data_and_title_on_pie_line(self):
+        output = render(
+            'pie showData title Key elements\n'
+            '    "Calcium" : 42.96\n'
+            '    "Iron" : 5'
+        )
+        assert "Key elements" in output
+        assert "[42.96]" in output
+
     def test_show_data_displays_values(self):
         output = render(
             'pie showData\n'
