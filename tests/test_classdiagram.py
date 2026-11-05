@@ -253,6 +253,14 @@ class TestClassDiagramRendering:
         )
         assert "interface" in output
 
+    def test_label_right_of_rightmost_class_drawn_in_full(self):
+        output = render(
+            "classDiagram\n"
+            "  Animal <|-- Duck : quacks loudly\n"
+            "  Animal <|-- Fish : swims in the deep blue sea"
+        )
+        assert "swims in the deep blue sea" in output
+
 
 class TestWideCharBoxes:
     def test_cjk_class_box_borders_intact(self):

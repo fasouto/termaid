@@ -220,6 +220,30 @@ class TestERDiagramRendering:
         # Dashed lines rendered with lifeline-style connector
         assert "┆" in output, "Dashed relationship should use ┆ character"
 
+    def test_label_right_of_rightmost_entity_drawn_in_full(self):
+        output = render(
+            "erDiagram\n"
+            "  USER ||--o{ ORDER : places\n"
+            "  USER {\n"
+            "    int id PK\n"
+            "    string name\n"
+            "    string email\n"
+            "  }\n"
+            "  ORDER ||--|{ LINE_ITEM : contains\n"
+            "  ORDER {\n"
+            "    int id PK\n"
+            "    date created\n"
+            "    string status\n"
+            "  }\n"
+            '  PRODUCT ||--o{ LINE_ITEM : "ordered in"\n'
+            "  PRODUCT {\n"
+            "    int id PK\n"
+            "    string name\n"
+            "    float price\n"
+            "  }"
+        )
+        assert "ordered in" in output
+
 
 class TestWideCharBoxes:
     def test_cjk_entity_box_borders_intact(self):
