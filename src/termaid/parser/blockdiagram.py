@@ -32,6 +32,10 @@ _LINK_SIMPLE_RE = re.compile(
     r"^(\S+)\s*-->\s*(\S+)$"
 )
 
+# Every grid column costs time and memory, and 64 columns is already wider
+# than any terminal, so larger column counts and spans are capped.
+_MAX_COLUMNS = 64
+
 # Counter for anonymous group IDs
 _anon_counter = 0
 
@@ -87,7 +91,7 @@ def _parse_group(lines: list[str], i: int) -> tuple[list[Block], list[BlockLink]
 
         # End of group
         if lower == "end":
-            return blocks, links, columns, i + 1
+            return blocks, links, _cap_grid(blocks, columns), i + 1
 
         # Skip directives
         if lower.startswith("classdef ") or lower.startswith("style ") or lower.startswith("class "):
@@ -164,7 +168,20 @@ def _parse_group(lines: list[str], i: int) -> tuple[list[Block], list[BlockLink]
 
         i += 1
 
-    return blocks, links, columns, i
+    return blocks, links, _cap_grid(blocks, columns), i
+
+
+def _cap_grid(blocks: list[Block], columns: int) -> int:
+    """Cap the grid's spans and column count at _MAX_COLUMNS and return its columns.
+
+    A grid with no columns line lays its blocks out in one row, so when
+    their spans add up past the cap it gets the cap and wraps instead.
+    """
+    for block in blocks:
+        block.col_span = min(block.col_span, _MAX_COLUMNS)
+    if columns <= 0 and sum(b.col_span for b in blocks) > _MAX_COLUMNS:
+        return _MAX_COLUMNS
+    return min(columns, _MAX_COLUMNS)
 
 
 def _collect_all_blocks(blocks: list[Block]) -> dict[str, Block]:

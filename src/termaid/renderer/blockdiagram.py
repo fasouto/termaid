@@ -17,6 +17,10 @@ _MIN_BLOCK_W = 12
 _MIN_BLOCK_H = 5
 _COL_GAP = 4
 _ROW_GAP = 2
+# Grids are capped at 64 columns, but deep nesting or hundreds of full-width
+# rows can still ask for millions of cells from a few KB of source. A drawing
+# that big is unreadable, so it is refused instead of taking seconds and GBs.
+_MAX_CELLS = 1_000_000
 _MARGIN = 2
 _GROUP_PAD = 2  # inner margin for nested groups
 
@@ -54,6 +58,8 @@ def render_block_diagram(diagram: BlockDiagram, *, use_ascii: bool = False, padd
     # Expand for links that might go outside
     total_w = max(total_w, 20)
     total_h = max(total_h, 5)
+    if total_w * total_h > _MAX_CELLS:
+        raise ValueError(f"block diagram is too large to draw ({total_w} x {total_h} characters)")
 
     canvas = Canvas(total_w, total_h)
 
