@@ -264,9 +264,19 @@ def _draw_tb(
 
     col_gap = max(max_label + 4, 10)
 
+    # Text is centred on its branch column. Later columns sit col_gap, wider
+    # than any text, to the right, so only the first can push text off the edge.
+    first = sorted_branches[0]
+    first_col = max(
+        _MARGIN,
+        len(first) // 2,
+        *(len(c.label) // 2 for c in branch_commits[first]),
+        *(display_width(f"[{c.tag}]") // 2 for c in branch_commits[first] if c.tag),
+    )
+
     branch_col: dict[str, int] = {}
     for i, name in enumerate(sorted_branches):
-        branch_col[name] = _MARGIN + i * col_gap
+        branch_col[name] = first_col + i * col_gap
 
     row_gap = 4
     n_commits = len(diagram.commits)
@@ -287,7 +297,7 @@ def _draw_tb(
         for i, c in enumerate(diagram.commits):
             commit_row[c.id] = top_offset + i * row_gap
 
-    canvas_w = _MARGIN + len(sorted_branches) * col_gap + _MARGIN
+    canvas_w = first_col + len(sorted_branches) * col_gap + _MARGIN
     canvas.__init__(canvas_w, canvas_h)  # type: ignore[misc]
 
     # Compute vertical branch extents (with merge extensions)
