@@ -260,3 +260,70 @@ def test_state_folder_without_getuid(tmp_path, monkeypatch):
     monkeypatch.delattr(os, "getuid", raising=False)
     assert json.loads(_open_fence())["hookSpecificOutput"]["displayContent"] == ""
     assert (tmp_path / "termaid-claude-hook" / "m1.json").exists()
+
+
+def _feed_lines(renderer: StreamRenderer, lines: list[str]) -> list[str]:
+    return [renderer.feed(line + "\n") for line in lines]
+
+
+LONG_LINES = [f"  line {i:04d} " + "x" * 60 for i in range(200)]
+
+
+def test_unclosed_fence_is_shown_once_it_passes_the_limit():
+    r = StreamRenderer(width=80)
+    shown = _feed_lines(r, ["```mermaid", *LONG_LINES])
+    first = next(i for i, out in enumerate(shown) if out)
+    assert 100 < first < 130
+    assert "".join(shown) == "".join(line + "\n" for line in ["```mermaid", *LONG_LINES])
+    assert not r.fence
+
+
+def test_saved_state_stays_under_the_limit():
+    r = StreamRenderer(width=80)
+    for line in ["```mermaid", *LONG_LINES]:
+        r.feed(line + "\n")
+        assert len(r.to_json()) < 10_000
+
+
+def test_one_line_past_the_limit_is_shown_at_once():
+    r = StreamRenderer(width=80)
+    assert r.feed("```mermaid\n") == ""
+    long_line = "x" * 10_000
+    assert r.feed(long_line + "\n") == "```mermaid\n" + long_line + "\n"
+
+
+def test_a_large_closed_diagram_under_the_limit_is_drawn():
+    padding = [f"%% {'pad ' * 15}{i}" for i in range(110)]
+    source = ["```mermaid", "graph LR", *padding, "  A --> B", "```"]
+    assert sum(len(line) for line in source) > 7_000
+    out = "".join(_feed_lines(StreamRenderer(width=80), source))
+    assert "```mermaid" not in out and "─" in out
+
+
+def test_a_fence_after_a_released_one_is_still_drawn():
+    r = StreamRenderer(width=80)
+    _feed_lines(r, ["```mermaid", *LONG_LINES, "text"])
+    out = r.feed(FLOW + "after\n", final=True)
+    assert "```mermaid" not in out and "─" in out and out.endswith("after\n")
+
+
+def test_blank_lines_count_toward_the_limit():
+    r = StreamRenderer(width=80)
+    lines = ["```mermaid", *[""] * 9_000]
+    shown = _feed_lines(r, lines)
+    assert any(shown[:-100]), "a fence of blank lines should be released before it ends"
+    assert "".join(shown) == "".join(line + "\n" for line in lines)
+
+
+def test_hook_shows_an_unclosed_fence_before_the_message_ends(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    batches = ["```mermaid\n", *(line + "\n" for line in LONG_LINES), "end\n"]
+    shown = [_run(delta, message_id="long", index=i, final=i == len(batches) - 1) for i, delta in enumerate(batches)]
+    assert any(shown[:150])
+    assert "".join(shown) == "".join(batches)
+    assert list(tmp_path.glob("termaid-claude-hook*/long.json")) == []
+
+
+def test_a_renderer_built_with_held_lines_counts_them():
+    r = StreamRenderer(width=80, fence="```", held=["```mermaid", *LONG_LINES[:112]])
+    assert r.feed(LONG_LINES[112] + "\n").startswith("```mermaid\n")

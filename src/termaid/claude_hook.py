@@ -32,6 +32,10 @@ from .utils import display_width
 
 _DEFAULT_WIDTH = 80
 _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
+# A fence that never closes would hide the rest of the reply until it ends,
+# and every batch saves the held lines again, so past this many characters
+# they are shown as written.
+_MAX_HELD_CHARS = 8_192
 
 
 @dataclass
@@ -50,6 +54,10 @@ class StreamRenderer:
     indent: str = ""
     held: list[str] = field(default_factory=list)   # original lines, fence included
     carry: str = ""        # a final batch may end mid-line
+    held_size: int = field(default=0, init=False, repr=False, compare=False)  # held's characters, line breaks included
+
+    def __post_init__(self) -> None:
+        self.held_size = sum(len(line) + 1 for line in self.held)
 
     def feed(self, text: str, final: bool = False) -> str:
         out: list[str] = []
@@ -77,10 +85,15 @@ class StreamRenderer:
     def _line(self, line: str) -> list[str]:
         if self.fence:
             self.held.append(line)
+            self.held_size += len(line) + 1
             close = re.compile(
                 r"^[ \t]*" + re.escape(self.fence[0]) + "{" + str(len(self.fence)) + r",}[ \t]*\r?$"
             )
             if not close.match(line):
+                if self.held_size > _MAX_HELD_CHARS:
+                    held = self.held
+                    self._reset()
+                    return held
                 return []
             body = [_dedent(raw, len(self.indent)).rstrip("\r") for raw in self.held[1:-1]]
             drawn = self._draw("\n".join(body))
@@ -94,6 +107,7 @@ class StreamRenderer:
                 self.fence = match.group("fence")
                 self.indent = match.group("indent")
                 self.held = [line]
+                self.held_size = len(line) + 1
                 return []
         return [line]
 
@@ -101,6 +115,7 @@ class StreamRenderer:
         self.fence = ""
         self.indent = ""
         self.held = []
+        self.held_size = 0
 
     def _draw(self, source: str) -> list[str] | None:
         """Render one diagram, or None when it cannot be drawn."""
@@ -137,6 +152,7 @@ class StreamRenderer:
         self.fence = saved.get("fence", "")
         self.indent = saved.get("indent", "")
         self.held = list(saved.get("held", []))
+        self.held_size = sum(len(line) + 1 for line in self.held)
         self.carry = saved.get("carry", "")
 
 
