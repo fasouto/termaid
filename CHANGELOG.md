@@ -16,6 +16,7 @@
 - Flowchart: with `gap` below 4, an edge that turned just before its target drew its sideways run on the same line as the arrowheads (`▼────▼`). The gap in front of such a target is now at least three cells deep
 - Sequence: a message label keeps its spaces where it crosses another participant's lifeline, so the lifeline no longer shows through a gap between two words (`no opening┆hours`)
 - Block diagrams: groups nested many levels deep render in milliseconds. Each level sized its children twice, so every level doubled the work and 20 levels took 1.5 seconds
+- Block diagrams: a grid is capped at 64 columns, already wider than any terminal, and so is a block's `:N` span and `space:N`. `columns 1000000` took 9 seconds and over 3 GB of memory to draw a single block (#15)
 
 ## 0.10.0 (2026-10-25)
 
