@@ -23,12 +23,12 @@ class TestGitGraphParser:
         assert len(d.commits) == 3
         assert all(c.branch == "main" for c in d.commits)
 
-    def test_commit_auto_ids(self):
+    def test_commit_auto_labels(self):
         d = parse_git_graph(
             "gitGraph\n  commit\n  commit"
         )
-        assert d.commits[0].id == "0"
-        assert d.commits[1].id == "1"
+        assert d.commits[0].label == "0"
+        assert d.commits[1].label == "1"
 
     def test_commit_explicit_id(self):
         d = parse_git_graph(

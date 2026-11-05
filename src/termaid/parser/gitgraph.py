@@ -19,6 +19,12 @@ def parse_git_graph(text: str) -> GitGraph:
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 
+
+def _generated_id(name: object) -> str:
+    # The id: patterns capture no quote, so no written id can equal this.
+    return f'"{name}"'
+
+
 class _GitGraphParser:
     def __init__(self, text: str) -> None:
         self.text = text
@@ -166,8 +172,11 @@ class _GitGraphParser:
             tag = tag_match.group(1)
 
         if commit_id is None:
-            commit_id = str(self.auto_id)
+            label = str(self.auto_id)
+            commit_id = _generated_id(label)
             self.auto_id += 1
+        else:
+            label = commit_id
 
         parents = []
         if self.current_branch in self.branch_heads:
@@ -176,7 +185,7 @@ class _GitGraphParser:
         commit = Commit(
             id=commit_id,
             branch=self.current_branch,
-            label=commit_id,
+            label=label,
             type=commit_type,
             tag=tag,
             parents=parents,
@@ -228,7 +237,7 @@ class _GitGraphParser:
             tag = tag_match.group(1)
 
         if commit_id is None:
-            commit_id = str(self.auto_id)
+            commit_id = _generated_id(self.auto_id)
             self.auto_id += 1
 
         parents = []
@@ -265,10 +274,11 @@ class _GitGraphParser:
             )
             return
 
-        commit_id = f"{source_id}-cherry"
+        label = f"{source_id}-cherry"
         # Avoid duplicate IDs
-        while commit_id in self._commit_map:
-            commit_id += "-cp"
+        while _generated_id(label) in self._commit_map:
+            label += "-cp"
+        commit_id = _generated_id(label)
 
         tag = ""
         tag_match = re.search(r'tag:\s*"([^"]*)"', line)
@@ -283,7 +293,7 @@ class _GitGraphParser:
         commit = Commit(
             id=commit_id,
             branch=self.current_branch,
-            label=commit_id,
+            label=label,
             type="NORMAL",
             tag=tag,
             parents=parents,
