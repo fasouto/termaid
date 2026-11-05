@@ -1,6 +1,10 @@
 """Tests for gitGraph diagram parsing and rendering."""
 from __future__ import annotations
 
+import re
+
+import pytest
+
 from termaid import render
 from termaid.parser.gitgraph import parse_git_graph
 
@@ -19,12 +23,12 @@ class TestGitGraphParser:
         assert len(d.commits) == 3
         assert all(c.branch == "main" for c in d.commits)
 
-    def test_commit_auto_ids(self):
+    def test_commit_auto_labels(self):
         d = parse_git_graph(
             "gitGraph\n  commit\n  commit"
         )
-        assert d.commits[0].id == "0"
-        assert d.commits[1].id == "1"
+        assert d.commits[0].label == "0"
+        assert d.commits[1].label == "1"
 
     def test_commit_explicit_id(self):
         d = parse_git_graph(
@@ -418,6 +422,77 @@ class TestGitGraphRendering:
             assert cid in output
         assert "main" in output
         assert "develop" in output
+
+    @pytest.mark.parametrize("header", ["gitGraph", "gitGraph TB:", "gitGraph BT:"])
+    @pytest.mark.parametrize(
+        "merge_line,merge_label",
+        [("merge fix", set()), ('merge fix id: "M1"', {"M1"})],
+    )
+    def test_merge_is_labeled_only_by_its_own_id(self, header, merge_line, merge_label):
+        output = render(
+            f"{header}\n"
+            '  commit id: "base"\n'
+            "  branch fix\n"
+            '  commit id: "patch"\n'
+            "  checkout main\n"
+            f"  {merge_line}\n"
+            '  commit id: "tip"'
+        )
+        words = set(re.findall(r"\w+", output))
+        assert words == {"main", "fix", "base", "patch", "tip"} | merge_label
+
+    @pytest.mark.parametrize(
+        "source,written",
+        [
+            pytest.param('commit id: "{id}"\ncommit\ncommit\ncommit', "1", id="written-first"),
+            pytest.param("commit\ncommit\ncommit id: \"{id}\"", "0", id="written-last"),
+            pytest.param(
+                'commit id: "{id}"\nbranch dev\ncommit\ncommit\n'
+                'checkout main\ncommit id: "x"\nmerge dev',
+                "1",
+                id="fork-from-written",
+            ),
+            pytest.param(
+                "commit\nbranch dev\ncommit\ncheckout main\nmerge dev\n"
+                'commit id: "{id}"',
+                "2",
+                id="after-unnamed-merge",
+            ),
+            pytest.param(
+                'commit id: "A"\nbranch dev\ncommit id: "B"\ncheckout main\n'
+                'cherry-pick id: "B"\ncommit id: "{id}"',
+                "B-cherry",
+                id="after-cherry-pick",
+            ),
+            pytest.param(
+                'commit id: "{id}"\nbranch dev\ncommit\ncommit\n'
+                'cherry-pick id: "{id}"',
+                "1",
+                id="cherry-pick-by-written",
+            ),
+        ],
+    )
+    def test_every_commit_draws_when_a_written_id_matches_an_automatic_one(
+        self, source, written
+    ):
+        # A same-width id that matches no automatic id draws the expected picture.
+        stand_in = "Q" * len(written)
+        expected = render("gitGraph\n" + source.format(id=stand_in))
+        assert render("gitGraph\n" + source.format(id=written)) == expected.replace(
+            stand_in, written
+        )
+
+    @pytest.mark.parametrize("direction", ["TB", "BT"])
+    def test_vertical_layout_keeps_wide_text_on_the_first_branch_whole(self, direction):
+        output = render(
+            '%%{init: {"gitGraph": {"mainBranchName": "production"}}}%%\n'
+            f"gitGraph {direction}\n"
+            '  commit id: "release" tag: "v1.0.0-rc1"\n'
+            "  branch dev\n"
+            '  commit id: "feature"'
+        )
+        texts = ["production", "release", "[v1.0.0-rc1]", "dev", "feature"]
+        assert [t for t in texts if t not in output] == []
 
     def test_empty_graph(self):
         output = render("gitGraph")

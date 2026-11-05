@@ -55,8 +55,8 @@ def _sort_branches(diagram: GitGraph) -> list[str]:
 
 
 def _commit_footprint(c: Commit) -> int:
-    """Return the half-width of the widest label (id or tag) for a commit."""
-    w = len(c.id)
+    """Return the half-width of the widest text (label or tag) for a commit."""
+    w = len(c.label)
     if c.tag:
         w = max(w, len(c.tag) + 2)  # "[tag]"
     return (w + 1) // 2  # ceil half
@@ -222,7 +222,7 @@ def _draw_lr(
 
         canvas.put(row, col, marker, merge=False, style="node")
 
-        label = c.id
+        label = c.label
         label_col = col - display_width(label) // 2
         canvas.put_text(row + 1, label_col, label, style="label")
 
@@ -258,15 +258,25 @@ def _draw_tb(
     for b in sorted_branches:
         max_label = max(max_label, len(b))
     for c in diagram.commits:
-        max_label = max(max_label, len(c.id))
+        max_label = max(max_label, len(c.label))
         if c.tag:
             max_label = max(max_label, len(c.tag) + 2)
 
     col_gap = max(max_label + 4, 10)
 
+    # Text is centred on its branch column. Later columns sit col_gap, wider
+    # than any text, to the right, so only the first can push text off the edge.
+    first = sorted_branches[0]
+    first_col = max(
+        _MARGIN,
+        len(first) // 2,
+        *(len(c.label) // 2 for c in branch_commits[first]),
+        *(display_width(f"[{c.tag}]") // 2 for c in branch_commits[first] if c.tag),
+    )
+
     branch_col: dict[str, int] = {}
     for i, name in enumerate(sorted_branches):
-        branch_col[name] = _MARGIN + i * col_gap
+        branch_col[name] = first_col + i * col_gap
 
     row_gap = 4
     n_commits = len(diagram.commits)
@@ -287,7 +297,7 @@ def _draw_tb(
         for i, c in enumerate(diagram.commits):
             commit_row[c.id] = top_offset + i * row_gap
 
-    canvas_w = _MARGIN + len(sorted_branches) * col_gap + _MARGIN
+    canvas_w = first_col + len(sorted_branches) * col_gap + _MARGIN
     canvas.__init__(canvas_w, canvas_h)  # type: ignore[misc]
 
     # Compute vertical branch extents (with merge extensions)
@@ -373,15 +383,15 @@ def _draw_tb(
 
         canvas.put(row, col, marker, merge=False, style="node")
 
-        label_col = col - len(c.id) // 2
+        label_col = col - len(c.label) // 2
         if bottom_to_top:
-            canvas.put_text(row - 1, label_col, c.id, style="label")
+            canvas.put_text(row - 1, label_col, c.label, style="label")
             if c.tag:
                 tag_text = f"[{c.tag}]"
                 tag_col = col - display_width(tag_text) // 2
                 canvas.put_text(row + 1, tag_col, tag_text, style="edge_label")
         else:
-            canvas.put_text(row + 1, label_col, c.id, style="label")
+            canvas.put_text(row + 1, label_col, c.label, style="label")
             if c.tag:
                 tag_text = f"[{c.tag}]"
                 tag_col = col - display_width(tag_text) // 2
