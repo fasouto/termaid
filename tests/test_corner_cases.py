@@ -905,3 +905,14 @@ class TestControlCharacters:
     def test_other_line_endings_render_like_newlines(self, line_end):
         lines = ["flowchart LR", '  A["one"] --> B["two"]']
         assert render(line_end.join(lines)) == render("\n".join(lines))
+
+
+class TestGitGraphInitConfig:
+    def test_non_object_git_graph_config_is_ignored(self):
+        out = render('%%{init: {"gitGraph": 5}}%%\ngitGraph\n  commit id: "a"')
+        assert "main" in out and "a" in out
+
+    def test_deeply_nested_init_json_is_ignored(self):
+        nested = "[" * 100_000 + "]" * 100_000
+        out = render('%%{init: {"x": ' + nested + '}}%%\ngitGraph\n  commit id: "a"')
+        assert "main" in out
