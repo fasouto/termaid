@@ -179,7 +179,7 @@ def test_a_state_folder_it_cannot_write_shows_the_reply_as_written(tmp_path, mon
     folder.mkdir(mode=0o500)
     folder.chmod(0o500)
     try:
-        assert _open_fence() == ""
+        assert json.loads(_open_fence())["hookSpecificOutput"]["displayContent"] == "```mermaid\ngraph LR\n"
     finally:
         folder.chmod(0o700)
 
@@ -225,8 +225,35 @@ def test_a_failed_save_leaves_no_temp_file(tmp_path, monkeypatch):
         raise OSError("disk full")
 
     monkeypatch.setattr(os, "replace", fail)
-    assert _open_fence() == ""
+    assert json.loads(_open_fence())["hookSpecificOutput"]["displayContent"] == "```mermaid\ngraph LR\n"
     assert list(tmp_path.glob("termaid-claude-hook*/*")) == []
+
+
+@posix_only
+def test_a_failed_save_mid_message_shows_the_reply_as_written(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    real_replace = os.replace
+    saves = []
+
+    def fail_second_save(src, dst):
+        saves.append(dst)
+        if len(saves) == 2:
+            raise OSError("disk full")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", fail_second_save)
+    batches = ["```mermaid\n", "graph LR\n", "  A --> B\n", "```\nok\n"]
+    shown = [_run(delta, message_id="m", index=i, final=i == 3) for i, delta in enumerate(batches)]
+    assert "".join(shown) == "".join(batches)
+    assert list(tmp_path.glob("termaid-claude-hook*/*")) == []
+
+
+def test_no_usable_temp_folder_shows_the_reply_as_written(monkeypatch):
+    def no_temp_folder():
+        raise FileNotFoundError("No usable temporary directory")
+
+    monkeypatch.setattr("tempfile.gettempdir", no_temp_folder)
+    assert _open_fence() == ""
 
 def test_state_folder_without_getuid(tmp_path, monkeypatch):
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))

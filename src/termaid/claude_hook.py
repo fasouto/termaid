@@ -197,7 +197,8 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     that holds lines back returns an empty ``displayContent``; the drawing
     comes with the batch that closes the fence. Any failure prints nothing,
     and Claude Code then shows the original text. That includes a state
-    folder that another user could read or write.
+    folder that another user could read or write. When the state can't be
+    saved, the lines held so far are shown as written.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -237,7 +238,13 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
             try:
                 _write_state(path, renderer.to_json())
             except OSError:
-                return 0
+                # The next batch would resume from an older saved state, so
+                # show what is held as written and drop that state.
+                shown += renderer.feed("", final=True)
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 
     json.dump({"hookSpecificOutput": {"hookEventName": "MessageDisplay", "displayContent": shown}}, stdout)
     stdout.write("\n")
