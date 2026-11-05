@@ -26,6 +26,10 @@
 - gitGraph: a `%%{init}%%` whose `gitGraph` value is not an object, or whose JSON nests thousands of levels deep, is ignored instead of crashing the render
 - Claude Code hook: on Linux and macOS, the state kept between streaming batches lives in a folder only you can open (`termaid-claude-hook-<uid>` in the temp folder, mode 700, files 600). If that folder exists but another user could open it, or it is a symlink, the hook leaves the reply as Claude wrote it instead of using the folder (#17)
 - Claude Code hook: a Mermaid block that never closes no longer hides the rest of the reply. Once the held text passes 8,192 characters (line breaks count), a few hundred typical lines, it is shown as written and the state saved between batches stops growing. A diagram larger than that now shows as its source in Claude Code instead of being drawn; `termaid` itself still draws it (#18)
+- Pie: `pie title Pets adopted by volunteers`, the form in Mermaid's docs, keeps its title. Before, only a title on its own line was read
+- Pie: the row under the stacked bar names every slice or none of them. When a name does not fit, the row shows only percentages, and the bars below name each slice. Before, one slice could get its name and the others only `33%`
+- Pie: CJK and emoji slice names are no longer cut short in front of their bars, and a title wider than the chart is no longer cut off
+- Pie: every slice gets at least one cell in the stacked bar, which grows past 40 cells when there are more slices than that. Before, a small last slice could get none (97/1/2), and many small slices ran the bar past its width or off the chart. A value too large for a float is skipped instead of crashing
 - Claude Code plugin: asking Claude for a diagram shows it once. The `/termaid:mermaid` skill told Claude to run termaid on diagrams it wrote itself, which the hook already draws, so a second and often wider copy followed. The skill is now for diagrams that already exist (files, READMEs, PR descriptions) and passes `--width`, since the Bash tool can't see the terminal's width
 
 ## 0.10.0 (2026-10-25)

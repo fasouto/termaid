@@ -1,13 +1,14 @@
 """Parser for Mermaid pie chart diagrams.
 
 Syntax:
-    pie [showData]
+    pie [showData] [title <text>]
         [title <text>]
         "<label>" : <value>
         ...
 """
 from __future__ import annotations
 
+import math
 import re
 
 from ..model.piechart import PieChart, PieSlice
@@ -23,12 +24,12 @@ def parse_pie_chart(text: str) -> PieChart:
     if not lines:
         return chart
 
-    # Parse header line: pie [showData]
-    header = lines[0].strip()
-    if "showData" in header:
+    header = lines[0].strip()[len("pie"):].strip()
+    if header.startswith("showData"):
         chart.show_data = True
+        header = header[len("showData"):]
 
-    for line in lines[1:]:
+    for line in [header, *lines[1:]]:
         stripped = line.strip()
         if not stripped:
             continue
@@ -50,6 +51,9 @@ def parse_pie_chart(text: str) -> PieChart:
         if m:
             label = m.group(1)
             value = float(m.group(2))
+            if not math.isfinite(value):
+                chart.warnings.append(f"Pie slice value is too large: {label}")
+                continue
             if value <= 0:
                 chart.warnings.append(f"Pie slice value must be positive: {label} = {value}")
                 continue

@@ -144,6 +144,23 @@ class TestPieChartRendering:
         )
         assert "Pets adopted" in output
 
+    def test_title_on_pie_line_displayed(self):
+        output = render(
+            'pie title Pets adopted by volunteers\n'
+            '    "Dogs" : 386\n'
+            '    "Cats" : 85'
+        )
+        assert "Pets adopted by volunteers" in output
+
+    def test_show_data_and_title_on_pie_line(self):
+        output = render(
+            'pie showData title Key elements\n'
+            '    "Calcium" : 42.96\n'
+            '    "Iron" : 5'
+        )
+        assert "Key elements" in output
+        assert "[42.96]" in output
+
     def test_show_data_displays_values(self):
         output = render(
             'pie showData\n'
@@ -189,7 +206,8 @@ class TestPieChartRendering:
         big_line = next(l for l in lines if "Big" in l and "┃" in l)
         small_line = next(l for l in lines if "Small" in l and "┃" in l)
         big_bar_len = big_line.count("█")
-        small_bar_len = small_line.count("▓")
+        small_bar_len = small_line.count("░")
+        assert small_bar_len > 0
         assert big_bar_len > small_bar_len
 
     def test_ascii_mode(self):
@@ -251,3 +269,72 @@ class TestPieChartRendering:
         long_line = next(l for l in lines if "Very Long Label" in l and "┃" in l)
         # The bar separator ┃ should be at the same column
         assert short_line.index("┃") == long_line.index("┃")
+
+
+def _stacked_bar(output: str) -> str:
+    return next(l for l in output.split("\n") if "█" in l and "┃" not in l).strip()
+
+
+class TestPieChartStackedBar:
+    def test_every_slice_gets_a_segment(self):
+        output = render(
+            'pie\n'
+            '    "Big" : 97\n'
+            '    "One" : 1\n'
+            '    "Two" : 2'
+        )
+        full = _stacked_bar(render('pie\n    "All" : 1'))
+        bar = _stacked_bar(output)
+        assert set(bar) == {"█", "░", "▒"}
+        assert len(bar) == len(full)
+
+
+def _stacked_label_row(output: str) -> str:
+    lines = output.split("\n")
+    stacked = next(i for i, l in enumerate(lines) if "█" in l and "┃" not in l)
+    return lines[stacked + 1]
+
+
+class TestPieChartStackedLabels:
+    def test_only_percentages_when_any_name_does_not_fit(self):
+        output = render(
+            'pie title Fixes by area\n'
+            '    "Block diagrams" : 2\n'
+            '    "Labels" : 2\n'
+            '    "Claude hook" : 2'
+        )
+        assert _stacked_label_row(output).split() == ["33%", "33%", "33%"]
+
+    def test_every_name_when_all_names_fit(self):
+        output = render(
+            'pie\n'
+            '    "Dogs" : 50\n'
+            '    "Cats" : 30\n'
+            '    "Rats" : 20'
+        )
+        assert _stacked_label_row(output).split() == [
+            "Dogs", "50%", "Cats", "30%", "Rats", "20%",
+        ]
+
+
+class TestWideText:
+    def test_wide_slice_names_are_whole(self):
+        out = render('pie\n    "日本語テキスト" : 90\n    "B" : 10\n    "🍕 Pizza" : 5')
+        assert "日本語テキスト┃" in out
+        assert "🍕 Pizza┃" in out
+
+    def test_title_wider_than_the_bars_is_whole(self):
+        title = "A title that is a good deal wider than the forty-cell bar and its labels"
+        assert title in render(f'pie title {title}\n    "A" : 1\n    "B" : 1')
+
+
+class TestManySlicesAndHugeValues:
+    def test_more_slices_than_cells_widen_the_bar(self):
+        for n in (41, 60):
+            source = "pie\n" + "\n".join(f'    "S{i}" : 1' for i in range(n))
+            assert len(_stacked_bar(render(source))) == n
+
+    def test_value_too_large_for_a_float_is_skipped(self):
+        output = render('pie\n    "Huge" : ' + "9" * 400 + '\n    "A" : 1')
+        assert "A┃" in output
+        assert "Huge" not in output

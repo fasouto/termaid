@@ -46,7 +46,13 @@ def render_pie_chart(
     max_suffix_len = max(len(sf) for sf in suffixes)
 
     bar_left = label_col_w
+    # One cell per slice at least, so a chart with more slices than cells
+    # gets a longer stacked bar instead of losing slices.
+    stacked_w = max(_BAR_WIDTH, len(diagram.slices))
     canvas_w = bar_left + _BAR_WIDTH + max_suffix_len + _MARGIN
+    canvas_w = max(canvas_w, bar_left + 1 + stacked_w + _MARGIN)
+    if diagram.title:
+        canvas_w = max(canvas_w, display_width(diagram.title) + 2 * _MARGIN)
     title_rows = 2 if diagram.title else 0
 
     # Layout: title, stacked bar (3 rows), blank, per-slice bars
@@ -58,43 +64,39 @@ def render_pie_chart(
 
     # Title
     if diagram.title:
-        title_col = max(0, (canvas_w - len(diagram.title)) // 2)
+        title_col = max(0, (canvas_w - display_width(diagram.title)) // 2)
         canvas.put_text(_MARGIN, title_col, diagram.title, style="label")
 
     # Stacked bar showing parts of a whole
-    stacked_w = _BAR_WIDTH
     stacked_left = bar_left + 1
+    widths = [max(1, round(s.value / total * stacked_w)) for s in diagram.slices]
+    rest = stacked_w - sum(widths[:-1])
+    if rest > 0:
+        widths[-1] = rest
+    # Rounding every slice up to a cell can overflow the bar. The widest
+    # segments give up the extra cells, so no slice is squeezed out.
+    while sum(widths) > stacked_w and max(widths) > 1:
+        widths[widths.index(max(widths))] -= 1
     col = 0
-    label_parts: list[tuple[int, int, str, str]] = []  # (start, width, label, fill)
-    for i, s in enumerate(diagram.slices):
+    label_parts: list[tuple[int, int, str, str]] = []  # (start, width, named, pct)
+    for i, (s, seg_w) in enumerate(zip(diagram.slices, widths)):
         fill = fills[i % len(fills)]
-        seg_w = max(1, round(s.value / total * stacked_w))
-        # Clamp last segment to fill exactly
-        if i == len(diagram.slices) - 1:
-            seg_w = stacked_w - col
-        if seg_w <= 0:
-            continue
         for c in range(seg_w):
             canvas.put(stacked_top, stacked_left + col + c, fill, merge=False, style="node")
-        pct = s.value / total * 100
-        short_label = f"{s.label} {pct:.0f}%"
-        label_parts.append((col, seg_w, short_label, fill))
+        pct_label = f"{s.value / total * 100:.0f}%"
+        label_parts.append((col, seg_w, f"{s.label} {pct_label}", pct_label))
         col += seg_w
 
-    # Labels below the stacked bar: try full label, then just percentage
+    # Name every slice or none. A mixed row reads as if the bare percentages
+    # were unnamed slices, and the per-slice bars below already name each one.
+    show_names = all(display_width(named) <= seg_w for _, seg_w, named, _ in label_parts)
     label_row = stacked_top + 1
-    for start, seg_w, short_label, fill in label_parts:
-        lw = display_width(short_label)
-        if lw <= seg_w:
-            lx = stacked_left + start + (seg_w - lw) // 2
-            canvas.put_text(label_row, lx, short_label, style="label")
-        elif seg_w >= 4:
-            # Show just the fill character as a legend marker
-            pct_only = short_label.split()[-1]  # e.g. "40%"
-            pw = display_width(pct_only)
-            if pw <= seg_w:
-                lx = stacked_left + start + (seg_w - pw) // 2
-                canvas.put_text(label_row, lx, pct_only, style="label")
+    for start, seg_w, named, pct_label in label_parts:
+        text = named if show_names else pct_label
+        tw = display_width(text)
+        if show_names or (seg_w >= 4 and tw <= seg_w):
+            lx = stacked_left + start + (seg_w - tw) // 2
+            canvas.put_text(label_row, lx, text, style="label")
 
     # Per-slice bars (uniform fill)
     for i, s in enumerate(diagram.slices):
@@ -103,7 +105,7 @@ def render_pie_chart(
         bar_len = max(1, round(s.value / total * _BAR_WIDTH))
 
         # Label (right-aligned)
-        label_text = s.label.rjust(max_label_len)
+        label_text = " " * (max_label_len - display_width(s.label)) + s.label
         canvas.put_text(row, _MARGIN, label_text, style="label")
 
         # Bar
