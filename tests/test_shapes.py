@@ -92,10 +92,39 @@ class TestShapeRendering:
         output = render("graph LR\n  A{Decision}")
         assert "◇" in output
 
-    def test_stadium_has_parens(self):
-        output = render("graph LR\n  A([Stadium])")
-        assert "(" in output
-        assert ")" in output
+    def test_stadium_is_a_capsule(self):
+        lines = render("graph LR\n  A([Stadium])").split("\n")
+        assert lines[0].strip().startswith("╭") and lines[0].startswith(" ")  # inset corner
+        assert lines[1].lstrip().startswith("╭╯") and lines[1].rstrip().endswith("╰╮")
+        assert "│  Stadium  │" in lines[2]
+        assert lines[3].lstrip().startswith("╰╮") and lines[3].rstrip().endswith("╭╯")
+
+    def test_short_stadium_has_round_sides(self):
+        # Too short for a capsule: a rounded box with round ends for sides.
+        lines = render("graph LR\n  A([Stadium])", padding_y=0).split("\n")
+        assert lines[0].startswith("╭") and lines[0].rstrip().endswith("╮")
+        assert lines[1].startswith("❨  Stadium") and lines[1].rstrip().endswith("❩")
+        assert lines[2].startswith("╰")
+
+    def test_ascii_stadium(self):
+        lines = render("graph LR\n  A([Stadium])", use_ascii=True).split("\n")
+        assert lines[1].lstrip().startswith("/") and lines[3].lstrip().startswith("\\")
+        assert "|  Stadium  |" in lines[2]
+        short = render("graph LR\n  A([Stadium])", use_ascii=True, padding_y=0)
+        assert "(  Stadium  )" in short
+
+    def test_stadium_edges_attach_to_straight_sides(self):
+        for padding_y in (0, 1, 2, 3):
+            output = render("graph LR\n  A([Go]) --> B([Stop])", padding_y=padding_y)
+            edge_row = next(line for line in output.split("\n") if "►" in line)
+            assert "├─" in edge_row or "❩─" in edge_row, (padding_y, output)
+
+    def test_cylinder_lid_never_covers_label(self):
+        for padding_y in (0, 1, 2):
+            for label in ("Database", "Users\\ntable"):
+                output = render(f"graph LR\n  A[({label})]", padding_y=padding_y)
+                for line in label.split("\\n"):
+                    assert line in output, (padding_y, label, output)
 
     def test_hexagon_has_slashes(self):
         output = render("graph LR\n  A{{Hex}}")

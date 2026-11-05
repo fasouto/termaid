@@ -82,23 +82,71 @@ def draw_stadium(
     canvas: Canvas, x: int, y: int, width: int, height: int,
     label: str, cs: CharSet, style: str = "",
 ) -> None:
-    """Draw a stadium (pill) shape."""
-    # Top border with rounded ends
-    canvas.put(y, x, cs.round_top_left, style=style)
-    for c in range(x + 1, x + width - 1):
+    """Draw a stadium (pill) shape.
+
+    With room for straight sides beside the label, it is a capsule whose corners
+    step in::
+
+         ╭──────────╮
+        ╭╯          ╰╮
+        │    Done    │
+        ╰╮          ╭╯
+         ╰──────────╯
+
+    Shorter, it is a rounded box with round ends for sides::
+
+        ╭──────────╮
+        ❨   Done   ❩
+        ╰──────────╯
+
+    ASCII draws the capsule with diagonal steps (``/  \\``) and the short form with
+    ``( )`` sides.
+    """
+    left, right = x, x + width - 1
+    bottom = y + height - 1
+    lines = label.split("\n") if "\n" in label else label.split("\\n")
+    # The capsule's stepped rows must stay clear of the label and of the middle row,
+    # where edges attach, so it needs two straight rows more than the label.
+    if width < 5 or not (height >= 5 and height - 4 >= len(lines)):
+        canvas.put(y, left, cs.round_top_left, style=style)
+        canvas.put(bottom, left, cs.round_bottom_left, style=style)
+        for c in range(left + 1, right):
+            canvas.put(y, c, cs.horizontal, style=style)
+            canvas.put(bottom, c, cs.horizontal, style=style)
+        canvas.put(y, right, cs.round_top_right, style=style)
+        canvas.put(bottom, right, cs.round_bottom_right, style=style)
+        for r in range(y + 1, bottom):
+            canvas.put(r, left, cs.stadium_left, style=style)
+            canvas.put(r, right, cs.stadium_right, style=style)
+        _draw_label(canvas, x, y, width, height, label, style=style)
+        return
+
+    # Capsule: top and bottom edges inset by one column at each end...
+    canvas.put(y, left + 1, cs.round_top_left, style=style)
+    canvas.put(bottom, left + 1, cs.round_bottom_left, style=style)
+    for c in range(left + 2, right - 1):
         canvas.put(y, c, cs.horizontal, style=style)
-    canvas.put(y, x + width - 1, cs.round_top_right, style=style)
-
-    # Bottom border
-    canvas.put(y + height - 1, x, cs.round_bottom_left, style=style)
-    for c in range(x + 1, x + width - 1):
-        canvas.put(y + height - 1, c, cs.horizontal, style=style)
-    canvas.put(y + height - 1, x + width - 1, cs.round_bottom_right, style=style)
-
-    # Side borders using parentheses for stadium look
-    for r in range(y + 1, y + height - 1):
-        canvas.put(r, x, "(", style=style)
-        canvas.put(r, x + width - 1, ")", style=style)
+        canvas.put(bottom, c, cs.horizontal, style=style)
+    canvas.put(y, right - 1, cs.round_top_right, style=style)
+    canvas.put(bottom, right - 1, cs.round_bottom_right, style=style)
+    # ...stepping out on the first and last body rows, with straight sides between.
+    if cs.round_top_left == "+":  # ASCII: diagonal steps
+        canvas.put(y + 1, left, "/", style=style)
+        canvas.put(y + 1, right, "\\", style=style)
+        canvas.put(bottom - 1, left, "\\", style=style)
+        canvas.put(bottom - 1, right, "/", style=style)
+    else:
+        canvas.put(y + 1, left, cs.round_top_left, style=style)
+        canvas.put(y + 1, left + 1, cs.round_bottom_right, style=style)
+        canvas.put(y + 1, right - 1, cs.round_bottom_left, style=style)
+        canvas.put(y + 1, right, cs.round_top_right, style=style)
+        canvas.put(bottom - 1, left, cs.round_bottom_left, style=style)
+        canvas.put(bottom - 1, left + 1, cs.round_top_right, style=style)
+        canvas.put(bottom - 1, right - 1, cs.round_top_left, style=style)
+        canvas.put(bottom - 1, right, cs.round_bottom_right, style=style)
+    for r in range(y + 2, bottom - 1):
+        canvas.put(r, left, cs.vertical, style=style)
+        canvas.put(r, right, cs.vertical, style=style)
 
     _draw_label(canvas, x, y, width, height, label, style=style)
 
@@ -280,7 +328,9 @@ def draw_cylinder(
         canvas.put(y + height - 1, c, cs.horizontal, style=style)
     canvas.put(y + height - 1, x + width - 1, cs.round_bottom_right, style=style)
 
-    _draw_label(canvas, x, y, width, height, label, style=style)
+    # Centre the label in the body, below the lid row, so the lid never draws over it.
+    # (Layout reserves the lid row: see compute_sizes.)
+    _draw_label(canvas, x, y + 1, width, height - 1, label, style=style)
 
 
 def draw_trapezoid(

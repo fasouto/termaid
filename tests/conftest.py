@@ -126,12 +126,13 @@ def find_box(lines: list[str], label: str) -> tuple[int, int, int, int]:
     The box is found from its left border, the nearest ``│`` or ``(`` left of
     the first line that shows the label, or ``┤`` where an edge leaves that
     side. Bottom is the first row where that border stops, so a border shared
-    with another box reports the shared row.
+    with another box reports the shared row. A stadium capsule reports its inset
+    top and bottom borders.
     """
-    pattern = re.compile(r"[│┤(] +" + re.escape(label) + r"( |$)")
+    pattern = re.compile(r"[│┤(❨] +" + re.escape(label) + r"( |$)")
     row = next(i for i, line in enumerate(lines) if pattern.search(line))
     left = pattern.search(lines[row]).start()
-    side = "(" if lines[row][left] == "(" else "│┤"
+    side = lines[row][left] if lines[row][left] in "(❨" else "│┤"
     top = row
     while lines[top - 1][left] in side:
         top -= 1
@@ -140,6 +141,10 @@ def find_box(lines: list[str], label: str) -> tuple[int, int, int, int]:
     while lines[bottom + 1][left] in side:
         bottom += 1
     bottom += 1
+    if lines[top][left : left + 2] == "╭╯" and lines[bottom][left : left + 2] == "╰╮":
+        # A stadium capsule: the stepped rows sit inside inset top and bottom borders.
+        right = lines[top].index("╮", left + 2)
+        return top - 1, bottom + 1, left, right
     right = left + 1
     while lines[top][right] not in "┐┤╮╯/":
         right += 1

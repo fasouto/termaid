@@ -61,6 +61,10 @@ class CharSet:
     lid_fill: str
     lid_right: str
 
+    # Sides of a stadium too short to draw as a capsule
+    stadium_left: str
+    stadium_right: str
+
     # Endpoint types
     circle_endpoint: str
     cross_endpoint: str
@@ -97,6 +101,7 @@ UNICODE = CharSet(
     # Diamond
     diamond_top="◇", diamond_bottom="◇", diamond_left="◇", diamond_right="◇",
     lid_left="╰", lid_fill="─", lid_right="╯",
+    stadium_left="❨", stadium_right="❩",
     # Endpoints
     circle_endpoint="○", cross_endpoint="×",
     # Subgraph
@@ -128,6 +133,7 @@ ASCII = CharSet(
     # Diamond
     diamond_top="/", diamond_bottom="\\", diamond_left="/", diamond_right="\\",
     lid_left="\\", lid_fill="_", lid_right="/",
+    stadium_left="(", stadium_right=")",
     # Endpoints
     circle_endpoint="o", cross_endpoint="x",
     # Subgraph

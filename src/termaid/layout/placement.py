@@ -230,6 +230,10 @@ def compute_sizes(
         # Ensure minimum sizes
         content_width = max(content_width, 3)
         content_height = max(content_height, 1)
+        if node.shape == NodeShape.CYLINDER:
+            # The cylinder's lid takes the first row inside the box, so the label
+            # needs one more row however small the padding is.
+            content_height = max(content_height, text_height + 1)
 
         col = placement.grid.col
         row = placement.grid.row

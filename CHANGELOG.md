@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- Flowchart: stadium nodes (`([text])`) draw as a capsule whose corners step in (`╭╯ … ╰╮`) when there is room for straight sides beside the label. Shorter, they keep the rounded box with ornament parentheses for sides (`❨ Done ❩`), in place of `( )` under rounded corners, which could look like a broken box in some fonts. ASCII draws the capsule with diagonal steps (`/  \`) and keeps `( )` sides for the short form
+- Flowchart: with `padding_y` below 2, a cylinder's lid gets its own row instead of sharing the label's row (`│╰─Database─╯│`), and the label is centred in the body below it
+
 ## 0.11.0 (2026-11-06)
 
 ### New
