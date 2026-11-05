@@ -93,7 +93,8 @@ def draw_stadium(
         ╰╮          ╭╯
          ╰──────────╯
 
-    Shorter, it is a rounded box with round ends for sides::
+    Shorter, it is a rounded box with round ends for sides beside the label (and
+    straight sides on any other rows)::
 
         ╭──────────╮
         ❨   Done   ❩
@@ -115,9 +116,14 @@ def draw_stadium(
             canvas.put(bottom, c, cs.horizontal, style=style)
         canvas.put(y, right, cs.round_top_right, style=style)
         canvas.put(bottom, right, cs.round_bottom_right, style=style)
+        # Round ends beside the label's rows; straight sides on any others (when a
+        # taller node in the same row stretches this one).
+        start = y + (height - len(lines)) // 2
+        label_rows = range(start, start + len(lines))
         for r in range(y + 1, bottom):
-            canvas.put(r, left, cs.stadium_left, style=style)
-            canvas.put(r, right, cs.stadium_right, style=style)
+            rounded = r in label_rows
+            canvas.put(r, left, cs.stadium_left if rounded else cs.vertical, style=style)
+            canvas.put(r, right, cs.stadium_right if rounded else cs.vertical, style=style)
         _draw_label(canvas, x, y, width, height, label, style=style)
         return
 

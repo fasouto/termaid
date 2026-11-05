@@ -106,6 +106,12 @@ class TestShapeRendering:
         assert lines[1].startswith("❨  Stadium") and lines[1].rstrip().endswith("❩")
         assert lines[2].startswith("╰")
 
+    def test_stretched_short_stadium_rounds_only_beside_its_label(self):
+        # A cylinder in the same row makes the stadium 4 rows tall.
+        lines = render("graph LR\n  A([Start]) --> B[(Database)]", padding_y=0).split("\n")
+        assert lines[1].startswith("❨  Start")
+        assert lines[2].startswith("│") and "├" in lines[2]  # straight side; the edge attaches
+
     def test_ascii_stadium(self):
         lines = render("graph LR\n  A([Stadium])", use_ascii=True).split("\n")
         assert lines[1].lstrip().startswith("/") and lines[3].lstrip().startswith("\\")
