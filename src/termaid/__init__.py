@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, NamedTuple
 from .graph.model import Graph
 from .parser.flowchart import parse_flowchart
 from .parser.statediagram import parse_state_diagram
+from .utils import DIRECTIVE
 
 if TYPE_CHECKING:
     from .output.styled import StyledDocument
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 __version__ = "0.10.0"
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
+_LEADING_DIRECTIVES_RE = re.compile(rf"(?:{DIRECTIVE}|%%[^\n]*|\s+)*")
 
 
 # C0 and C1 control characters, except tab and newline. In a label they would
@@ -35,6 +37,11 @@ def _prepare_source(source: str) -> str:
     return _strip_frontmatter(text.strip())
 
 
+def _skip_directives(text: str) -> str:
+    """Drop the %%{...}%% directives and %% comments before the diagram keyword."""
+    return text[_LEADING_DIRECTIVES_RE.match(text).end():]
+
+
 def parse(source: str) -> Graph:
     """Parse mermaid syntax and return a Graph model.
 
@@ -46,7 +53,7 @@ def parse(source: str) -> Graph:
     Returns:
         Parsed Graph model
     """
-    text = _prepare_source(source)
+    text = _skip_directives(_prepare_source(source))
     if text.startswith("stateDiagram"):
         return parse_state_diagram(text)
     return parse_flowchart(text)
@@ -79,7 +86,8 @@ def _render_canvas(
     if gap != 4:
         extra["gap"] = gap
 
-    text = _prepare_source(source)
+    prepared = _prepare_source(source)
+    text = _skip_directives(prepared)
     if text.startswith("sequenceDiagram"):
         from .parser.sequence import parse_sequence_diagram
         from .renderer.sequence import render_sequence
@@ -103,10 +111,11 @@ def _render_canvas(
         from .renderer.blockdiagram import render_block_diagram
         return _Rendered(render_block_diagram(parse_block_diagram(text), use_ascii=use_ascii, **extra))
 
-    if text.startswith("gitGraph") or (text.startswith("%%{init") and "gitGraph" in text):
+    if text.startswith("gitGraph"):
         from .parser.gitgraph import parse_git_graph
         from .renderer.gitgraph import render_git_graph
-        return _Rendered(render_git_graph(parse_git_graph(text), use_ascii=use_ascii))
+        # gitGraph reads mainBranchName from its %%{init}%% directive.
+        return _Rendered(render_git_graph(parse_git_graph(prepared), use_ascii=use_ascii))
 
     if text.startswith("gantt"):
         from .parser.gantt import parse_gantt

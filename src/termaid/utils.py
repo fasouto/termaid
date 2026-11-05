@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import unicodedata
 
+# A %%{...}%% directive, which may span lines. It ends at the next %%{, so an
+# unclosed one is not rescanned to the end of the source from every later %%{.
+DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
+
 
 def _is_wide(ch: str) -> bool:
     """Return True if *ch* occupies 2 terminal columns."""
