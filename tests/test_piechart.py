@@ -315,3 +315,14 @@ class TestPieChartStackedLabels:
         assert _stacked_label_row(output).split() == [
             "Dogs", "50%", "Cats", "30%", "Rats", "20%",
         ]
+
+
+class TestWideText:
+    def test_wide_slice_names_are_whole(self):
+        out = render('pie\n    "日本語テキスト" : 90\n    "B" : 10\n    "🍕 Pizza" : 5')
+        assert "日本語テキスト┃" in out
+        assert "🍕 Pizza┃" in out
+
+    def test_title_wider_than_the_bars_is_whole(self):
+        title = "A title that is a good deal wider than the forty-cell bar and its labels"
+        assert title in render(f'pie title {title}\n    "A" : 1\n    "B" : 1')
