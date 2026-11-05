@@ -81,6 +81,10 @@ class TestSimplifyPath:
         assert result == [(0, 0), (2, 0), (2, 2), (4, 2)]
 
 
+def _first_turn_row(re) -> int:
+    return re.grid_path[1][1]
+
+
 class TestEdgeRouting:
     def test_simple_lr_routing(self):
         g = parse_flowchart("graph LR\n  A --> B")
@@ -148,6 +152,68 @@ class TestEdgeRouting:
         paths = [tuple(re.grid_path) for re in routed]
         # Not all paths should be identical
         assert len(set(paths)) > 1
+
+    def test_fan_out_branches_off_one_bus(self):
+        g = parse_flowchart("graph TD\n  A --> B & C & D & E")
+        layout = compute_layout(g)
+        routed = route_edges(g, layout)
+        bent = [re for re in routed if len(re.grid_path) > 2]
+        assert len(bent) >= 3
+        assert len({_first_turn_row(re) for re in bent}) == 1
+
+    def test_fan_out_is_as_tall_as_a_single_edge(self):
+        from termaid import render
+
+        single = render("graph TD\n  A --> B")
+        fan_out = render("graph TD\n  A --> B & C & D & E")
+        assert len(fan_out.splitlines()) == len(single.splitlines())
+
+    @pytest.mark.parametrize("gap", [1, 2, 3])
+    def test_arrowheads_stay_off_the_bus_with_small_gaps(self, gap):
+        from termaid import render
+
+        out = render("graph TD\n  A --> B & C & D", gap=gap, padding_y=0)
+        arrow_rows = [line for line in out.splitlines() if "▼" in line]
+        assert arrow_rows and all("─" not in line for line in arrow_rows)
+
+    def test_labeled_fan_out_keeps_a_lane_per_edge(self):
+        g = parse_flowchart("graph TD\n  A -->|one| B\n  A -->|two| C\n  A -->|three| D")
+        layout = compute_layout(g)
+        routed = route_edges(g, layout)
+        bent = [re for re in routed if len(re.grid_path) > 2]
+        assert len({_first_turn_row(re) for re in bent}) == len(bent)
+
+    @pytest.mark.parametrize(
+        "fan_out", ["B --> B1 & B2 & B3 & B4 & B5 & B6", "B --> B6 & B5 & B4 & B3 & B2 & B1"]
+    )
+    def test_fan_out_keeps_one_bus_when_another_shares_the_gap(self, fan_out):
+        g = parse_flowchart(f"graph LR\n  R --> A & B\n  A --> A1 & A2\n  {fan_out}")
+        layout = compute_layout(g, padding_y=0, gap=2)
+        routed = route_edges(g, layout)
+        lanes: dict[str, set[int]] = {}
+        for re in routed:
+            for (c1, r1), (c2, r2) in zip(re.grid_path, re.grid_path[1:]):
+                if c1 == c2 and r1 != r2:
+                    lanes.setdefault(re.edge.source, set()).add(c1)
+        assert all(len(cols) == 1 for cols in lanes.values()), lanes
+
+    @pytest.mark.parametrize("direction", ["TD", "LR"])
+    def test_odd_fan_out_has_no_crossing(self, direction):
+        from termaid import render
+        from tests.conftest import edge_targets
+
+        out = render(f"graph {direction}\n  A --> B & C & D")
+        assert "┼" not in out
+        assert edge_targets(out.split("\n"), "A", ["A", "B", "C", "D"]) == {"B", "C", "D"}
+
+    def test_labeled_sibling_keeps_its_label_and_makes_no_crossing(self):
+        from termaid import render
+        from tests.conftest import edge_targets
+
+        out = render("graph TD\n  A -->|yes| B\n  A --> C\n  A --> D")
+        assert "┼" not in out
+        assert "yes" in out
+        assert edge_targets(out.split("\n"), "A", ["A", "B", "C", "D"]) == {"B", "C", "D"}
 
 
 class TestUnrelatedEdgesStayApart:
