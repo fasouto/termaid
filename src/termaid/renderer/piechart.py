@@ -47,6 +47,8 @@ def render_pie_chart(
 
     bar_left = label_col_w
     canvas_w = bar_left + _BAR_WIDTH + max_suffix_len + _MARGIN
+    if diagram.title:
+        canvas_w = max(canvas_w, display_width(diagram.title) + 2 * _MARGIN)
     title_rows = 2 if diagram.title else 0
 
     # Layout: title, stacked bar (3 rows), blank, per-slice bars
@@ -58,7 +60,7 @@ def render_pie_chart(
 
     # Title
     if diagram.title:
-        title_col = max(0, (canvas_w - len(diagram.title)) // 2)
+        title_col = max(0, (canvas_w - display_width(diagram.title)) // 2)
         canvas.put_text(_MARGIN, title_col, diagram.title, style="label")
 
     # Stacked bar showing parts of a whole
@@ -100,7 +102,7 @@ def render_pie_chart(
         bar_len = max(1, round(s.value / total * _BAR_WIDTH))
 
         # Label (right-aligned)
-        label_text = s.label.rjust(max_label_len)
+        label_text = " " * (max_label_len - display_width(s.label)) + s.label
         canvas.put_text(row, _MARGIN, label_text, style="label")
 
         # Bar
