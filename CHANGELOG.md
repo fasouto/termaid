@@ -31,6 +31,7 @@
 - Pie: the row under the stacked bar names every slice or none of them. When a name does not fit, the row shows only percentages, and the bars below name each slice. Before, one slice could get its name and the others only `33%`
 - Pie: CJK and emoji slice names are no longer cut short in front of their bars, and a title wider than the chart is no longer cut off
 - Pie: every slice gets at least one cell in the stacked bar, which grows past 40 cells when there are more slices than that. Before, a small last slice could get none (97/1/2), and many small slices ran the bar past its width or off the chart. A value too large for a float is skipped instead of crashing
+- Treemap: a small box is at least as wide as its label, so the README example draws `Auth` instead of `Au…`. Since 0.2.0 a box could shrink to 4 cells whatever its label
 - Claude Code plugin: asking Claude for a diagram shows it once. The `/termaid:mermaid` skill told Claude to run termaid on diagrams it wrote itself, which the hook already draws, so a second and often wider copy followed. The skill is now for diagrams that already exist (files, READMEs, PR descriptions) and passes `--width`, since the Bash tool can't see the terminal's width
 
 ## 0.10.0 (2026-10-25)

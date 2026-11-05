@@ -123,7 +123,7 @@ def _slice_layout(
         if node.children:
             mw = _compute_min_width(node.children) + 2
         else:
-            mw = _MIN_BOX_W
+            mw = max(_MIN_BOX_W, display_width(node.label) + 2)
         min_widths.append(mw)
 
     # Distribute width proportionally, respecting minimums
