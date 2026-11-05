@@ -10,6 +10,7 @@ from __future__ import annotations
 import unicodedata
 
 from .charset import CharSet, UNICODE
+from ..utils import display_width
 
 
 # Direction bitfield constants
@@ -111,11 +112,12 @@ class Canvas:
             return
         new_w = max(self.width, new_width)
         new_h = max(self.height, new_height)
+        extra = new_w - self.width
         for r in range(self.height):
-            self._grid[r].extend(" " for _ in range(new_w - self.width))
-            self._style_grid[r].extend("default" for _ in range(new_w - self.width))
-            self._protected[r].extend(False for _ in range(new_w - self.width))
-            self._directions[r].extend(0 for _ in range(new_w - self.width))
+            self._grid[r].extend([" "] * extra)
+            self._style_grid[r].extend(["default"] * extra)
+            self._protected[r].extend([False] * extra)
+            self._directions[r].extend([0] * extra)
         for _ in range(new_h - self.height):
             self._grid.append([" " for _ in range(new_w)])
             self._style_grid.append(["default" for _ in range(new_w)])
@@ -199,13 +201,17 @@ class Canvas:
         text: str,
         style: str = "",
         overwrite_spaces: bool = False,
+        grow: bool = False,
     ) -> None:
         """Place a string of characters starting at (row, col).
 
         Wide (CJK) characters advance the column by 2 and leave a
         placeholder space in the next cell so subsequent characters
-        don't overlap.
+        don't overlap. Text past the right edge is clipped unless
+        ``grow`` is set, which widens the canvas to fit it.
         """
+        if grow:
+            self.resize(col + display_width(text), self.height)
         offset = 0
         for ch in text:
             target_col = col + offset

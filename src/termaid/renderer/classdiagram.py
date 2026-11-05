@@ -404,6 +404,8 @@ def _draw_routed_line(
     - Straight if aligned on one axis
     - Otherwise: vertical from start, horizontal bend, vertical to end
     """
+    # Spread exit and entry points can push a line past the rightmost box
+    canvas.resize(max(c1, c2) + 1, canvas.height)
     if c1 == c2:
         # Straight vertical
         for r in range(min(r1, r2), max(r1, r2) + 1):
@@ -598,35 +600,35 @@ def _draw_relationship(
         if start_row == end_row:
             # Horizontal: label above the line
             mid_c = (start_col + end_col) // 2
-            canvas.put_text(mid_r - 1, mid_c - label_w // 2, rel.label, style="edge_label")
+            canvas.put_text(mid_r - 1, mid_c - label_w // 2, rel.label, style="edge_label", grow=True)
         elif start_col == end_col:
             # Straight vertical: label to the right of the midpoint
-            canvas.put_text(mid_r, start_col + 2, rel.label, style="edge_label")
+            canvas.put_text(mid_r, start_col + 2, rel.label, style="edge_label", grow=True)
         elif use_horizontal:
             # LR mode Z-route: label beside the vertical run
-            canvas.put_text(mid_r, (start_col + end_col) // 2 + 2, rel.label, style="edge_label")
+            canvas.put_text(mid_r, (start_col + end_col) // 2 + 2, rel.label, style="edge_label", grow=True)
         elif right_col - left_col - 2 >= label_w:
             # Z-route: the label rides on the horizontal run between the corners
-            canvas.put_text(mid_r, left_col + 2, rel.label, style="edge_label")
+            canvas.put_text(mid_r, left_col + 2, rel.label, style="edge_label", grow=True)
         else:
             # Too short a run: hang the label off the drop into the target, on
             # the row the track reserved below the run
-            canvas.put_text(mid_r + 1, end_col + 2, rel.label, style="edge_label")
+            canvas.put_text(mid_r + 1, end_col + 2, rel.label, style="edge_label", grow=True)
 
     # Draw cardinality near endpoints
     if use_horizontal and start_row == end_row:
         # Below the line at each end, so it never collides with the label above
         if rel.source_card:
             col = start_col + 1 if start_col < end_col else start_col - display_width(rel.source_card)
-            canvas.put_text(start_row + 1, col, rel.source_card, style="edge_label")
+            canvas.put_text(start_row + 1, col, rel.source_card, style="edge_label", grow=True)
         if rel.target_card:
             col = end_col - display_width(rel.target_card) if start_col < end_col else end_col + 1
-            canvas.put_text(end_row + 1, col, rel.target_card, style="edge_label")
+            canvas.put_text(end_row + 1, col, rel.target_card, style="edge_label", grow=True)
     else:
         if rel.source_card:
-            canvas.put_text(start_row, start_col + 1, rel.source_card, style="edge_label")
+            canvas.put_text(start_row, start_col + 1, rel.source_card, style="edge_label", grow=True)
         if rel.target_card:
-            canvas.put_text(end_row, end_col + 1, rel.target_card, style="edge_label")
+            canvas.put_text(end_row, end_col + 1, rel.target_card, style="edge_label", grow=True)
 
 
 def _compute_exit_offsets(
@@ -828,18 +830,6 @@ def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padd
     # Position notes, adjusting class positions to make room
     note_positions, positions, width, height = _layout_notes(
         diagram, positions, sizes, gap=gap)
-
-    # Expand canvas to fit relationship labels placed beside vertical lines
-    for rel in diagram.relationships:
-        if not rel.label or rel.source not in positions or rel.target not in positions:
-            continue
-        sx, sy = positions[rel.source]
-        sw, _ = sizes[rel.source]
-        tx, ty = positions[rel.target]
-        tw, _ = sizes[rel.target]
-        mid_c = (sx + sw // 2 + tx + tw // 2) // 2
-        label_end = mid_c + 2 + display_width(rel.label)
-        width = max(width, label_end + _MARGIN)
 
     exit_offsets = _compute_exit_offsets(diagram, layer_of)
     entry_offsets = _compute_exit_offsets(diagram, layer_of, end="target")

@@ -366,6 +366,8 @@ def _draw_routed_line(
     mid_row: int | None = None,
 ) -> None:
     """Draw a routed line from (r1,c1) to (r2,c2)."""
+    # Spread exit and entry points can push a line past the rightmost box
+    canvas.resize(max(c1, c2) + 1, canvas.height)
     if c1 == c2:
         for r in range(min(r1, r2), max(r1, r2) + 1):
             canvas.put(r, c1, v_char, style=style)
@@ -487,16 +489,16 @@ def _draw_relationship(
             left_card, left_row = card2_text, end_row
             right_card, right_row = card1_text, start_row
         if left_card:
-            canvas.put_text(left_row - 1, left_col + 1, left_card, style="edge_label")
+            canvas.put_text(left_row - 1, left_col + 1, left_card, style="edge_label", grow=True)
         if right_card:
             canvas.put_text(right_row - 1, right_col - display_width(right_card),
-                            right_card, style="edge_label")
+                            right_card, style="edge_label", grow=True)
     else:
         # Vertical connection: cardinality to the right of each endpoint
         if card1_text:
-            canvas.put_text(start_row, start_col + 1, card1_text, style="edge_label")
+            canvas.put_text(start_row, start_col + 1, card1_text, style="edge_label", grow=True)
         if card2_text:
-            canvas.put_text(end_row, end_col + 1, card2_text, style="edge_label")
+            canvas.put_text(end_row, end_col + 1, card2_text, style="edge_label", grow=True)
 
     if not rel.label:
         return
@@ -505,21 +507,21 @@ def _draw_relationship(
     if start_row == end_row:
         # Horizontal: label below the line, centered
         mid_c = (start_col + end_col) // 2
-        canvas.put_text(start_row + 1, mid_c - label_w // 2, rel.label, style="edge_label")
+        canvas.put_text(start_row + 1, mid_c - label_w // 2, rel.label, style="edge_label", grow=True)
     elif start_col == end_col:
         # Straight vertical: label to the right of midpoint
-        canvas.put_text(mid_r, start_col + 2, rel.label, style="edge_label")
+        canvas.put_text(mid_r, start_col + 2, rel.label, style="edge_label", grow=True)
     elif use_horizontal:
         # LR mode Z-route: label below the horizontal bend
         label_c = (start_col + end_col) // 2 - label_w // 2
-        canvas.put_text(mid_r + 1, label_c, rel.label, style="edge_label")
+        canvas.put_text(mid_r + 1, label_c, rel.label, style="edge_label", grow=True)
     elif right_col - left_col - 2 >= label_w:
         # Z-route: the label rides on the horizontal run between the corners
-        canvas.put_text(mid_r, left_col + 2, rel.label, style="edge_label")
+        canvas.put_text(mid_r, left_col + 2, rel.label, style="edge_label", grow=True)
     else:
         # Too short a run: hang the label off the drop into the target, on the
         # row the track reserved below the run
-        canvas.put_text(mid_r + 1, end_col + 2, rel.label, style="edge_label")
+        canvas.put_text(mid_r + 1, end_col + 2, rel.label, style="edge_label", grow=True)
 
 
 def _compute_exit_offsets(
@@ -564,23 +566,6 @@ def render_er_diagram(diagram: ERDiagram, *, use_ascii: bool = False, padding_x:
     positions, sizes, width, height, layer_of, run_rows = _compute_layout(diagram, padding_x=padding_x, gap=gap)
     if width <= 1:
         return Canvas(1, 1)
-
-    # Expand canvas to fit relationship labels and cardinality text
-    for rel in diagram.relationships:
-        if rel.entity1 not in positions or rel.entity2 not in positions:
-            continue
-        sx, sy = positions[rel.entity1]
-        sw, _ = sizes[rel.entity1]
-        tx, ty = positions[rel.entity2]
-        tw, _ = sizes[rel.entity2]
-        mid_c = (sx + sw // 2 + tx + tw // 2) // 2
-        if rel.label:
-            label_end = mid_c + 2 + display_width(rel.label)
-            width = max(width, label_end + _MARGIN)
-        # Cardinality text at endpoints
-        for card in (rel.card1, rel.card2):
-            card_len = len(_card_text(card))
-            width = max(width, mid_c + 1 + card_len + _MARGIN)
 
     exit_offsets = _compute_exit_offsets(diagram, layer_of)
     entry_offsets = _compute_exit_offsets(diagram, layer_of, end="target")
