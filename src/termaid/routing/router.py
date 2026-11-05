@@ -13,6 +13,7 @@ from ..graph.model import Direction, Edge, Graph
 from ..layout.grid import (
     SG_BORDER_PAD, GridLayout, NodePlacement, SubgraphBounds, compute_layout,
 )
+from ..layout.layers import bus_edges
 from .pathfinder import find_path, simplify_path
 
 
@@ -44,6 +45,13 @@ class RoutedEdge:
 
 _MAX_GAP_ROUNDS = 3
 _CROWDING_COST = 10.0
+_OFF_BUS_COST = 0.5
+
+
+@dataclass
+class _BusCells:
+    branches: set[tuple[int, int]] = field(default_factory=set)
+    preferred: set[tuple[int, int]] = field(default_factory=set)
 
 
 def layout_and_route(
@@ -94,6 +102,11 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
     """Route all edges in the graph."""
     direction = graph.direction.normalized()
     routed: list[RoutedEdge] = []
+    vertical = direction.is_vertical
+    buses = bus_edges(graph)
+    on_bus = {i for idxs in buses.values() for i in idxs}
+    spans = _bus_spans(graph, layout, buses, vertical)
+    bus_cells: dict[str, _BusCells] = {}
 
     # Build subgraph bounds lookup
     sg_bounds: dict[str, SubgraphBounds] = {}
@@ -113,7 +126,9 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
         if src is not None and tgt is not None and not graph.edges[i].is_self_reference
     }
 
-    for i, edge in enumerate(graph.edges):
+    order = _routing_order(graph, layout, buses)
+    for pos, i in enumerate(order):
+        edge = graph.edges[i]
         src, tgt = endpoints[i]
 
         if src is None or tgt is None:
@@ -130,17 +145,25 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
         penalty = _side_exit_penalty(facing, sg_regions, direction)
         shared, crossings, blocked = _occupancy(
             [(r, _related(places[i], places[r.index])) for r in routed],
-            [ends[j] for j in range(i + 1, len(graph.edges))
+            [ends[j] for j in order[pos + 1:]
              if j in ends and not _related(places[i], places[j])],
         )
+        bus = bus_cells.setdefault(edge.source, _BusCells()) if i in on_bus else _BusCells()
         re = _route_edge(
-            edge, src, tgt, layout, direction, shared | forbidden, penalty,
-            crossings, blocked,
+            edge, src, tgt, layout, direction, (shared - bus.branches) | forbidden,
+            _prefer_cells(bus.preferred, penalty), crossings, blocked,
         )
         re.index = i
         routed.append(re)
         facing_homes.append((re, facing))
+        bus.branches.update(re.occupied_cells)
+        if i in on_bus and _misalignment(edge, layout, vertical):
+            if not bus.preferred:
+                bus.preferred.update(_bus_lane(re.grid_path, spans[edge.source], vertical))
+            bus.preferred.update(re.occupied_cells)
 
+    routed.sort(key=lambda re: re.index)
+    _step_off_four_way_splits(routed, layout, vertical)
     _fit_boxes_to_corridors(facing_homes, layout, sg_bounds, sg_regions, direction)
 
     # Snap subgraph-endpoint edges onto the subgraph border so they
@@ -259,6 +282,120 @@ def _path_axes(path: list[tuple[int, int]]) -> dict[tuple[int, int], bool | None
         straight = cell[0] - prev[0] == nxt[0] - cell[0] and cell[1] - prev[1] == nxt[1] - cell[1]
         axes[cell] = (prev[1] == cell[1]) if straight else None
     return axes
+
+
+def _routing_order(graph: Graph, layout: GridLayout, buses: dict[str, list[int]]) -> list[int]:
+    vertical = graph.direction.normalized().is_vertical
+
+    def misalignment(i: int) -> int:
+        return _misalignment(graph.edges[i], layout, vertical)
+
+    order = list(range(len(graph.edges)))
+    for indexes in buses.values():
+        straightest_first = sorted(indexes, key=lambda i: (misalignment(i), i))
+        for slot, i in zip(indexes, straightest_first):
+            order[slot] = i
+    return order
+
+
+def _exits_by_cell(paths: list[list[tuple[int, int]]]) -> dict[tuple[int, int], set[tuple[int, int]]]:
+    exits: dict[tuple[int, int], set[tuple[int, int]]] = {}
+    for path in paths:
+        for (c0, r0), (c1, r1) in zip(path, path[1:]):
+            dc, dr = (c1 > c0) - (c1 < c0), (r1 > r0) - (r1 < r0)
+            c, r = c0, r0
+            while (c, r) != (c1, r1):
+                exits.setdefault((c, r), set()).add((dc, dr))
+                c, r = c + dc, r + dr
+                exits.setdefault((c, r), set()).add((-dc, -dr))
+    return exits
+
+
+def _step_off_four_way_splits(routed: list[RoutedEdge], layout: GridLayout, vertical: bool) -> None:
+    by_source: dict[str, list[RoutedEdge]] = {}
+    for re in routed:
+        if not re.edge.is_self_reference:
+            by_source.setdefault(re.edge.source, []).append(re)
+    for lines in by_source.values():
+        if len(lines) < 3:
+            continue
+        exits_per_line = [_exits_by_cell([re.grid_path]) for re in lines]
+        for cell, exits in _exits_by_cell([re.grid_path for re in lines]).items():
+            straight_through = sum(
+                len(own.get(cell, ())) == 2 and _is_straight(own[cell]) for own in exits_per_line
+            )
+            is_crossing = straight_through >= 2
+            if len(exits) == 4 and not is_crossing:
+                x, y = layout.grid_to_draw_center(*cell)
+                for re in lines:
+                    if _step_aside(re.draw_path, x, y, vertical):
+                        break
+
+
+def _is_straight(exits: set[tuple[int, int]]) -> bool:
+    (a, b), (c, d) = exits
+    return (a, b) == (-c, -d)
+
+
+def _step_aside(path: list[tuple[int, int]], x: int, y: int, vertical: bool) -> bool:
+    for k, ((x0, y0), (x1, y1)) in enumerate(zip(path, path[1:])):
+        through = (x0 == x1 == x and min(y0, y1) < y < max(y0, y1)) if vertical else (
+            y0 == y1 == y and min(x0, x1) < x < max(x0, x1))
+        if through:
+            side = (x + 1, y) if vertical else (x, y + 1)
+            end = (x1 + 1, y1) if vertical else (x1, y1 + 1)
+            path[k + 1:k + 2] = [(x, y), side, end]
+            return True
+    return False
+
+
+def _misalignment(edge: Edge, layout: GridLayout, vertical: bool) -> int:
+    src = layout.placements.get(edge.source)
+    tgt = layout.placements.get(edge.target)
+    if not src or not tgt:
+        return 0
+    if vertical:
+        return abs(tgt.grid.col - src.grid.col)
+    return abs(tgt.grid.row - src.grid.row)
+
+
+def _bus_spans(
+    graph: Graph, layout: GridLayout, buses: dict[str, list[int]], vertical: bool,
+) -> dict[str, tuple[int, int]]:
+    spans: dict[str, tuple[int, int]] = {}
+    for source, indexes in buses.items():
+        src = layout.placements.get(source)
+        if not src:
+            continue
+        a = src.grid.col if vertical else src.grid.row
+        lo, hi = a, a
+        for i in indexes:
+            tgt = layout.placements.get(graph.edges[i].target)
+            if tgt:
+                b = tgt.grid.col if vertical else tgt.grid.row
+                lo, hi = min(lo, b), max(hi, b)
+        spans[source] = (lo, hi)
+    return spans
+
+
+def _bus_lane(path: list[tuple[int, int]], span: tuple[int, int], vertical: bool) -> set[tuple[int, int]]:
+    for (c1, r1), (c2, r2) in zip(path, path[1:]):
+        if vertical and r1 == r2 and c1 != c2:
+            return {(c, r1) for c in range(span[0], span[1] + 1)}
+        if not vertical and c1 == c2 and r1 != r2:
+            return {(c1, r) for r in range(span[0], span[1] + 1)}
+    return set()
+
+
+def _prefer_cells(
+    cells: set[tuple[int, int]], penalty: Callable[[int, int], float] | None,
+) -> Callable[[int, int], float] | None:
+    if not cells:
+        return penalty
+
+    def cost(c: int, r: int) -> float:
+        return (penalty(c, r) if penalty else 0.0) + _OFF_BUS_COST * ((c, r) not in cells)
+    return cost
 
 
 def _spread_shared_endpoints(

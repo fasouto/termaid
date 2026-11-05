@@ -5,7 +5,7 @@ each layer to minimize edge crossings using a barycenter heuristic.
 """
 from __future__ import annotations
 
-from collections import deque
+from collections import Counter, deque
 
 from ..graph.model import Edge, Graph, Subgraph
 from .grid import STRIDE, GridLayout
@@ -437,6 +437,15 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
     return layer_lists
 
 
+def bus_edges(graph: Graph) -> dict[str, list[int]]:
+    in_degree = Counter(e.target for e in graph.edges)
+    by_source: dict[str, list[int]] = {}
+    for i, e in enumerate(graph.edges):
+        if not e.label and not e.is_self_reference and in_degree[e.target] == 1:
+            by_source.setdefault(e.source, []).append(i)
+    return {src: idxs for src, idxs in by_source.items() if len(idxs) > 1}
+
+
 def compute_gap_expansions(
     graph: Graph, layer_order: list[list[str]],
 ) -> dict[int, int]:
@@ -459,9 +468,9 @@ def compute_gap_expansions(
             node_layer[nid] = layer_idx
             node_pos[nid] = pos_idx
 
-    # Count edges that need horizontal routing per gap
-    diagonal_per_gap: dict[int, int] = {}
-    for edge in graph.edges:
+    on_bus = {i for idxs in bus_edges(graph).values() for i in idxs}
+    lanes_per_gap: dict[int, set[tuple[str, str | int]]] = {}
+    for i, edge in enumerate(graph.edges):
         if edge.is_self_reference:
             continue
         src_layer = node_layer.get(edge.source)
@@ -476,11 +485,10 @@ def compute_gap_expansions(
         # Count this edge for each gap it crosses
         lo, hi = min(src_layer, tgt_layer), max(src_layer, tgt_layer)
         for gap_idx in range(lo, hi):
-            diagonal_per_gap[gap_idx] = diagonal_per_gap.get(gap_idx, 0) + 1
+            lane = ("bus", edge.source) if i in on_bus and tgt_layer == src_layer + 1 else ("edge", i)
+            lanes_per_gap.setdefault(gap_idx, set()).add(lane)
 
-    # Extra cells = max(0, n_diagonal - 1): one edge fits in the default
-    # gap cell, each additional edge needs one more cell.
-    return {gap: max(0, n - 1) for gap, n in diagonal_per_gap.items()}
+    return {gap: max(0, len(lanes) - 1) for gap, lanes in lanes_per_gap.items()}
 
 
 def _get_orthogonal_sg_nodes(graph: Graph) -> list[set[str]]:
