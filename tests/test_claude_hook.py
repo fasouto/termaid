@@ -183,6 +183,51 @@ def test_a_state_folder_it_cannot_write_shows_the_reply_as_written(tmp_path, mon
     finally:
         folder.chmod(0o700)
 
+
+@posix_only
+def test_a_folder_owned_by_another_user_is_not_used(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    other = os.getuid() + 1
+    monkeypatch.setattr(os, "getuid", lambda: other)
+    assert _open_fence() == ""
+    assert list(tmp_path.glob("termaid-claude-hook*/*")) == []
+
+
+@posix_only
+def test_a_folder_the_group_can_open_is_not_used(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    folder = tmp_path / f"termaid-claude-hook-{os.getuid()}"
+    folder.mkdir()
+    folder.chmod(0o770)
+    assert _open_fence() == ""
+    assert list(folder.iterdir()) == []
+
+
+@posix_only
+def test_a_private_symlink_is_not_used_as_the_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    target = tmp_path / "elsewhere"
+    target.mkdir(mode=0o700)
+    old_umask = os.umask(0o077)
+    try:
+        (tmp_path / f"termaid-claude-hook-{os.getuid()}").symlink_to(target)
+    finally:
+        os.umask(old_umask)
+    assert _open_fence() == ""
+    assert list(target.iterdir()) == []
+
+
+@posix_only
+def test_a_failed_save_leaves_no_temp_file(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+
+    def fail(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "replace", fail)
+    assert _open_fence() == ""
+    assert list(tmp_path.glob("termaid-claude-hook*/*")) == []
+
 def test_state_folder_without_getuid(tmp_path, monkeypatch):
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
     monkeypatch.delattr(os, "getuid", raising=False)

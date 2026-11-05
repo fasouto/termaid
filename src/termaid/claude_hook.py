@@ -153,15 +153,13 @@ def _state_dir() -> str | None:
     no one else can open. Windows gives each user their own temp folder.
     """
     getuid = getattr(os, "getuid", None)
-    if getuid is None:
-        folder = os.path.join(tempfile.gettempdir(), "termaid-claude-hook")
-        try:
-            os.makedirs(folder, exist_ok=True)
-        except OSError:
-            return None
-        return folder
-    folder = os.path.join(tempfile.gettempdir(), f"termaid-claude-hook-{getuid()}")
     try:
+        base = tempfile.gettempdir()
+        if getuid is None:
+            folder = os.path.join(base, "termaid-claude-hook")
+            os.makedirs(folder, exist_ok=True)
+            return folder
+        folder = os.path.join(base, f"termaid-claude-hook-{getuid()}")
         os.makedirs(folder, mode=0o700, exist_ok=True)
         info = os.lstat(folder)
     except OSError:
@@ -179,9 +177,16 @@ def _state_path(folder: str, message_id: str) -> str:
 def _write_state(path: str, data: str) -> None:
     """Write through a temp file, so a later call never reads half a file."""
     tmp = f"{path}.{os.getpid()}.tmp"
-    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
-        f.write(data)
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_ascii: bool = False) -> int:
