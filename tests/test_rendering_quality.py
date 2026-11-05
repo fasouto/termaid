@@ -156,6 +156,39 @@ class TestMissingEdges:
                 )
 
 
+
+class TestLabelsKeepOffOtherLines:
+    """A label written over another edge's line cuts that edge."""
+
+    def test_label_leaves_a_sibling_line_whole(self):
+        from tests.conftest import edge_targets
+
+        src = (
+            "flowchart LR\n"
+            "  A[Hard edge] -->|Link text| B(Round edge)\n"
+            "  B --> C{Decision}\n"
+            "  C -->|One| D[Result one]\n"
+            "  C -->|Two| E[Result two]"
+        )
+        out = render(src)
+        reached = edge_targets(out.split("\n"), "Decision", ["Decision", "Result one", "Result two"])
+        assert reached == {"Result one", "Result two"}, out
+
+    def test_label_stays_out_of_a_node_box(self):
+        from tests.conftest import find_box
+
+        src = (
+            "graph LR\n"
+            "  A[Client] <-->|sync| B[Server]\n"
+            "  B <-.->|heartbeat| C[Monitor]\n"
+            "  C <==>|data| D[Storage]"
+        )
+        out = render(src)
+        lines = out.split("\n")
+        top, bottom, left, right = find_box(lines, "Storage")
+        inside = [line[left + 1:right] for line in lines[top + 1:bottom]]
+        assert not any("data" in row for row in inside), out
+
 class TestSubgraphBorderCrossings:
     """Subgraph borders should remain intact when edges cross them."""
 
