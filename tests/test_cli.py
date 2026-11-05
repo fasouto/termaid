@@ -123,7 +123,7 @@ class TestCliWrapFit:
         source = 'pie title Languages\n  "Python" : 45\n  "Go" : 30\n  "Rust" : 25'
         args = argparse.Namespace(
             gap=4, padding_x=4, padding_y=2, ascii=False, sharp_edges=False,
-            inline_edge_labels=False, no_auto_fit=False, strict_width=False,
+            inline_edge_labels=False, no_auto_fit=False, strict_width=False, arrow_style="pointer",
             diagnostics_format="text",
         )
         calls: list[dict] = []

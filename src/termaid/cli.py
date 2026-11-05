@@ -89,6 +89,7 @@ def _auto_fit(
             padding_y=args.padding_y,
             rounded_edges=not args.sharp_edges,
             inline_edge_labels=args.inline_edge_labels,
+            arrow_style=args.arrow_style,
             **overrides,
         )
 
@@ -213,6 +214,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Vertical padding inside node boxes (default: 2)",
     )
     parser.add_argument(
+        "--arrow-style",
+        choices=("pointer", "triangle", "outline"),
+        default="pointer",
+        help="Arrowheads: pointer (default, ► ◄ ▼ ▲), triangle (▶ ◀ ▼ ▲) or outline (▷ ◁ ▽ △). See --arrow-styles",
+    )
+    parser.add_argument(
         "--gap",
         type=int,
         default=4,
@@ -308,6 +315,11 @@ def main(argv: list[str] | None = None) -> int:
              "response as JSON on stdin and draw its Mermaid blocks in place.",
     )
     parser.add_argument(
+        "--arrow-styles",
+        action="store_true",
+        help="List available arrowhead styles and exit.",
+    )
+    parser.add_argument(
         "--themes",
         action="store_true",
         help="List available color themes and exit.",
@@ -343,6 +355,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.themes:
         return _list_themes()
+
+    if args.arrow_styles:
+        return _list_arrow_styles()
 
     if args.demo is not None:
         return _run_demo(args)
@@ -479,6 +494,7 @@ def _render_one(source: str, args: argparse.Namespace, render_fn, target_width: 
         rounded_edges=not args.sharp_edges,
         gap=args.gap,
         inline_edge_labels=args.inline_edge_labels,
+        arrow_style=args.arrow_style,
     )
     return _auto_fit(result, source, args, render_fn=render_fn, target_width=target_width)
 
@@ -569,6 +585,7 @@ def _run_tui(source: str, args: argparse.Namespace) -> int:
                 padding_y=args.padding_y,
                 rounded_edges=not args.sharp_edges,
                 gap=args.gap,
+                arrow_style=args.arrow_style,
             ))
 
     DiagramApp().run()
@@ -625,6 +642,20 @@ def _list_themes() -> int:
         print(f"  {name:12s} {tag:8s} {desc}")
     return 0
 
+
+
+def _list_arrow_styles() -> int:
+    """List available arrowhead styles."""
+    from .renderer.charset import ARROW_STYLES
+
+    descriptions = {
+        "pointer": "Pointers (default)",
+        "triangle": "Solid triangles, matching the up and down arrows",
+        "outline": "Open triangles",
+    }
+    for name, (right, left, down, up) in ARROW_STYLES.items():
+        print(f"  {name:10s} {right} {left} {down} {up}   {descriptions.get(name, '')}")
+    return 0
 
 _DEMO_SOURCES = {
     "flowchart": ("Flowchart", "graph TD\n  A[Start] --> B{Decision}\n  B -->|Yes| C[Process]\n  B -->|No| D[End]\n  C --> D"),

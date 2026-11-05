@@ -22,6 +22,7 @@ MARKED = replace(
     UNICODE,
     arrow_right="R", arrow_left="L", arrow_down="D", arrow_up="U",
     inherit_down="I", inherit_up="J", inherit_right="K", inherit_left="M",
+    dependency_down="E", dependency_up="F", dependency_right="G", dependency_left="H",
     horizontal="=", line_horizontal="=",
 )
 
@@ -41,7 +42,7 @@ def test_default_charset():
         ("flowchart", lambda cs: render_graph_canvas(parse_flowchart("graph LR\n  A --> B"), cs=cs), "R"),
         ("flowchart TD", lambda cs: render_graph_canvas(parse_flowchart("graph TD\n  A --> B"), cs=cs), "D"),
         ("sequence", lambda cs: render_sequence(parse_sequence_diagram("sequenceDiagram\n  A->>B: hi\n  B-->>A: yo"), cs=cs), "RL"),
-        ("class dependency", lambda cs: render_class_diagram(parse_class_diagram("classDiagram\n  A --> B"), cs=cs), "D"),
+        ("class dependency", lambda cs: render_class_diagram(parse_class_diagram("classDiagram\n  A --> B"), cs=cs), "E"),
         ("class inheritance", lambda cs: render_class_diagram(parse_class_diagram("classDiagram\n  A <|-- B"), cs=cs), "J"),
         ("journey", lambda cs: render_journey(parse_journey("journey\n  section S\n    a: 5: Me\n    b: 3: Me"), cs=cs), "R"),
         ("er", lambda cs: render_er_diagram(parse_er_diagram("erDiagram\n  A ||--o{ B : has"), cs=cs), "="),

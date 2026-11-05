@@ -547,6 +547,8 @@ packet
 | `--padding-x N` | Horizontal padding inside boxes (default: 4) |
 | `--padding-y N` | Vertical padding inside boxes (default: 2) |
 | `--gap N` | Space between nodes (default: 4). Use `1` or `2` for compact diagrams |
+| `--arrow-style STYLE` | Arrowheads: `pointer` (default, `► ◄ ▼ ▲`), `triangle` (`▶ ◀ ▼ ▲`) or `outline` (`▷ ◁ ▽ △`). Also `arrow_style=` in `render()`, `render_rich()`, `render_styled()` and `MermaidWidget` |
+| `--arrow-styles` | List the arrowhead styles |
 | `--inline-edge-labels` | Attach flowchart labels directly to their edges |
 | `--width N` | Max output width. Re-renders with smaller gap/padding, then wraps labels, if exceeded |
 | `--strict-width` | Exit with status 2 instead of a warning when the output is still wider than `--width` |
