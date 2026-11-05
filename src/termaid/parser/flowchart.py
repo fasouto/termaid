@@ -229,9 +229,14 @@ def _decode_entities(text: str) -> str:
     def decode(m: re.Match[str]) -> str:
         code = m.group(1)
         if code.isdigit():
-            return html.unescape(f"&#{code};")
-        # html.unescape would read "&notathing;" as "&not" plus "athing;".
-        return html.entities.html5.get(f"{code};", m.group(0))
+            decoded = html.unescape(f"&#{code};")
+        else:
+            # html.unescape would read "&notathing;" as "&not" plus "athing;".
+            decoded = html.entities.html5.get(f"{code};", m.group(0))
+        # A control character would reach the terminal. HTML shows the whitespace ones as a space.
+        if len(decoded) == 1 and (ord(decoded) < 0x20 or 0x7F <= ord(decoded) <= 0x9F):
+            return " " if decoded.isspace() else ""
+        return decoded
     return _ENTITY_CODE.sub(decode, text)
 
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from termaid import render
 from termaid.parser.flowchart import parse_flowchart
 from termaid.graph.model import Direction, Edge, EdgeStyle
 from termaid.graph.shapes import NodeShape
@@ -420,3 +421,17 @@ class TestEntityCodes:
         g = parse_flowchart('graph LR\n  A["`**#lt;b#gt;** #amp;`"]')
         assert g.nodes["A"].label == "<b> &"
         assert [s.text for s in g.nodes["A"].label_segments] == ["<b>", " &"]
+
+    @pytest.mark.parametrize("code", ["#9;", "#10;", "#12;", "#13;", "#Tab;", "#NewLine;"])
+    def test_whitespace_codes_become_a_space(self, code):
+        g = parse_flowchart(f'graph LR\n  A["ab{code}cd"]')
+        assert g.nodes["A"].label == "ab cd"
+
+    def test_codes_for_control_characters_never_reach_the_output(self):
+        codes = "".join(f"#{n};" for n in [*range(0x20), *range(0x7F, 0xA0)])
+        source = f'graph LR\n  A["a{codes}b"] -->|"a{codes}b"| B\n  subgraph S["a{codes}b"]\n    C\n  end'
+        g = parse_flowchart(source)
+        for label in (g.nodes["A"].label, g.edges[0].label, g.subgraphs[0].label):
+            assert not [hex(ord(c)) for c in label if ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F]
+        output = render(source)
+        assert not [hex(ord(c)) for c in output if c != "\n" and (ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F)]
