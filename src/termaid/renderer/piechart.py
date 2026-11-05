@@ -64,16 +64,18 @@ def render_pie_chart(
     # Stacked bar showing parts of a whole
     stacked_w = _BAR_WIDTH
     stacked_left = bar_left + 1
+    widths = [max(1, round(s.value / total * stacked_w)) for s in diagram.slices]
+    rest = stacked_w - sum(widths[:-1])
+    if rest > 0:
+        widths[-1] = rest
+    # Rounding every slice up to a cell can overflow the bar. The widest
+    # segments give up the extra cells, so no slice is squeezed out.
+    while sum(widths) > stacked_w and max(widths) > 1:
+        widths[widths.index(max(widths))] -= 1
     col = 0
     label_parts: list[tuple[int, int, str, str]] = []  # (start, width, named, pct)
-    for i, s in enumerate(diagram.slices):
+    for i, (s, seg_w) in enumerate(zip(diagram.slices, widths)):
         fill = fills[i % len(fills)]
-        seg_w = max(1, round(s.value / total * stacked_w))
-        # Clamp last segment to fill exactly
-        if i == len(diagram.slices) - 1:
-            seg_w = stacked_w - col
-        if seg_w <= 0:
-            continue
         for c in range(seg_w):
             canvas.put(stacked_top, stacked_left + col + c, fill, merge=False, style="node")
         pct_label = f"{s.value / total * 100:.0f}%"
