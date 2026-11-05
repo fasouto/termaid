@@ -86,36 +86,41 @@ def _render_canvas(
     if gap != 4:
         extra["gap"] = gap
 
+    from .renderer.charset import default_charset
+
+    # Every renderer draws with this one character set.
+    cs = default_charset(use_ascii)
+
     prepared = _prepare_source(source)
     text = _skip_directives(prepared)
     if text.startswith("sequenceDiagram"):
         from .parser.sequence import parse_sequence_diagram
         from .renderer.sequence import render_sequence
         return _Rendered(render_sequence(
-            parse_sequence_diagram(text), use_ascii=use_ascii,
+            parse_sequence_diagram(text), use_ascii=use_ascii, cs=cs,
             max_label_width=max_label_width, **extra,
         ))
 
     if text.startswith("classDiagram"):
         from .parser.classdiagram import parse_class_diagram
         from .renderer.classdiagram import render_class_diagram
-        return _Rendered(render_class_diagram(parse_class_diagram(text), use_ascii=use_ascii, **extra))
+        return _Rendered(render_class_diagram(parse_class_diagram(text), use_ascii=use_ascii, cs=cs, **extra))
 
     if text.startswith("erDiagram"):
         from .parser.erdiagram import parse_er_diagram
         from .renderer.erdiagram import render_er_diagram
-        return _Rendered(render_er_diagram(parse_er_diagram(text), use_ascii=use_ascii, **extra))
+        return _Rendered(render_er_diagram(parse_er_diagram(text), use_ascii=use_ascii, cs=cs, **extra))
 
     if text.startswith("block"):
         from .parser.blockdiagram import parse_block_diagram
         from .renderer.blockdiagram import render_block_diagram
-        return _Rendered(render_block_diagram(parse_block_diagram(text), use_ascii=use_ascii, **extra))
+        return _Rendered(render_block_diagram(parse_block_diagram(text), use_ascii=use_ascii, cs=cs, **extra))
 
     if text.startswith("gitGraph"):
         from .parser.gitgraph import parse_git_graph
         from .renderer.gitgraph import render_git_graph
         # gitGraph reads mainBranchName from its %%{init}%% directive.
-        return _Rendered(render_git_graph(parse_git_graph(prepared), use_ascii=use_ascii))
+        return _Rendered(render_git_graph(parse_git_graph(prepared), use_ascii=use_ascii, cs=cs))
 
     if text.startswith("gantt"):
         from .parser.gantt import parse_gantt
@@ -130,7 +135,7 @@ def _render_canvas(
     if text.startswith("treemap"):
         from .parser.treemap import parse_treemap
         from .renderer.treemap import render_treemap
-        return _Rendered(render_treemap(parse_treemap(text), use_ascii=use_ascii))
+        return _Rendered(render_treemap(parse_treemap(text), use_ascii=use_ascii, cs=cs))
 
     if text.startswith("mindmap"):
         from .parser.mindmap import parse_mindmap
@@ -151,17 +156,17 @@ def _render_canvas(
     if text.startswith("journey"):
         from .parser.journey import parse_journey
         from .renderer.journey import render_journey
-        return _Rendered(render_journey(parse_journey(text), use_ascii=use_ascii, rounded=rounded_edges, **extra))
+        return _Rendered(render_journey(parse_journey(text), use_ascii=use_ascii, cs=cs, rounded=rounded_edges, **extra))
 
     if text.startswith("timeline"):
         from .parser.timeline import parse_timeline
         from .renderer.timeline import render_timeline
-        return _Rendered(render_timeline(parse_timeline(text), use_ascii=use_ascii))
+        return _Rendered(render_timeline(parse_timeline(text), use_ascii=use_ascii, cs=cs))
 
     if text.startswith("kanban"):
         from .parser.kanban import parse_kanban
         from .renderer.kanban import render_kanban
-        return _Rendered(render_kanban(parse_kanban(text), use_ascii=use_ascii, **extra))
+        return _Rendered(render_kanban(parse_kanban(text), use_ascii=use_ascii, cs=cs, **extra))
 
     if text.startswith("quadrantChart"):
         from .parser.quadrant import parse_quadrant
@@ -177,6 +182,7 @@ def _render_canvas(
         graph = parse(text)
     canvas = draw.render_graph_canvas(
         graph,
+        cs=cs,
         use_ascii=use_ascii,
         padding_x=padding_x,
         padding_y=padding_y,

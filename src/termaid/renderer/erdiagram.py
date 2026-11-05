@@ -9,7 +9,7 @@ from collections import deque
 
 from ..model.erdiagram import Entity, ERDiagram, Relationship
 from .canvas import Canvas
-from .charset import ASCII, UNICODE, CharSet
+from .charset import CharSet, default_charset
 from .relation_tracks import assign_tracks
 from ..utils import display_width
 
@@ -559,9 +559,9 @@ def _compute_exit_offsets(
     return offsets
 
 
-def render_er_diagram(diagram: ERDiagram, *, use_ascii: bool = False, padding_x: int = 2, gap: int = 4) -> Canvas:
+def render_er_diagram(diagram: ERDiagram, *, use_ascii: bool = False, padding_x: int = 2, gap: int = 4, cs: CharSet | None = None) -> Canvas:
     """Render an ERDiagram to a Canvas."""
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     positions, sizes, width, height, layer_of, run_rows = _compute_layout(diagram, padding_x=padding_x, gap=gap)
     if width <= 1:

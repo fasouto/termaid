@@ -8,7 +8,7 @@ from __future__ import annotations
 from ..model.kanban import Kanban
 from ..utils import display_width, truncate_to_width
 from .canvas import Canvas
-from .charset import ASCII, UNICODE, CharSet
+from .charset import CharSet, default_charset
 
 
 _COL_PAD = 2      # horizontal padding inside columns
@@ -21,11 +21,12 @@ def render_kanban(
     diagram: Kanban,
     *,
     use_ascii: bool = False,
+    cs: CharSet | None = None,
     padding_x: int = _CARD_PAD,
     gap: int = _COL_GAP,
 ) -> Canvas:
     """Render a Kanban model to a Canvas."""
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     if not diagram.columns:
         return Canvas(1, 1)

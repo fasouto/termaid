@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from ..model.gitgraph import Commit, GitGraph
 from .canvas import Canvas
-from .charset import ASCII, UNICODE, CharSet
+from .charset import CharSet, default_charset
 from ..utils import display_width
 
 # ── layout constants ──────────────────────────────────────────────
@@ -398,9 +398,9 @@ def _draw_tb(
                 canvas.put_text(row - 1, tag_col, tag_text, style="edge_label")
 
 
-def render_git_graph(diagram: GitGraph, *, use_ascii: bool = False) -> Canvas:
+def render_git_graph(diagram: GitGraph, *, use_ascii: bool = False, cs: CharSet | None = None) -> Canvas:
     """Render a GitGraph to a Canvas."""
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     if not diagram.commits:
         return Canvas(1, 1)

@@ -10,7 +10,7 @@ from typing import Union
 
 from ..model.sequence import ActivateEvent, Block, BlockSection, DestroyEvent, Event, Message, Note, SequenceDiagram
 from .canvas import Canvas
-from .charset import ASCII, UNICODE, CharSet
+from .charset import CharSet, default_charset
 from .shapes import draw_rectangle, draw_cylinder
 from ..utils import display_width, wrap_display_text
 
@@ -514,6 +514,7 @@ def render_sequence(
     diagram: SequenceDiagram,
     *,
     use_ascii: bool = False,
+    cs: CharSet | None = None,
     padding_x: int = 4,
     gap: int = 16,
     max_label_width: int | None = None,
@@ -524,7 +525,7 @@ def render_sequence(
     titles) is wrapped to that many display cells; frame titles are wrapped to
     the frame width their contents dictate instead.
     """
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     # Flatten events for linear layout
     flat_events = _flatten_events(diagram.events)
@@ -902,20 +903,14 @@ def _draw_message(
     # Arrowhead at target
     if msg.arrow_type == "bidirectional":
         # Arrowheads at both ends
-        if use_ascii:
-            canvas.put(row, left, "<", merge=False, style="arrow")
-            canvas.put(row, right, ">", merge=False, style="arrow")
-        else:
-            canvas.put(row, left, "◄", merge=False, style="arrow")
-            canvas.put(row, right, "►", merge=False, style="arrow")
+        canvas.put(row, left, cs.arrow_left, merge=False, style="arrow")
+        canvas.put(row, right, cs.arrow_right, merge=False, style="arrow")
     elif msg.arrow_type == "arrow":
         if going_right:
-            arrow = ">" if use_ascii else "►"
-            canvas.put(row, right, arrow, merge=False, style="arrow")
+            canvas.put(row, right, cs.arrow_right, merge=False, style="arrow")
             canvas.put(row, left, h_char, merge=False, style="edge")
         else:
-            arrow = "<" if use_ascii else "◄"
-            canvas.put(row, left, arrow, merge=False, style="arrow")
+            canvas.put(row, left, cs.arrow_left, merge=False, style="arrow")
             canvas.put(row, right, h_char, merge=False, style="edge")
     elif msg.arrow_type == "cross":
         if going_right:
@@ -972,8 +967,7 @@ def _draw_self_message(
 
     # Arrowhead pointing back at lifeline
     if msg.arrow_type == "arrow":
-        arrow = "<" if use_ascii else "◄"
-        canvas.put(row + 1, col, arrow, merge=False, style="arrow")
+        canvas.put(row + 1, col, cs.arrow_left, merge=False, style="arrow")
     elif msg.arrow_type == "cross":
         canvas.put(row + 1, col, "x", merge=False, style="arrow")
     elif msg.arrow_type == "async":

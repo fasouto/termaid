@@ -7,7 +7,7 @@ from __future__ import annotations
 from ..graph.shapes import NodeShape
 from ..model.blockdiagram import Block, BlockDiagram, BlockLink
 from .canvas import Canvas
-from .charset import ASCII, UNICODE, CharSet
+from .charset import CharSet, default_charset
 from .shapes import SHAPE_RENDERERS
 from ..utils import display_width
 
@@ -25,9 +25,9 @@ _MARGIN = 2
 _GROUP_PAD = 2  # inner margin for nested groups
 
 
-def render_block_diagram(diagram: BlockDiagram, *, use_ascii: bool = False, padding_x: int = 2, gap: int = 4) -> Canvas:
+def render_block_diagram(diagram: BlockDiagram, *, use_ascii: bool = False, padding_x: int = 2, gap: int = 4, cs: CharSet | None = None) -> Canvas:
     """Render a BlockDiagram to a Canvas."""
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     if not diagram.blocks:
         return Canvas(1, 1)

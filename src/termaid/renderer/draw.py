@@ -20,7 +20,7 @@ from ..layout.grid import GridLayout, NodePlacement
 from ..routing.router import AttachDir, RoutedEdge, layout_and_route
 from .canvas import Canvas
 from ..utils import display_width
-from .charset import ASCII, UNICODE, CharSet
+from .charset import ASCII, CharSet, UNICODE, default_charset
 from .shapes import SHAPE_RENDERERS, draw_rectangle
 
 
@@ -68,6 +68,7 @@ def render_graph_canvas(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    cs: CharSet | None = None,
 ) -> Canvas | None:
     """Render a graph and return the Canvas (with style info).
 
@@ -76,7 +77,7 @@ def render_graph_canvas(
     if not graph.node_order:
         return None
 
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     # Need to handle BT/RL by rendering as TB/LR then flipping
     direction = graph.direction
@@ -335,7 +336,7 @@ def _draw_edges(
             _draw_edge_label(
                 canvas, re, placed_labels,
                 inline=inline_edge_labels,
-                use_ascii=cs is ASCII,
+                cs=cs,
             )
 
 
@@ -715,7 +716,7 @@ def _draw_edge_label(
     placed_labels: list[tuple[int, int, int]],
     *,
     inline: bool = False,
-    use_ascii: bool = False,
+    cs: CharSet = UNICODE,
 ) -> None:
     """Draw an edge label on the best segment of the path.
 
@@ -730,7 +731,7 @@ def _draw_edge_label(
 
     path = re.draw_path
     leader_char = _edge_line_chars(
-        re.edge.style, ASCII if use_ascii else UNICODE,
+        re.edge.style, cs,
     )[0]
 
     # Build segment list ordered by preference: post-turn segments first,
@@ -778,7 +779,7 @@ def _draw_edge_label(
                 prefer_left=is_straight,
                 bias_target=is_straight,
                 inline=inline,
-                use_ascii=use_ascii,
+                use_ascii=cs is ASCII,
                 leader_char=leader_char,
                 rules=rules,
             ):
@@ -788,7 +789,7 @@ def _draw_edge_label(
         _draw_edge_label(
             canvas, re, placed_labels,
             inline=False,
-            use_ascii=use_ascii,
+            cs=cs,
         )
         return
 
