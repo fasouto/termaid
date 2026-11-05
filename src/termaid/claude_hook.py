@@ -229,7 +229,10 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
             except OSError:
                 pass
         else:
-            _write_state(path, renderer.to_json())
+            try:
+                _write_state(path, renderer.to_json())
+            except OSError:
+                return 0
 
     json.dump({"hookSpecificOutput": {"hookEventName": "MessageDisplay", "displayContent": shown}}, stdout)
     stdout.write("\n")

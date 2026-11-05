@@ -170,6 +170,19 @@ def test_a_symlinked_folder_is_not_used(tmp_path, monkeypatch):
     assert list(target.iterdir()) == []
 
 
+
+@posix_only
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores modes")
+def test_a_state_folder_it_cannot_write_shows_the_reply_as_written(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    folder = tmp_path / f"termaid-claude-hook-{os.getuid()}"
+    folder.mkdir(mode=0o500)
+    folder.chmod(0o500)
+    try:
+        assert _open_fence() == ""
+    finally:
+        folder.chmod(0o700)
+
 def test_state_folder_without_getuid(tmp_path, monkeypatch):
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
     monkeypatch.delattr(os, "getuid", raising=False)
