@@ -198,10 +198,12 @@ class TestNestedGroups:
         assert "c" in output
 
     def test_deep_nesting_renders_quickly(self):
-        depth = 40
+        # Deep enough that doubling work per level takes many seconds, shallow
+        # enough that a regression fails here instead of hanging CI.
+        depth = 22
         source = "block-beta\n" + "".join("  " * d + f"block:g{d}\n" for d in range(depth))
         source += "  " * depth + "X\n" + "".join("  " * d + "end\n" for d in reversed(range(depth)))
         start = time.perf_counter()
         output = render(source)
-        assert time.perf_counter() - start < 5, "40 nested groups should not take seconds"
+        assert time.perf_counter() - start < 2, "22 nested groups should not take seconds"
         assert "X" in output
