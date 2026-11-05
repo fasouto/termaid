@@ -818,6 +818,47 @@ class TestAllDiagramTypesNoCrash:
         assert len(out) > 0
 
 
+class TestLeadingDirectives:
+    """Directives and comments before the diagram keyword do not change the drawing."""
+
+    SOURCES = {
+        "flowchart": "graph LR\n  A --> B",
+        "sequence": "sequenceDiagram\n  A->>B: hi",
+        "class": "classDiagram\n  class Animal\n  Animal <|-- Dog",
+        "er": "erDiagram\n  A ||--o{ B : has",
+        "state": "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Done",
+        "block": "block-beta\n  columns 2\n  A B",
+        "git": "gitGraph TB:\n  commit\n  branch dev\n  commit",
+        "gantt": "gantt\n  section S\n    Design :d1, 2024-02-01, 2024-02-04",
+        "pie": 'pie\n  "A" : 30\n  "B" : 70',
+        "treemap": 'treemap-beta\n  "Root"\n    "A": 30\n    "B": 70',
+        "mindmap": "mindmap\n  Root\n    A\n    B",
+        "packet": 'packet-beta\n  0-15: "Source"\n  16-31: "Dest"',
+        "xychart": "xychart-beta\n  x-axis [a, b]\n  bar [1, 2]",
+        "journey": "journey\n  section Day\n    Work: 3: Me",
+        "timeline": "timeline\n  section Q1\n    Plan : Draft",
+        "kanban": "kanban\n  Todo\n    Task",
+        "quadrant": "quadrantChart\n  Task A: [0.3, 0.8]",
+        "architecture": "architecture-beta\n  service a(server)[A]\n  service b(server)[B]\n  a:R --> L:b",
+    }
+    PREFIXES = {
+        "init": '%%{init: {"theme": "dark"}}%%\n',
+        "multiline-init": '%%{\n  init: {"theme": "dark"}\n}%%\n',
+        "comment": "%% a comment\n",
+        "bom": "\ufeff",
+    }
+
+    @pytest.mark.parametrize("prefix", list(PREFIXES.values()), ids=list(PREFIXES))
+    @pytest.mark.parametrize("source", list(SOURCES.values()), ids=list(SOURCES))
+    def test_render_ignores_leading_directives(self, source, prefix):
+        assert render(prefix + source) == render(source)
+
+    @pytest.mark.parametrize("prefix", list(PREFIXES.values()), ids=list(PREFIXES))
+    def test_parse_ignores_leading_directives(self, prefix):
+        source = self.SOURCES["state"]
+        assert parse(prefix + source) == parse(source)
+
+
 class TestControlCharacters:
     """Control characters in the source must not reach the terminal (#16)."""
 
@@ -864,3 +905,14 @@ class TestControlCharacters:
     def test_other_line_endings_render_like_newlines(self, line_end):
         lines = ["flowchart LR", '  A["one"] --> B["two"]']
         assert render(line_end.join(lines)) == render("\n".join(lines))
+
+
+class TestGitGraphInitConfig:
+    def test_non_object_git_graph_config_is_ignored(self):
+        out = render('%%{init: {"gitGraph": 5}}%%\ngitGraph\n  commit id: "a"')
+        assert "main" in out and "a" in out
+
+    def test_deeply_nested_init_json_is_ignored(self):
+        nested = "[" * 100_000 + "]" * 100_000
+        out = render('%%{init: {"x": ' + nested + '}}%%\ngitGraph\n  commit id: "a"')
+        assert "main" in out

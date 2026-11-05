@@ -9,6 +9,7 @@ import json
 import re
 
 from ..model.gitgraph import Branch, Commit, GitGraph
+from ..utils import DIRECTIVE
 
 
 def parse_git_graph(text: str) -> GitGraph:
@@ -18,6 +19,7 @@ def parse_git_graph(text: str) -> GitGraph:
 
 
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_DIRECTIVE = re.compile(DIRECTIVE)
 
 class _GitGraphParser:
     def __init__(self, text: str) -> None:
@@ -31,18 +33,9 @@ class _GitGraphParser:
         self._seq = 0
 
     def parse(self) -> GitGraph:
-        lines = self._preprocess(self.text)
-        if not lines:
-            return self.diagram
-
-        # Handle %%{init}%% directives before the header
-        remaining: list[str] = []
-        for line in lines:
-            if line.startswith("%%{init"):
-                self._parse_init(line)
-            else:
-                remaining.append(line)
-
+        for directive in _DIRECTIVE.findall(self.text):
+            self._parse_init(directive)
+        remaining = self._preprocess(_DIRECTIVE.sub("", self.text))
         if not remaining:
             return self.diagram
 
@@ -72,28 +65,29 @@ class _GitGraphParser:
         result: list[str] = []
         for line in text.split("\n"):
             stripped = line.strip()
-            # Skip pure comment lines (but keep %%{init} directives)
-            if stripped.startswith("%%") and not stripped.startswith("%%{"):
+            if stripped.startswith("%%"):
                 continue
             if stripped:
                 result.append(stripped)
         return result
 
-    def _parse_init(self, line: str) -> None:
+    def _parse_init(self, directive: str) -> None:
         """Extract config from %%{init: {...}}%% directive."""
-        m = re.search(r"%%\{init:\s*(\{.*\})\s*\}%%", line)
+        m = re.search(r"%%\{\s*init:\s*(\{.*\})\s*\}%%", directive, re.DOTALL)
         if not m:
             return
         try:
             config = json.loads(m.group(1))
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
             # Try with single quotes replaced
             try:
                 fixed = m.group(1).replace("'", '"')
                 config = json.loads(fixed)
-            except json.JSONDecodeError:
+            except (ValueError, RecursionError):
                 return
         git_config = config.get("gitGraph", config)
+        if not isinstance(git_config, dict):
+            return
         if "mainBranchName" in git_config:
             # JSON escapes such as \u001b decode here, after the source's own
             # control characters were removed, so remove them again.

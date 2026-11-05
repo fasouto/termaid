@@ -583,7 +583,7 @@ def _apply_show_ids(source: str) -> str:
     Non-flowchart diagrams are returned unchanged.
     """
     try:
-        from termaid import parse
+        from termaid import _prepare_source, _skip_directives, parse
         graph = parse(source)
     except Exception:
         return source
@@ -599,9 +599,8 @@ def _apply_show_ids(source: str) -> str:
     if not extra_lines:
         return source
 
-    # Append the redefinition lines after the header
-    lines = source.split("\n")
-    # Insert after the first line (the graph/flowchart header)
+    # Insert the redefinitions right after the graph/flowchart header line.
+    lines = _skip_directives(_prepare_source(source)).split("\n")
     return lines[0] + "\n" + "\n".join(extra_lines) + "\n" + "\n".join(lines[1:])
 
 

@@ -274,6 +274,24 @@ class TestRenderErrorPropagation:
         assert not out.exists()
 
 
+class TestShowIds:
+    @pytest.mark.parametrize("prefix", [
+        "",
+        '%%{init: {"theme": "dark"}}%%\n',
+        "%% a comment\n",
+        "---\ntitle: Flow\n---\n",
+    ], ids=["plain", "directive", "comment", "frontmatter"])
+    def test_ids_shown_after_any_preamble(self, tmp_path: Path, prefix: str):
+        mmd = tmp_path / "t.mmd"
+        mmd.write_text(prefix + "graph LR\n  A[Start] --> B[End]")
+        out = tmp_path / "out.txt"
+        assert main([str(mmd), "--show-ids", "-o", str(out)]) == 0
+        content = out.read_text()
+        assert "A: Start" in content
+        assert "B: End" in content
+        assert "graph LR" not in content
+
+
 class TestThemeOptionInteractions:
     """--theme must not silently drop -o, --show-ids, --gap, or --width."""
 
