@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
@@ -143,21 +144,55 @@ def _widest(text: str) -> int:
     return max((display_width(line) for line in text.split("\n")), default=0)
 
 
-def _state_path(message_id: str) -> str:
+def _state_dir() -> str | None:
+    """Return the folder that holds hook state, or None when it is not private.
+
+    The temp folder is shared between users on Linux, and anyone can create a
+    folder there first, then read the state or swap a file for a symlink. So
+    on POSIX the folder must be a real directory that this user owns and that
+    no one else can open. Windows gives each user their own temp folder.
+    """
+    getuid = getattr(os, "getuid", None)
+    if getuid is None:
+        folder = os.path.join(tempfile.gettempdir(), "termaid-claude-hook")
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError:
+            return None
+        return folder
+    folder = os.path.join(tempfile.gettempdir(), f"termaid-claude-hook-{getuid()}")
+    try:
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        info = os.lstat(folder)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != getuid() or info.st_mode & 0o077:
+        return None
+    return folder
+
+
+def _state_path(folder: str, message_id: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9_-]", "_", message_id)[:80]
-    folder = os.path.join(tempfile.gettempdir(), "termaid-claude-hook")
-    os.makedirs(folder, exist_ok=True)
     return os.path.join(folder, safe + ".json")
+
+
+def _write_state(path: str, data: str) -> None:
+    """Write through a temp file, so a later call never reads half a file."""
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
+        f.write(data)
+    os.replace(tmp, path)
 
 
 def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_ascii: bool = False) -> int:
     """Handle one MessageDisplay call: read the batch, print the replacement.
 
-    State is kept per ``message_id`` in the temp directory so a fence that
-    spans several batches is still drawn. A batch that holds lines back
-    returns an empty ``displayContent``; the drawing comes with the batch
-    that closes the fence. Any failure prints nothing, and Claude Code then
-    shows the original text.
+    State is kept per ``message_id`` in a private folder under the temp
+    directory so a fence that spans several batches is still drawn. A batch
+    that holds lines back returns an empty ``displayContent``; the drawing
+    comes with the batch that closes the fence. Any failure prints nothing,
+    and Claude Code then shows the original text. That includes a state
+    folder that another user could read or write.
     """
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
@@ -172,7 +207,12 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     message_id = str(event.get("message_id") or "")
 
     renderer = StreamRenderer(width=width, use_ascii=use_ascii)
-    path = _state_path(message_id) if message_id else None
+    path = None
+    if message_id:
+        folder = _state_dir()
+        if folder is None:
+            return 0
+        path = _state_path(folder, message_id)
     if path and os.path.exists(path):
         try:
             with open(path, encoding="utf-8") as f:
@@ -189,8 +229,7 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
             except OSError:
                 pass
         else:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(renderer.to_json())
+            _write_state(path, renderer.to_json())
 
     json.dump({"hookSpecificOutput": {"hookEventName": "MessageDisplay", "displayContent": shown}}, stdout)
     stdout.write("\n")

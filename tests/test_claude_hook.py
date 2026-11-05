@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import stat
 
 import pytest
 
@@ -98,10 +100,10 @@ def test_hook_keeps_fence_state_between_calls(tmp_path, monkeypatch):
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
     mid = "11111111-2222-3333-4444-555555555555"
     assert _run("Flow:\n```mermaid\ngraph LR\n", message_id=mid, index=0, final=False) == "Flow:\n"
-    assert (tmp_path / "termaid-claude-hook" / f"{mid}.json").exists()
+    assert len(list(tmp_path.glob(f"termaid-claude-hook*/{mid}.json"))) == 1
     drawn = _run("  A --> B\n```\nok\n", message_id=mid, index=1, final=False)
     assert drawn.startswith("```\n") and drawn.endswith("ok\n")
-    assert not (tmp_path / "termaid-claude-hook" / f"{mid}.json").exists()
+    assert list(tmp_path.glob(f"termaid-claude-hook*/{mid}.json")) == []
     assert _run("", message_id=mid, index=2, final=True) == ""
 
 
@@ -123,3 +125,53 @@ def test_cli_flag_runs_the_hook(monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO(_event("x\n", message_id="c", index=0, final=True)))
     assert main(["--claude-hook"]) == 0
     assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["displayContent"] == "x\n"
+
+
+posix_only = pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX permissions")
+
+
+def _open_fence(mid: str = "m1") -> str:
+    out = io.StringIO()
+    run_claude_hook(io.StringIO(_event("```mermaid\ngraph LR\n", message_id=mid, index=0, final=False)), out)
+    return out.getvalue()
+
+
+@posix_only
+def test_state_is_private_to_the_user(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    old_umask = os.umask(0)
+    try:
+        assert json.loads(_open_fence())["hookSpecificOutput"]["displayContent"] == ""
+    finally:
+        os.umask(old_umask)
+    folder = tmp_path / f"termaid-claude-hook-{os.getuid()}"
+    assert stat.S_IMODE(folder.stat().st_mode) == 0o700
+    assert stat.S_IMODE((folder / "m1.json").stat().st_mode) == 0o600
+    assert sorted(p.name for p in folder.iterdir()) == ["m1.json"]
+
+
+@posix_only
+def test_a_folder_others_can_open_is_not_used(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    folder = tmp_path / f"termaid-claude-hook-{os.getuid()}"
+    folder.mkdir(mode=0o755)
+    folder.chmod(0o755)
+    assert _open_fence() == ""
+    assert list(folder.iterdir()) == []
+
+
+@posix_only
+def test_a_symlinked_folder_is_not_used(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    target = tmp_path / "elsewhere"
+    target.mkdir(mode=0o700)
+    (tmp_path / f"termaid-claude-hook-{os.getuid()}").symlink_to(target)
+    assert _open_fence() == ""
+    assert list(target.iterdir()) == []
+
+
+def test_state_folder_without_getuid(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.delattr(os, "getuid", raising=False)
+    assert json.loads(_open_fence())["hookSpecificOutput"]["displayContent"] == ""
+    assert (tmp_path / "termaid-claude-hook" / "m1.json").exists()
