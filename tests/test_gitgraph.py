@@ -1,6 +1,10 @@
 """Tests for gitGraph diagram parsing and rendering."""
 from __future__ import annotations
 
+import re
+
+import pytest
+
 from termaid import render
 from termaid.parser.gitgraph import parse_git_graph
 
@@ -418,6 +422,24 @@ class TestGitGraphRendering:
             assert cid in output
         assert "main" in output
         assert "develop" in output
+
+    @pytest.mark.parametrize("header", ["gitGraph", "gitGraph TB:", "gitGraph BT:"])
+    @pytest.mark.parametrize(
+        "merge_line,merge_label",
+        [("merge fix", set()), ('merge fix id: "M1"', {"M1"})],
+    )
+    def test_merge_is_labeled_only_by_its_own_id(self, header, merge_line, merge_label):
+        output = render(
+            f"{header}\n"
+            '  commit id: "base"\n'
+            "  branch fix\n"
+            '  commit id: "patch"\n'
+            "  checkout main\n"
+            f"  {merge_line}\n"
+            '  commit id: "tip"'
+        )
+        words = set(re.findall(r"\w+", output))
+        assert words == {"main", "fix", "base", "patch", "tip"} | merge_label
 
     def test_empty_graph(self):
         output = render("gitGraph")
