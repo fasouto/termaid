@@ -18,9 +18,21 @@ __version__ = "0.10.0"
 _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 
 
+# C0 and C1 control characters, except tab and newline. In a label they would
+# reach the terminal as escape sequences, title changes or cursor moves.
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CARRIAGE_RETURN_RE = re.compile(r"\r\n?")
+
+
 def _strip_frontmatter(text: str) -> str:
     """Strip YAML frontmatter (---...---) from the beginning of mermaid source."""
     return _FRONTMATTER_RE.sub("", text)
+
+
+def _prepare_source(source: str) -> str:
+    """Normalize line endings, drop control characters and strip frontmatter."""
+    text = _CONTROL_CHARS_RE.sub("", _CARRIAGE_RETURN_RE.sub("\n", source))
+    return _strip_frontmatter(text.strip())
 
 
 def parse(source: str) -> Graph:
@@ -34,7 +46,7 @@ def parse(source: str) -> Graph:
     Returns:
         Parsed Graph model
     """
-    text = _strip_frontmatter(source.strip())
+    text = _prepare_source(source)
     if text.startswith("stateDiagram"):
         return parse_state_diagram(text)
     return parse_flowchart(text)
@@ -67,7 +79,7 @@ def _render_canvas(
     if gap != 4:
         extra["gap"] = gap
 
-    text = _strip_frontmatter(source.strip())
+    text = _prepare_source(source)
     if text.startswith("sequenceDiagram"):
         from .parser.sequence import parse_sequence_diagram
         from .renderer.sequence import render_sequence
