@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- Claude Code hook: a diagram too wide for the pane now wraps its labels to fit, as `--width` does, so a sequence diagram with long messages no longer comes out wider than the terminal and wraps into a mess. When Claude Code tells the hook the pane width (`COLUMNS`) or `--width` is given, a diagram that still does not fit is shown as its Mermaid source
+
 ## 0.11.0 (2026-11-06)
 
 ### New
