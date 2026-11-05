@@ -1,6 +1,6 @@
 <h1 align="center">termaid</h1>
 
-<p align="center">Render Mermaid diagrams in your terminal or Python app.</p>
+<p align="center">Render Mermaid diagrams in your terminal, in Claude Code, or in your Python app.</p>
 
 <p align="center">
   <img src="termaid-demo.gif" alt="termaid demo" width="800">
@@ -8,15 +8,25 @@
 
 **[Try it online at termaid.com](https://termaid.com)**
 
+## Diagrams in Claude Code
+
+Claude writes Mermaid diagrams all the time, and in a terminal they arrive as code. With the termaid plugin, Claude Code draws each one in place as the reply streams in:
+
+```
+/plugin install termaid --marketplace fasouto/termaid
+```
+
+The plugin needs the `termaid` command (`brew install termaid` or `uv tool install termaid`). Only what you see changes: Claude still reads the Mermaid source. See [Claude Code](#claude-code) for details.
+
 ## Features
 
+- Draws the Mermaid blocks in Claude Code's replies as they stream, and in Markdown files
 - 18 diagram types: flowcharts, sequence, class, ER, state, block, git, gantt, architecture, pie, treemap, mindmap, timeline, kanban, quadrant, XY chart, user journey, and packet
 - No dependencies. The core is pure Python
 - Fits the terminal width: it tightens spacing first, then wraps labels at word boundaries
 - Colored output with Rich and a TUI widget for Textual, as optional extras, with 11 themes
 - `--ascii` for terminals without box-drawing characters
 - Reads from a file or stdin: `cat diagram.mmd | termaid`
-- Draws the Mermaid blocks in a Markdown file, or in Claude Code's replies, in place
 
 ## Why?
 
