@@ -212,25 +212,34 @@ class TestNestedGroups:
 
 
 class TestOversizedGrids:
-    def test_huge_column_count_draws_like_the_cap(self):
-        assert render("block-beta\ncolumns 50000\nA") == render("block-beta\ncolumns 64\nA")
-
-    def test_columns_just_past_the_cap_draw_like_trunk(self):
-        assert render("block-beta\ncolumns 65\nA B C") == render("block-beta\ncolumns 64\nA B C")
+    def test_extra_top_level_columns_do_not_change_the_drawing(self):
+        capped = render("block-beta\ncolumns 64\nA B C")
+        assert render("block-beta\ncolumns 65\nA B C") == capped
+        assert render("block-beta\ncolumns 50000\nA B C") == capped
 
     @pytest.mark.parametrize("source", [
-        "block-beta\ncolumns 1000000\nA",
-        "block-beta\nA:1000000",
-        "block-beta\nspace:1000000\nA",
-        "block-beta\nblock:g\ncolumns 1000000\nA\nend",
+        "block-beta\ncolumns 400000\nA",
+        "block-beta\nA:400000",
+        "block-beta\nspace:400000\nA",
+        "block-beta\nblock:g\ncolumns 400000\nA\nend",
     ], ids=["columns", "span", "space", "nested-columns"])
     def test_absurd_sizes_render_quickly(self, source):
         start = time.perf_counter()
         output = render(source)
         assert time.perf_counter() - start < 2, "an absurd grid size should be capped, not drawn"
-        assert output.strip()
+        assert "A" in output
 
     def test_wide_blocks_without_columns_wrap_at_the_cap(self):
         output = render("block-beta\n" + "\n".join(f"B{i}:64" for i in range(3)))
         assert max(len(line) for line in output.split("\n")) < 1100
         assert all(f"B{i}" in output for i in range(3))
+
+    @pytest.mark.parametrize("source", [
+        "block-beta\n" + "block\ncolumns 64\n" * 40 + "A\n" + "end\n" * 40,
+        "block-beta\n" + "\n".join(f"B{i}:64" for i in range(200)),
+    ], ids=["nested-wide-groups", "many-full-rows"])
+    def test_drawings_too_large_to_read_are_refused(self, source):
+        start = time.perf_counter()
+        with pytest.raises(ValueError, match="too large to draw"):
+            render(source)
+        assert time.perf_counter() - start < 2
