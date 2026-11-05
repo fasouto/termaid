@@ -32,6 +32,10 @@ from .utils import display_width
 
 _DEFAULT_WIDTH = 80
 _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
+# A fence that never closes would hide the rest of the reply until it ends,
+# and every batch saves the held lines again, so past this many characters
+# they are shown as written.
+_MAX_HELD_CHARS = 8_192
 
 
 @dataclass
@@ -81,6 +85,10 @@ class StreamRenderer:
                 r"^[ \t]*" + re.escape(self.fence[0]) + "{" + str(len(self.fence)) + r",}[ \t]*\r?$"
             )
             if not close.match(line):
+                if sum(map(len, self.held)) > _MAX_HELD_CHARS:
+                    held = self.held
+                    self._reset()
+                    return held
                 return []
             body = [_dedent(raw, len(self.indent)).rstrip("\r") for raw in self.held[1:-1]]
             drawn = self._draw("\n".join(body))
