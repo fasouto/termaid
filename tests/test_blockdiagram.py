@@ -1,6 +1,8 @@
 """Tests for block diagram parsing and rendering."""
 from __future__ import annotations
 
+import time
+
 from termaid import render
 from termaid.parser.blockdiagram import parse_block_diagram
 
@@ -194,3 +196,12 @@ class TestNestedGroups:
         assert "a" in output
         assert "b" in output
         assert "c" in output
+
+    def test_deep_nesting_renders_quickly(self):
+        depth = 40
+        source = "block-beta\n" + "".join("  " * d + f"block:g{d}\n" for d in range(depth))
+        source += "  " * depth + "X\n" + "".join("  " * d + "end\n" for d in reversed(range(depth)))
+        start = time.perf_counter()
+        output = render(source)
+        assert time.perf_counter() - start < 5, "40 nested groups should not take seconds"
+        assert "X" in output
