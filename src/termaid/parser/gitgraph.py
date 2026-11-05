@@ -78,14 +78,16 @@ class _GitGraphParser:
             return
         try:
             config = json.loads(m.group(1))
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
             # Try with single quotes replaced
             try:
                 fixed = m.group(1).replace("'", '"')
                 config = json.loads(fixed)
-            except json.JSONDecodeError:
+            except (ValueError, RecursionError):
                 return
         git_config = config.get("gitGraph", config)
+        if not isinstance(git_config, dict):
+            return
         if "mainBranchName" in git_config:
             # JSON escapes such as \u001b decode here, after the source's own
             # control characters were removed, so remove them again.
