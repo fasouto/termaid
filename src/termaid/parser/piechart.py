@@ -8,6 +8,7 @@ Syntax:
 """
 from __future__ import annotations
 
+import math
 import re
 
 from ..model.piechart import PieChart, PieSlice
@@ -50,6 +51,9 @@ def parse_pie_chart(text: str) -> PieChart:
         if m:
             label = m.group(1)
             value = float(m.group(2))
+            if not math.isfinite(value):
+                chart.warnings.append(f"Pie slice value is too large: {label}")
+                continue
             if value <= 0:
                 chart.warnings.append(f"Pie slice value must be positive: {label} = {value}")
                 continue

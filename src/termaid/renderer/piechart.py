@@ -46,7 +46,11 @@ def render_pie_chart(
     max_suffix_len = max(len(sf) for sf in suffixes)
 
     bar_left = label_col_w
+    # One cell per slice at least, so a chart with more slices than cells
+    # gets a longer stacked bar instead of losing slices.
+    stacked_w = max(_BAR_WIDTH, len(diagram.slices))
     canvas_w = bar_left + _BAR_WIDTH + max_suffix_len + _MARGIN
+    canvas_w = max(canvas_w, bar_left + 1 + stacked_w + _MARGIN)
     if diagram.title:
         canvas_w = max(canvas_w, display_width(diagram.title) + 2 * _MARGIN)
     title_rows = 2 if diagram.title else 0
@@ -64,7 +68,6 @@ def render_pie_chart(
         canvas.put_text(_MARGIN, title_col, diagram.title, style="label")
 
     # Stacked bar showing parts of a whole
-    stacked_w = _BAR_WIDTH
     stacked_left = bar_left + 1
     widths = [max(1, round(s.value / total * stacked_w)) for s in diagram.slices]
     rest = stacked_w - sum(widths[:-1])
