@@ -322,3 +322,8 @@ def test_hook_shows_an_unclosed_fence_before_the_message_ends(tmp_path, monkeypa
     assert any(shown[:150])
     assert "".join(shown) == "".join(batches)
     assert list(tmp_path.glob("termaid-claude-hook*/long.json")) == []
+
+
+def test_a_renderer_built_with_held_lines_counts_them():
+    r = StreamRenderer(width=80, fence="```", held=["```mermaid", *LONG_LINES[:112]])
+    assert r.feed(LONG_LINES[112] + "\n").startswith("```mermaid\n")

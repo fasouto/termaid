@@ -54,7 +54,10 @@ class StreamRenderer:
     indent: str = ""
     held: list[str] = field(default_factory=list)   # original lines, fence included
     carry: str = ""        # a final batch may end mid-line
-    held_size: int = 0     # characters in held, line breaks included; load() recomputes it
+    held_size: int = field(default=0, init=False, repr=False, compare=False)  # held's characters, line breaks included
+
+    def __post_init__(self) -> None:
+        self.held_size = sum(len(line) + 1 for line in self.held)
 
     def feed(self, text: str, final: bool = False) -> str:
         out: list[str] = []
