@@ -441,6 +441,47 @@ class TestGitGraphRendering:
         words = set(re.findall(r"\w+", output))
         assert words == {"main", "fix", "base", "patch", "tip"} | merge_label
 
+    @pytest.mark.parametrize(
+        "source,written",
+        [
+            pytest.param('commit id: "{id}"\ncommit\ncommit\ncommit', "1", id="written-first"),
+            pytest.param("commit\ncommit\ncommit id: \"{id}\"", "0", id="written-last"),
+            pytest.param(
+                'commit id: "{id}"\nbranch dev\ncommit\ncommit\n'
+                'checkout main\ncommit id: "x"\nmerge dev',
+                "1",
+                id="fork-from-written",
+            ),
+            pytest.param(
+                "commit\nbranch dev\ncommit\ncheckout main\nmerge dev\n"
+                'commit id: "{id}"',
+                "2",
+                id="after-unnamed-merge",
+            ),
+            pytest.param(
+                'commit id: "A"\nbranch dev\ncommit id: "B"\ncheckout main\n'
+                'cherry-pick id: "B"\ncommit id: "{id}"',
+                "B-cherry",
+                id="after-cherry-pick",
+            ),
+            pytest.param(
+                'commit id: "{id}"\nbranch dev\ncommit\ncommit\n'
+                'cherry-pick id: "{id}"',
+                "1",
+                id="cherry-pick-by-written",
+            ),
+        ],
+    )
+    def test_every_commit_draws_when_a_written_id_matches_an_automatic_one(
+        self, source, written
+    ):
+        # A same-width id that matches no automatic id draws the expected picture.
+        stand_in = "Q" * len(written)
+        expected = render("gitGraph\n" + source.format(id=stand_in))
+        assert render("gitGraph\n" + source.format(id=written)) == expected.replace(
+            stand_in, written
+        )
+
     def test_empty_graph(self):
         output = render("gitGraph")
         assert isinstance(output, str)
