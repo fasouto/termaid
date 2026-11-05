@@ -65,7 +65,7 @@ def render_pie_chart(
     stacked_w = _BAR_WIDTH
     stacked_left = bar_left + 1
     col = 0
-    label_parts: list[tuple[int, int, str, str]] = []  # (start, width, label, fill)
+    label_parts: list[tuple[int, int, str, str]] = []  # (start, width, named, pct)
     for i, s in enumerate(diagram.slices):
         fill = fills[i % len(fills)]
         seg_w = max(1, round(s.value / total * stacked_w))
@@ -76,25 +76,20 @@ def render_pie_chart(
             continue
         for c in range(seg_w):
             canvas.put(stacked_top, stacked_left + col + c, fill, merge=False, style="node")
-        pct = s.value / total * 100
-        short_label = f"{s.label} {pct:.0f}%"
-        label_parts.append((col, seg_w, short_label, fill))
+        pct_label = f"{s.value / total * 100:.0f}%"
+        label_parts.append((col, seg_w, f"{s.label} {pct_label}", pct_label))
         col += seg_w
 
-    # Labels below the stacked bar: try full label, then just percentage
+    # Name every slice or none. A mixed row reads as if the bare percentages
+    # were unnamed slices, and the per-slice bars below already name each one.
+    show_names = all(display_width(named) <= seg_w for _, seg_w, named, _ in label_parts)
     label_row = stacked_top + 1
-    for start, seg_w, short_label, fill in label_parts:
-        lw = display_width(short_label)
-        if lw <= seg_w:
-            lx = stacked_left + start + (seg_w - lw) // 2
-            canvas.put_text(label_row, lx, short_label, style="label")
-        elif seg_w >= 4:
-            # Show just the fill character as a legend marker
-            pct_only = short_label.split()[-1]  # e.g. "40%"
-            pw = display_width(pct_only)
-            if pw <= seg_w:
-                lx = stacked_left + start + (seg_w - pw) // 2
-                canvas.put_text(label_row, lx, pct_only, style="label")
+    for start, seg_w, named, pct_label in label_parts:
+        text = named if show_names else pct_label
+        tw = display_width(text)
+        if show_names or (seg_w >= 4 and tw <= seg_w):
+            lx = stacked_left + start + (seg_w - tw) // 2
+            canvas.put_text(label_row, lx, text, style="label")
 
     # Per-slice bars (uniform fill)
     for i, s in enumerate(diagram.slices):
