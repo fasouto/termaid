@@ -251,3 +251,31 @@ class TestPieChartRendering:
         long_line = next(l for l in lines if "Very Long Label" in l and "┃" in l)
         # The bar separator ┃ should be at the same column
         assert short_line.index("┃") == long_line.index("┃")
+
+
+def _stacked_label_row(output: str) -> str:
+    lines = output.split("\n")
+    stacked = next(i for i, l in enumerate(lines) if "█" in l and "┃" not in l)
+    return lines[stacked + 1]
+
+
+class TestPieChartStackedLabels:
+    def test_only_percentages_when_any_name_does_not_fit(self):
+        output = render(
+            'pie title Fixes by area\n'
+            '    "Block diagrams" : 2\n'
+            '    "Labels" : 2\n'
+            '    "Claude hook" : 2'
+        )
+        assert _stacked_label_row(output).split() == ["33%", "33%", "33%"]
+
+    def test_every_name_when_all_names_fit(self):
+        output = render(
+            'pie\n'
+            '    "Dogs" : 50\n'
+            '    "Cats" : 30\n'
+            '    "Rats" : 20'
+        )
+        assert _stacked_label_row(output).split() == [
+            "Dogs", "50%", "Cats", "30%", "Rats", "20%",
+        ]
