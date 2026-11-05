@@ -269,8 +269,28 @@ def compute_sizes(
         if r not in layout.row_heights:
             layout.row_heights[r] = max(gap - 1, 1)  # gap rows
 
+    _expand_gaps_for_turns(graph, layout)
+
     # Expand gaps to fit edge labels
     _expand_gaps_for_edge_labels(graph, layout)
+
+
+_MIN_TURN_GAP = 3
+
+
+def _expand_gaps_for_turns(graph: Graph, layout: GridLayout) -> None:
+    vertical = graph.direction.normalized().is_vertical
+    for edge in graph.edges:
+        src = layout.placements.get(edge.source)
+        tgt = layout.placements.get(edge.target)
+        if not src or not tgt or edge.is_self_reference:
+            continue
+        if vertical and tgt.grid.row > src.grid.row and tgt.grid.col != src.grid.col:
+            last_gap_row = tgt.grid.row - 2
+            layout.row_heights[last_gap_row] = max(layout.row_heights.get(last_gap_row, 1), _MIN_TURN_GAP)
+        elif not vertical and tgt.grid.col > src.grid.col and tgt.grid.row != src.grid.row:
+            last_gap_col = tgt.grid.col - 2
+            layout.col_widths[last_gap_col] = max(layout.col_widths.get(last_gap_col, 1), _MIN_TURN_GAP)
 
 
 def _expand_gaps_for_edge_labels(graph: Graph, layout: GridLayout) -> None:

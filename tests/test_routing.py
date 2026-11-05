@@ -149,6 +149,14 @@ class TestEdgeRouting:
         # Not all paths should be identical
         assert len(set(paths)) > 1
 
+    @pytest.mark.parametrize("gap", [1, 2, 3])
+    def test_arrowheads_stay_off_the_bus_with_small_gaps(self, gap):
+        from termaid import render
+
+        out = render("graph TD\n  A --> B & C & D", gap=gap, padding_y=0)
+        arrow_rows = [line for line in out.splitlines() if "▼" in line]
+        assert arrow_rows and all("─" not in line for line in arrow_rows)
+
 
 class TestUnrelatedEdgesStayApart:
     """Edges with no common endpoint may cross but never share a run or a T

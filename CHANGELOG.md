@@ -11,6 +11,7 @@
 
 ### Fixes
 - Flowchart: a `;` inside a `%%` comment line no longer splits the comment, so the text after it isn't parsed as nodes and edges
+- Flowchart: with `gap` below 4, an edge that turned just before its target drew its sideways run on the same line as the arrowheads (`▼────▼`). The gap in front of such a target is now at least three cells deep
 
 ## 0.10.0 (2026-10-25)
 
