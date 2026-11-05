@@ -206,7 +206,8 @@ class TestPieChartRendering:
         big_line = next(l for l in lines if "Big" in l and "┃" in l)
         small_line = next(l for l in lines if "Small" in l and "┃" in l)
         big_bar_len = big_line.count("█")
-        small_bar_len = small_line.count("▓")
+        small_bar_len = small_line.count("░")
+        assert small_bar_len > 0
         assert big_bar_len > small_bar_len
 
     def test_ascii_mode(self):
@@ -268,6 +269,24 @@ class TestPieChartRendering:
         long_line = next(l for l in lines if "Very Long Label" in l and "┃" in l)
         # The bar separator ┃ should be at the same column
         assert short_line.index("┃") == long_line.index("┃")
+
+
+def _stacked_bar(output: str) -> str:
+    return next(l for l in output.split("\n") if "█" in l and "┃" not in l).strip()
+
+
+class TestPieChartStackedBar:
+    def test_every_slice_gets_a_segment(self):
+        output = render(
+            'pie\n'
+            '    "Big" : 97\n'
+            '    "One" : 1\n'
+            '    "Two" : 2'
+        )
+        full = _stacked_bar(render('pie\n    "All" : 1'))
+        bar = _stacked_bar(output)
+        assert set(bar) == {"█", "░", "▒"}
+        assert len(bar) == len(full)
 
 
 def _stacked_label_row(output: str) -> str:
