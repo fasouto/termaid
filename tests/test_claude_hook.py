@@ -302,7 +302,7 @@ def test_a_large_closed_diagram_under_the_limit_is_drawn():
 
 def test_a_fence_after_a_released_one_is_still_drawn():
     r = StreamRenderer(width=80)
-    _feed_lines(r, ["```mermaid", *LONG_LINES, "```", "text"])
+    _feed_lines(r, ["```mermaid", *LONG_LINES, "text"])
     out = r.feed(FLOW + "after\n", final=True)
     assert "```mermaid" not in out and "─" in out and out.endswith("after\n")
 
@@ -313,3 +313,12 @@ def test_blank_lines_count_toward_the_limit():
     shown = _feed_lines(r, lines)
     assert any(shown[:-100]), "a fence of blank lines should be released before it ends"
     assert "".join(shown) == "".join(line + "\n" for line in lines)
+
+
+def test_hook_shows_an_unclosed_fence_before_the_message_ends(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    batches = ["```mermaid\n", *(line + "\n" for line in LONG_LINES), "end\n"]
+    shown = [_run(delta, message_id="long", index=i, final=i == len(batches) - 1) for i, delta in enumerate(batches)]
+    assert any(shown[:150])
+    assert "".join(shown) == "".join(batches)
+    assert list(tmp_path.glob("termaid-claude-hook*/long.json")) == []
