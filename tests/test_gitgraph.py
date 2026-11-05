@@ -482,6 +482,18 @@ class TestGitGraphRendering:
             stand_in, written
         )
 
+    @pytest.mark.parametrize("direction", ["TB", "BT"])
+    def test_vertical_layout_keeps_wide_text_on_the_first_branch_whole(self, direction):
+        output = render(
+            '%%{init: {"gitGraph": {"mainBranchName": "production"}}}%%\n'
+            f"gitGraph {direction}\n"
+            '  commit id: "release" tag: "v1.0.0-rc1"\n'
+            "  branch dev\n"
+            '  commit id: "feature"'
+        )
+        texts = ["production", "release", "[v1.0.0-rc1]", "dev", "feature"]
+        assert [t for t in texts if t not in output] == []
+
     def test_empty_graph(self):
         output = render("gitGraph")
         assert isinstance(output, str)
