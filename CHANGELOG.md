@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### New
+- Streaming: `partial=True` on `render()`, `render_rich()`, `render_styled()` and `parse()` draws the start of a diagram that is still arriving, such as a streamed reply. Unless the source ends with a newline, its last line may be unfinished: open brackets and quotes are closed, so a label shows the text so far (`C[Send sess`), and an edge or message whose target hasn't arrived is left out until it has (`B -->|ye`), instead of being drawn as nodes made of raw syntax. Default output is unchanged
+
 ## 0.11.0 (2026-11-06)
 
 ### New

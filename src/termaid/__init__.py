@@ -42,17 +42,23 @@ def _skip_directives(text: str) -> str:
     return text[_LEADING_DIRECTIVES_RE.match(text).end():]
 
 
-def parse(source: str) -> Graph:
+def parse(source: str, *, partial: bool = False) -> Graph:
     """Parse mermaid syntax and return a Graph model.
 
     Auto-detects diagram type (flowchart or state diagram).
 
     Args:
         source: Mermaid diagram source text
+        partial: The source is the start of a diagram that is still arriving
+            (see :func:`render`)
 
     Returns:
         Parsed Graph model
     """
+    if partial:
+        from .partial import complete_partial
+
+        source = complete_partial(source)
     text = _skip_directives(_prepare_source(source))
     if text.startswith("stateDiagram"):
         return parse_state_diagram(text)
@@ -76,6 +82,7 @@ def _render_canvas(
     gap: int,
     inline_edge_labels: bool,
     max_label_width: int | None,
+    partial: bool = False,
 ) -> _Rendered:
     """Parse source, pick the renderer for its diagram type, and draw it."""
     # Pass padding_x and gap only when they differ from the flowchart
@@ -86,6 +93,10 @@ def _render_canvas(
     if gap != 4:
         extra["gap"] = gap
 
+    if partial:
+        from .partial import complete_partial
+
+        source = complete_partial(source)
     prepared = _prepare_source(source)
     text = _skip_directives(prepared)
     if text.startswith("sequenceDiagram"):
@@ -198,6 +209,7 @@ def render(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    partial: bool = False,
 ) -> str:
     """Render mermaid syntax as Unicode (or ASCII) art.
 
@@ -211,6 +223,11 @@ def render(
         max_label_width: Wrap labels wider than this many columns at word
             boundaries. Applies to flowcharts (default 20) and sequence
             diagrams (unwrapped by default); other diagram types ignore it.
+        partial: The source is the start of a diagram that is still arriving,
+            such as a streamed reply. Its last line, unless it ends with a
+            newline, may be unfinished: open brackets and quotes are closed so
+            a label shows the text so far, and an edge or message whose target
+            hasn't arrived is left out until it has.
 
     Returns:
         Rendered diagram as a string
@@ -228,6 +245,7 @@ def render(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        partial=partial,
     ).canvas
     return canvas.to_string() if canvas is not None else ""
 
@@ -243,6 +261,7 @@ def render_rich(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    partial: bool = False,
 ):
     """Render mermaid syntax as a Rich Text object with colors.
 
@@ -259,6 +278,11 @@ def render_rich(
         max_label_width: Wrap labels wider than this many columns at word
             boundaries. Applies to flowcharts (default 20) and sequence
             diagrams (unwrapped by default); other diagram types ignore it.
+        partial: The source is the start of a diagram that is still arriving,
+            such as a streamed reply. Its last line, unless it ends with a
+            newline, may be unfinished: open brackets and quotes are closed so
+            a label shows the text so far, and an edge or message whose target
+            hasn't arrived is left out until it has.
 
     Returns:
         rich.text.Text object
@@ -274,6 +298,7 @@ def render_rich(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        partial=partial,
     )
     if rendered.graph is not None:
         return render_graph_rich(rendered.canvas, rendered.graph, theme=theme)
@@ -290,12 +315,15 @@ def render_styled(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    partial: bool = False,
 ) -> StyledDocument:
     """Render mermaid syntax as theme-independent styled chunks.
 
     Each line of the result is a list of ``{"text", "style"}`` chunks whose
     joined text equals the matching line of :func:`render`. The style keys
     are listed in :mod:`termaid.output.styled`.
+
+    ``partial`` works as in :func:`render`.
 
     Returns:
         ``{"version": 1, "lines": [[{"text": ..., "style": ...}, ...], ...]}``
@@ -311,6 +339,7 @@ def render_styled(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        partial=partial,
     ).canvas)
 
 
