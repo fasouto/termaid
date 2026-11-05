@@ -12,6 +12,7 @@ class Commit:
     tag: str = ""
     parents: list[str] = field(default_factory=list)
     seq: int = 0
+    label: str = ""
 
 
 @dataclass

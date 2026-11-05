@@ -176,6 +176,7 @@ class _GitGraphParser:
         commit = Commit(
             id=commit_id,
             branch=self.current_branch,
+            label=commit_id,
             type=commit_type,
             tag=tag,
             parents=parents,
@@ -239,6 +240,8 @@ class _GitGraphParser:
         commit = Commit(
             id=commit_id,
             branch=self.current_branch,
+            # Mermaid labels a merge only by an id: written on the merge line.
+            label=commit_id if id_match else "",
             type=commit_type,
             tag=tag,
             parents=parents,
@@ -280,6 +283,7 @@ class _GitGraphParser:
         commit = Commit(
             id=commit_id,
             branch=self.current_branch,
+            label=commit_id,
             type="NORMAL",
             tag=tag,
             parents=parents,

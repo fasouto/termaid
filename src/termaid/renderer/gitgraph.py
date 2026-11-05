@@ -55,8 +55,8 @@ def _sort_branches(diagram: GitGraph) -> list[str]:
 
 
 def _commit_footprint(c: Commit) -> int:
-    """Return the half-width of the widest label (id or tag) for a commit."""
-    w = len(c.id)
+    """Return the half-width of the widest text (label or tag) for a commit."""
+    w = len(c.label)
     if c.tag:
         w = max(w, len(c.tag) + 2)  # "[tag]"
     return (w + 1) // 2  # ceil half
@@ -222,7 +222,7 @@ def _draw_lr(
 
         canvas.put(row, col, marker, merge=False, style="node")
 
-        label = c.id
+        label = c.label
         label_col = col - display_width(label) // 2
         canvas.put_text(row + 1, label_col, label, style="label")
 
@@ -258,7 +258,7 @@ def _draw_tb(
     for b in sorted_branches:
         max_label = max(max_label, len(b))
     for c in diagram.commits:
-        max_label = max(max_label, len(c.id))
+        max_label = max(max_label, len(c.label))
         if c.tag:
             max_label = max(max_label, len(c.tag) + 2)
 
@@ -373,15 +373,15 @@ def _draw_tb(
 
         canvas.put(row, col, marker, merge=False, style="node")
 
-        label_col = col - len(c.id) // 2
+        label_col = col - len(c.label) // 2
         if bottom_to_top:
-            canvas.put_text(row - 1, label_col, c.id, style="label")
+            canvas.put_text(row - 1, label_col, c.label, style="label")
             if c.tag:
                 tag_text = f"[{c.tag}]"
                 tag_col = col - display_width(tag_text) // 2
                 canvas.put_text(row + 1, tag_col, tag_text, style="edge_label")
         else:
-            canvas.put_text(row + 1, label_col, c.id, style="label")
+            canvas.put_text(row + 1, label_col, c.label, style="label")
             if c.tag:
                 tag_text = f"[{c.tag}]"
                 tag_col = col - display_width(tag_text) // 2
