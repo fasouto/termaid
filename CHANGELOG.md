@@ -10,6 +10,7 @@
 - Flowchart LR/RL: nodes stacked in the same column keep the height of their own label instead of all growing to the tallest one, as in Mermaid. Diagrams with a mix of short and long labels get much shorter
 
 ### Fixes
+- Flowchart and state diagrams: an edge label first looks for a spot that covers no other edge's line, and may share a row with another label at least three columns away. Before, it fell back to writing over whatever was there, which cut lines (`fail┼`), hid arrowheads and put labels inside node boxes (`│data       │`)
 - Flowchart: a `;` inside a `%%` comment line no longer splits the comment, so the text after it isn't parsed as nodes and edges
 - Flowchart: unlabeled edges leaving one node branch off one shared line instead of staggered lanes that crossed each other, so fan-outs are shorter (a node with five children is as tall as one with a single child). A three-way split draws as `┴┬`, since `┼` reads as two lines crossing. An edge into a node that other edges also enter keeps its own route, so a fan-out never joins a fan-in into one line. Labeled edges keep a lane each so every label stays on its own segment
 - Flowchart: with `gap` below 4, an edge that turned just before its target drew its sideways run on the same line as the arrowheads (`▼────▼`). The gap in front of such a target is now at least three cells deep

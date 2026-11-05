@@ -12,6 +12,8 @@ Drawing order (back to front):
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from ..graph.model import ArrowType, Direction, EdgeStyle, Graph, GraphNote
 from ..graph.shapes import NodeShape
 from ..layout.grid import GridLayout, NodePlacement
@@ -478,18 +480,33 @@ def _draw_box_start(
     canvas.put(ey, ex, tee)
 
 
+_LABEL_GAP = 3
+
+
+@dataclass(frozen=True)
+class _LabelRules:
+    """Where an edge label may go.
+
+    may_cover: the (x, y) cells a single line may write over. None lets it
+    write over any unprotected cell, cutting the edges drawn there.
+    share_rows: a label may sit on a row that already holds another label,
+    if at least _LABEL_GAP columns apart so the two never read as one.
+    """
+
+    may_cover: set[tuple[int, int]] | None = None
+    share_rows: bool = False
+
+
 def _label_overlaps(
     row: int, col_start: int, col_end: int,
     placed: list[tuple[int, int, int]],
+    share_rows: bool = False,
 ) -> bool:
-    """Check if a label placement conflicts with any already-placed label.
-
-    Rejects placements on any row that already has a label, not just
-    column-overlapping ones, so labels from different edges never share
-    the same output line.
-    """
+    """Check if a label placement conflicts with any already-placed label."""
     for pr, ps, pe in placed:
-        if pr == row:
+        if pr != row:
+            continue
+        if not share_rows or (col_start < pe + _LABEL_GAP and col_end + _LABEL_GAP > ps):
             return True
     return False
 
@@ -498,20 +515,23 @@ def _place_label(
     canvas: Canvas,
     row: int, col: int, lines: list[str],
     placed: list[tuple[int, int, int]],
+    may_cover: set[tuple[int, int]] | None = None,
 ) -> bool:
     """Place a label block with its top-left at (row, col) when every
     character of every line can be written."""
     col_end = col + _block_width(lines)
     if col < 0 or row < 0:
         return False
-    # A single line may still overwrite unprotected cells (edge lines), as
-    # it always has; a block must not land on anything.
+    # A single line may write over unprotected cells (edge lines) that
+    # may_cover allows; a block must not land on anything.
     strict = len(lines) > 1
     for target_row in range(row, row + len(lines)):
         for target_col in range(col, col_end):
             if canvas.get(target_row, target_col) == " ":
                 continue
             if strict or canvas.is_protected(target_row, target_col):
+                return False
+            if may_cover is not None and (target_col, target_row) not in may_cover:
                 return False
     # Ensure canvas is large enough for the label
     needed_w = col_end + 1
@@ -528,16 +548,29 @@ def _try_place_label(
     canvas: Canvas,
     row: int, col: int, lines: list[str],
     placed: list[tuple[int, int, int]],
+    rules: _LabelRules,
 ) -> bool:
     """Try to place a non-overlapping label block at (row, col)."""
     col_end = col + _block_width(lines)
-    if any(_label_overlaps(r, col, col_end, placed) for r in range(row, row + len(lines))):
+    if any(
+        _label_overlaps(r, col, col_end, placed, rules.share_rows)
+        for r in range(row, row + len(lines))
+    ):
         return False
-    return _place_label(canvas, row, col, lines, placed)
+    return _place_label(canvas, row, col, lines, placed, rules.may_cover)
 
 
 def _block_width(lines: list[str]) -> int:
     return max(display_width(line) for line in lines)
+
+
+def _path_cells(path: list[tuple[int, int]]) -> set[tuple[int, int]]:
+    cells: set[tuple[int, int]] = set()
+    for (x1, y1), (x2, y2) in zip(path, path[1:]):
+        for x in range(min(x1, x2), max(x1, x2) + 1):
+            for y in range(min(y1, y2), max(y1, y2) + 1):
+                cells.add((x, y))
+    return cells
 
 
 def _find_last_turn(path: list[tuple[int, int]]) -> int:
@@ -571,6 +604,7 @@ def _try_place_on_segment(
     inline: bool = False,
     use_ascii: bool = False,
     leader_char: str = "─",
+    rules: _LabelRules = _LabelRules(),
 ) -> bool:
     """Try to place a label on a specific segment. Returns True if placed.
 
@@ -616,17 +650,17 @@ def _try_place_on_segment(
 
             for row, col, anchored_label in sides:
                 if _try_place_label(
-                    canvas, row, col, anchored_label, placed_labels,
+                    canvas, row, col, anchored_label, placed_labels, rules,
                 ):
                     return True
             for offset in range(1, 4):
                 for row, col, anchored_label in sides:
                     if _try_place_label(
-                        canvas, row - offset, col, anchored_label, placed_labels,
+                        canvas, row - offset, col, anchored_label, placed_labels, rules,
                     ):
                         return True
                     if _try_place_label(
-                        canvas, row + offset, col, anchored_label, placed_labels,
+                        canvas, row + offset, col, anchored_label, placed_labels, rules,
                     ):
                         return True
             return False
@@ -646,13 +680,13 @@ def _try_place_on_segment(
             ]
 
         for row, col in sides:
-            if _try_place_label(canvas, row, col, lines, placed_labels):
+            if _try_place_label(canvas, row, col, lines, placed_labels, rules):
                 return True
         for offset in range(1, 4):
             for row, col in sides:
-                if _try_place_label(canvas, row - offset, col, lines, placed_labels):
+                if _try_place_label(canvas, row - offset, col, lines, placed_labels, rules):
                     return True
-                if _try_place_label(canvas, row + offset, col, lines, placed_labels):
+                if _try_place_label(canvas, row + offset, col, lines, placed_labels, rules):
                     return True
         return False
 
@@ -665,11 +699,11 @@ def _try_place_on_segment(
             start = mid - label_len // 2
             if inline:
                 return _try_place_label(
-                    canvas, y1, start, lines, placed_labels,
+                    canvas, y1, start, lines, placed_labels, rules,
                 )
-            if _try_place_label(canvas, y1 - label_rows, start, lines, placed_labels):
+            if _try_place_label(canvas, y1 - label_rows, start, lines, placed_labels, rules):
                 return True
-            if _try_place_label(canvas, y1 + 1, start, lines, placed_labels):
+            if _try_place_label(canvas, y1 + 1, start, lines, placed_labels, rules):
                 return True
             return False
 
@@ -725,21 +759,30 @@ def _draw_edge_label(
     # so the label doesn't land on the same row as sibling edges' turns
     is_straight = last_turn < 0
 
-    # Try preferred segments first, then remaining
-    for i in preferred + remaining:
-        x1, y1 = path[i]
-        x2, y2 = path[i + 1]
-        prev = path[i - 1] if i > 0 else None
-        if _try_place_on_segment(
-            canvas, x1, y1, x2, y2, lines, placed_labels,
-            prev_point=prev,
-            prefer_left=is_straight,
-            bias_target=is_straight,
-            inline=inline,
-            use_ascii=use_ascii,
-            leader_char=leader_char,
-        ):
-            return
+    # Try preferred segments first, then remaining. A spot that covers
+    # another edge's line cuts that edge, so take one only when no clean
+    # spot exists, even on a row another label already uses.
+    own = _path_cells(path)
+    for rules in (
+        _LabelRules(may_cover=own),
+        _LabelRules(may_cover=own, share_rows=True),
+        _LabelRules(),
+    ):
+        for i in preferred + remaining:
+            x1, y1 = path[i]
+            x2, y2 = path[i + 1]
+            prev = path[i - 1] if i > 0 else None
+            if _try_place_on_segment(
+                canvas, x1, y1, x2, y2, lines, placed_labels,
+                prev_point=prev,
+                prefer_left=is_straight,
+                bias_target=is_straight,
+                inline=inline,
+                use_ascii=use_ascii,
+                leader_char=leader_char,
+                rules=rules,
+            ):
+                return
 
     if inline:
         _draw_edge_label(
