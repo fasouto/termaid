@@ -54,6 +54,7 @@ class StreamRenderer:
     indent: str = ""
     held: list[str] = field(default_factory=list)   # original lines, fence included
     carry: str = ""        # a final batch may end mid-line
+    held_size: int = 0     # characters in held, line breaks included; load() recomputes it
 
     def feed(self, text: str, final: bool = False) -> str:
         out: list[str] = []
@@ -81,11 +82,12 @@ class StreamRenderer:
     def _line(self, line: str) -> list[str]:
         if self.fence:
             self.held.append(line)
+            self.held_size += len(line) + 1
             close = re.compile(
                 r"^[ \t]*" + re.escape(self.fence[0]) + "{" + str(len(self.fence)) + r",}[ \t]*\r?$"
             )
             if not close.match(line):
-                if sum(map(len, self.held)) > _MAX_HELD_CHARS:
+                if self.held_size > _MAX_HELD_CHARS:
                     held = self.held
                     self._reset()
                     return held
@@ -102,6 +104,7 @@ class StreamRenderer:
                 self.fence = match.group("fence")
                 self.indent = match.group("indent")
                 self.held = [line]
+                self.held_size = len(line) + 1
                 return []
         return [line]
 
@@ -109,6 +112,7 @@ class StreamRenderer:
         self.fence = ""
         self.indent = ""
         self.held = []
+        self.held_size = 0
 
     def _draw(self, source: str) -> list[str] | None:
         """Render one diagram, or None when it cannot be drawn."""
@@ -145,6 +149,7 @@ class StreamRenderer:
         self.fence = saved.get("fence", "")
         self.indent = saved.get("indent", "")
         self.held = list(saved.get("held", []))
+        self.held_size = sum(len(line) + 1 for line in self.held)
         self.carry = saved.get("carry", "")
 
 

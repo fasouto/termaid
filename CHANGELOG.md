@@ -20,7 +20,7 @@
 - Control characters in diagram text, such as ESC or a raw carriage return, no longer reach a drawn diagram (tabs are kept). The source is filtered before parsing (#19, thanks @TheeCoderAhmed). A flowchart entity code such as `#13;` that decodes to a control character becomes a space if it is whitespace and is dropped otherwise. A control character written as a JSON escape in a gitGraph `%%{init}%%` branch name is dropped too (#16)
 - Control characters in a diagram, such as ESC or a raw carriage return, no longer reach the terminal. The source is filtered before parsing (#19, thanks @TheeCoderAhmed), and a flowchart entity code such as `#13;` that decodes to a control character becomes a space if it is whitespace and is dropped otherwise (#16)
 - Claude Code hook: on Linux and macOS, the state kept between streaming batches lives in a folder only you can open (`termaid-claude-hook-<uid>` in the temp folder, mode 700, files 600). If that folder exists but another user could open it, or it is a symlink, the hook leaves the reply as Claude wrote it instead of using the folder (#17)
-- Claude Code hook: a Mermaid block that never closes no longer hides the rest of the reply. Once the held lines pass 8,192 characters, about 250 lines, they are shown as written, and the state saved between batches stops growing (#18)
+- Claude Code hook: a Mermaid block that never closes no longer hides the rest of the reply. Once the held text passes 8,192 characters (line breaks count), about 250 lines, it is shown as written, and the state saved between batches stops growing (#18)
 
 ## 0.10.0 (2026-10-25)
 

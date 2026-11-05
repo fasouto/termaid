@@ -305,3 +305,11 @@ def test_a_fence_after_a_released_one_is_still_drawn():
     _feed_lines(r, ["```mermaid", *LONG_LINES, "```", "text"])
     out = r.feed(FLOW + "after\n", final=True)
     assert "```mermaid" not in out and "─" in out and out.endswith("after\n")
+
+
+def test_blank_lines_count_toward_the_limit():
+    r = StreamRenderer(width=80)
+    lines = ["```mermaid", *[""] * 9_000]
+    shown = _feed_lines(r, lines)
+    assert any(shown[:-100]), "a fence of blank lines should be released before it ends"
+    assert "".join(shown) == "".join(line + "\n" for line in lines)
