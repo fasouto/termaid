@@ -252,3 +252,18 @@ class TestTreemapWideChars:
         lines = output.split("\n")
         border_w = max(display_width(l) for l in lines if "┌" in l or "┄" in l)
         assert all(display_width(l) <= border_w for l in lines)
+
+
+class TestTreemapLeafLabels:
+    def test_small_leaf_keeps_a_label_that_fits(self):
+        output = render(
+            'treemap-beta\n'
+            '    "Frontend"\n'
+            '        "React": 40\n'
+            '        "CSS": 15\n'
+            '    "Backend"\n'
+            '        "API": 35\n'
+            '        "Auth": 10'
+        )
+        assert "│Auth│" in output
+        assert "…" not in output
