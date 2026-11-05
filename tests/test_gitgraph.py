@@ -423,3 +423,10 @@ class TestGitGraphRendering:
         output = render("gitGraph")
         assert isinstance(output, str)
         assert output == ""
+
+
+def test_init_branch_name_escapes_do_not_reach_the_output():
+    name = "m\\u001b]0;x\\u0007\\u001b[31my\\u009b2J"
+    out = render('%%{init: {"gitGraph": {"mainBranchName": "' + name + '"}}}%%\ngitGraph\n  commit\n')
+    assert not [hex(ord(c)) for c in out if c != "\n" and (ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F)]
+    assert "m]0;x[31my2J" in out
