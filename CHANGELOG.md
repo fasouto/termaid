@@ -15,6 +15,7 @@
 - Flowchart: unlabeled edges leaving one node branch off one shared line instead of staggered lanes that crossed each other, so fan-outs are shorter (a node with five children is as tall as one with a single child). A three-way split draws as `┴┬`, since `┼` reads as two lines crossing. An edge into a node that other edges also enter keeps its own route, so a fan-out never joins a fan-in into one line. Labeled edges keep a lane each so every label stays on its own segment
 - Flowchart: with `gap` below 4, an edge that turned just before its target drew its sideways run on the same line as the arrowheads (`▼────▼`). The gap in front of such a target is now at least three cells deep
 - Sequence: a message label keeps its spaces where it crosses another participant's lifeline, so the lifeline no longer shows through a gap between two words (`no opening┆hours`)
+- Block diagrams: groups nested many levels deep render in milliseconds. Each level sized its children twice, so every level doubled the work and 20 levels took 1.5 seconds
 
 ## 0.10.0 (2026-10-25)
 
