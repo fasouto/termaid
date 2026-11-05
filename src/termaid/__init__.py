@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .renderer.canvas import Canvas
 
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 _LEADING_DIRECTIVES_RE = re.compile(rf"(?:{DIRECTIVE}|%%[^\n]*|\s+)*")

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 (2026-11-06)
 
 ### New
 - Colored output: `classDef` and `style` now color a node's label with `color:`, as in Mermaid (`stroke:` colors the border). Labels without `color:` keep the theme's label style. In `--format styled-json` such a label carries the new key `class:<name>:text` or `nodestyle:<id>:text` instead of `label`
