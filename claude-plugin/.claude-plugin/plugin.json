@@ -4,5 +4,7 @@
   "description": "Draw the Mermaid diagrams in Claude's replies right in the terminal",
   "author": { "name": "Fabio Souto", "url": "https://github.com/fasouto" },
   "license": "MIT",
-  "repository": "https://github.com/fasouto/termaid"
+  "repository": "https://github.com/fasouto/termaid",
+  "homepage": "https://termaid.com",
+  "keywords": ["mermaid", "diagrams", "terminal", "ascii", "unicode"]
 }
