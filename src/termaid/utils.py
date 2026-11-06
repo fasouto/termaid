@@ -2,47 +2,81 @@
 from __future__ import annotations
 
 import unicodedata
+from typing import Iterator
 
 # A %%{...}%% directive, which may span lines. It ends at the next %%{, so an
 # unclosed one is not rescanned to the end of the source from every later %%{.
 DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
 
 
+_SOFT_HYPHEN = "­"
+_EMOJI_PRESENTATION = "️"
+# Hangul jamo vowels and finals, and the line and paragraph separators:
+# drawn at zero columns, though no mark category says so.
+_ZERO_WIDTH_RANGES = ((0x1160, 0x11FF), (0xD7B0, 0xD7FF), (0x2028, 0x2029))
+
+
+def _is_zero_width(ch: str) -> bool:
+    """Return True if a terminal draws *ch* at zero columns, on top of the
+    character before it (a combining mark) or not at all (a format char)."""
+    # Category, not combining class: Thai MAI HAN-AKAT and SARA I are Mn
+    # with combining class 0.
+    category = unicodedata.category(ch)
+    if category in ("Mn", "Me"):
+        return True
+    if category == "Cf":
+        return ch != _SOFT_HYPHEN
+    cp = ord(ch)
+    return any(low <= cp <= high for low, high in _ZERO_WIDTH_RANGES)
+
+
 def _is_wide(ch: str) -> bool:
     """Return True if *ch* occupies 2 terminal columns."""
-    if unicodedata.east_asian_width(ch) in ("F", "W"):
-        return True
-    # Emoji and symbols that render wide despite east_asian_width=N
-    cp = ord(ch)
-    if (
-        0x2600 <= cp <= 0x27BF      # Misc Symbols, Dingbats
-        or 0x1F300 <= cp <= 0x1FAFF  # Emoji blocks (Misc Symbols & Pictographs through Symbols Extended-A)
-        or 0xFE00 <= cp <= 0xFE0F   # Variation selectors
-    ):
-        return True
-    return False
+    return unicodedata.east_asian_width(ch) in ("F", "W")
+
+
+def _cluster_width(cluster: str) -> int:
+    if _is_wide(cluster[0]) or _EMOJI_PRESENTATION in cluster:
+        return 2
+    return 1
+
+
+def iter_cells(text: str) -> Iterator[tuple[str, int]]:
+    """Yield the terminal cells of *text* as ``(cluster, width)`` pairs.
+
+    A zero-width code point shares the cell of the code point before it,
+    so a Thai tone mark stays with its letter. Width is 1 or 2.
+    """
+    cluster = ""
+    for ch in text:
+        if cluster and _is_zero_width(ch):
+            cluster += ch
+            continue
+        if cluster:
+            yield cluster, _cluster_width(cluster)
+        cluster = ch
+    if cluster:
+        yield cluster, _cluster_width(cluster)
 
 
 def display_width(text: str) -> int:
     """Return the terminal display width of *text*.
 
-    East-Asian wide / fullwidth characters and emoji occupy 2 terminal
-    columns; everything else occupies 1.
+    East-Asian wide / fullwidth characters and emoji presentation occupy 2
+    terminal columns, combining marks 0, everything else 1.
     Uses only the stdlib ``unicodedata`` module.
     """
-    w = 0
-    for ch in text:
-        w += 2 if _is_wide(ch) else 1
-    return w
+    if text.isascii():
+        return len(text)
+    return sum(width for _, width in iter_cells(text))
 
 
 def max_line_width(text: str) -> int:
     """Return the display width of the widest line in *text*."""
     lines = text.split("\n")
-    # Without wide characters a line's width is its length. Fitting measures
-    # every candidate drawing, and checking each character took longer than
-    # the renders did.
-    if not any(_is_wide(ch) for ch in set(text)):
+    # An ASCII line's width is its length. Fitting measures every candidate
+    # drawing, and checking each character took longer than the renders did.
+    if text.isascii():
         return max(map(len, lines))
     return max(display_width(line) for line in lines)
 

@@ -1,9 +1,56 @@
 """Tests for shared utility functions."""
 from __future__ import annotations
 
+import unicodedata
+
 import pytest
 
-from termaid.utils import display_width, truncate_to_width, wrap_display_text
+from termaid.utils import display_width, iter_cells, max_line_width, truncate_to_width, wrap_display_text
+
+
+def clusters(text: str) -> list[str]:
+    return [cluster for cluster, _ in iter_cells(text)]
+
+
+class TestCells:
+    def test_thai_marks_share_the_letter_cell(self):
+        assert list(iter_cells("ผู้ใช้")) == [("ผู้", 1), ("ใ", 1), ("ช้", 1)]
+        assert clusters("น้ำแข็ง") == ["น้", "ำ", "แ", "ข็", "ง"]
+
+    def test_display_width_per_script(self):
+        cases = {
+            "สวัสดีครับ": 7,
+            "ภาษาไทย น้ำแข็ง": 13,
+            "ភាសាខ្មែរ": 8,
+            "שָׁלוֹם": 4,
+            "مَرْحَبًا": 5,
+            unicodedata.normalize("NFD", "Tiếng Việt"): 10,
+            unicodedata.normalize("NFD", "한국어"): 6,
+            "日本語": 6,
+            "日本ผู้": 5,
+            "का": 2,
+            "abc": 3,
+        }
+        for text, width in cases.items():
+            assert display_width(text) == width, text
+
+    def test_symbol_and_emoji_widths(self):
+        assert display_width("❤") == 1
+        assert display_width("★") == 1
+        assert display_width("❤️") == 2
+        thumb = "\U0001F44D\U0001F3FD"
+        assert display_width(thumb) == 4 and len(clusters(thumb)) == 2
+        family = "\U0001F468‍\U0001F469‍\U0001F467"
+        assert display_width(family) == 6 and len(clusters(family)) == 3
+
+    def test_lone_leading_mark_keeps_a_cell(self):
+        assert list(iter_cells("่ab")) == [("่", 1), ("a", 1), ("b", 1)]
+
+    def test_soft_hyphen_stays_visible(self):
+        assert display_width("a­b") == 3
+
+    def test_max_line_width_counts_marks_as_zero(self):
+        assert max_line_width("ผู้ใช้\nab") == 3
 
 
 class TestTruncateToWidth:
