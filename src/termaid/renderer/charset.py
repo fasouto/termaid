@@ -27,6 +27,12 @@ class CharSet:
     arrow_down: str
     arrow_up: str
 
+    # Class-diagram inheritance markers (open triangles)
+    inherit_right: str
+    inherit_left: str
+    inherit_down: str
+    inherit_up: str
+
     # Edge line styles
     line_horizontal: str
     line_vertical: str
@@ -83,6 +89,7 @@ UNICODE = CharSet(
     round_bottom_left="╰", round_bottom_right="╯",
     # Arrows
     arrow_right="►", arrow_left="◄", arrow_down="▼", arrow_up="▲",
+    inherit_right="▷", inherit_left="◁", inherit_down="▽", inherit_up="△",
     # Edge lines
     line_horizontal="─", line_vertical="│",
     line_dotted_h="┄", line_dotted_v="┆",
@@ -114,6 +121,7 @@ ASCII = CharSet(
     round_bottom_left="+", round_bottom_right="+",
     # Arrows
     arrow_right=">", arrow_left="<", arrow_down="v", arrow_up="^",
+    inherit_right=">", inherit_left="<", inherit_down="v", inherit_up="^",
     # Edge lines
     line_horizontal="-", line_vertical="|",
     line_dotted_h=".", line_dotted_v=":",
@@ -135,3 +143,8 @@ ASCII = CharSet(
     sg_bottom_left="+", sg_bottom_right="+",
     sg_horizontal="-", sg_vertical="|",
 )
+
+
+def default_charset(use_ascii: bool) -> CharSet:
+    """The built-in character set: ASCII, or Unicode box drawing."""
+    return ASCII if use_ascii else UNICODE

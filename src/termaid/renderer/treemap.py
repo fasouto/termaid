@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ..model.treemap import Treemap, TreemapNode
 from .canvas import Canvas
-from .charset import ASCII, UNICODE, CharSet
+from .charset import CharSet, default_charset
 from ..utils import display_width, truncate_to_width
 
 _MIN_BOX_W = 4
@@ -21,9 +21,10 @@ def render_treemap(
     diagram: Treemap,
     *,
     use_ascii: bool = False,
+    cs: CharSet | None = None,
 ) -> Canvas:
     """Render a Treemap model to a Canvas."""
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     if not diagram.roots:
         return Canvas(1, 1)
