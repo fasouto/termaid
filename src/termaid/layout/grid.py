@@ -28,6 +28,7 @@ Submodules
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from itertools import repeat
 
 from ..graph.model import Direction, Graph, Subgraph
 
@@ -115,14 +116,16 @@ class GridLayout:
     def grid_to_draw(self, col: int, row: int) -> tuple[int, int]:
         """Convert grid coordinates to drawing (character) coordinates.
         Returns the top-left position of the cell."""
-        x = sum(self.col_widths.get(c, 1) for c in range(col)) + self.offset_x
-        y = sum(self.row_heights.get(r, 1) for r in range(row)) + self.offset_y
+        columns = range(col)
+        defaults = repeat(1)
+        x = (sum(map(self.col_widths.get, columns, defaults)) if columns else 0) + self.offset_x
+        rows = range(row)
+        y = (sum(map(self.row_heights.get, rows, defaults)) if rows else 0) + self.offset_y
         return x, y
 
     def grid_to_draw_center(self, col: int, row: int) -> tuple[int, int]:
         """Convert grid coordinates to the center of the cell in drawing coords."""
-        x = sum(self.col_widths.get(c, 1) for c in range(col)) + self.offset_x
-        y = sum(self.row_heights.get(r, 1) for r in range(row)) + self.offset_y
+        x, y = GridLayout.grid_to_draw(self, col, row)
         w = self.col_widths.get(col, 1)
         h = self.row_heights.get(row, 1)
         return x + w // 2, y + h // 2
