@@ -40,7 +40,7 @@ uvx termaid diagram.mmd
 
 ### Claude Code plugin
 
-The plugin calls the `termaid` command, so install that first with `brew install termaid` or `uv tool install termaid`. Then run this in Claude Code 2.1.275 or later:
+The plugin carries its own copy of termaid. It needs Python 3.9 or later as `python3`, which macOS and most Linux systems already have. Run this in Claude Code 2.1.275 or later:
 
 ```
 /plugin install termaid --marketplace fasouto/termaid
@@ -662,12 +662,14 @@ On Claude Code 2.1.275 or later, install it with one command:
 ```
 
 On older versions, add the marketplace first with `/plugin marketplace add fasouto/termaid`
-and then `/plugin install termaid@termaid`. The plugin needs the `termaid` command on
-your PATH (`brew install termaid` or `uv tool install termaid`). It adds:
+and then `/plugin install termaid@termaid`. The plugin carries its own copy of termaid
+and needs Python 3.9 or later as `python3`, which macOS and most Linux systems already
+have. It adds:
 
-- a `MessageDisplay` hook that runs `termaid --claude-hook` on each reply and draws its
-  mermaid blocks in place. It only changes what you see. The transcript keeps the source,
-  and if termaid is missing or fails, Claude Code shows the original text.
+- a `MessageDisplay` hook that runs the plugin's bundled copy of termaid with `python3`
+  on each reply and draws its mermaid blocks in place. It only changes what you see. The
+  transcript keeps the source, and if `python3` is missing or termaid fails, the hook does
+  nothing and Claude Code shows the original text.
 - a `/termaid:mermaid` skill for explicit requests, such as rendering a file or the
   diagrams in a PR description.
 
