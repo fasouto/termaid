@@ -1,0 +1,51 @@
+name: Build Claude Code plugin
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the release tag, or the default branch on a manual run
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check out the claude-plugin branch into plugin-out
+        run: |
+          if git ls-remote --exit-code --heads origin claude-plugin >/dev/null 2>&1; then
+            git fetch origin claude-plugin
+            git worktree add -B claude-plugin plugin-out origin/claude-plugin
+          else
+            git worktree add --detach plugin-out
+            git -C plugin-out checkout --orphan claude-plugin
+            git -C plugin-out rm -rf -q . || true
+          fi
+
+      - name: Build the plugin
+        run: python scripts/build_claude_plugin.py plugin-out
+
+      - name: Commit and push
+        working-directory: plugin-out
+        run: |
+          version=$(python -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+          git add -A
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "The plugin has not changed. Nothing to push."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "termaid $version"
+          git push origin HEAD:claude-plugin

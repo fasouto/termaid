@@ -27,3 +27,37 @@ jobs:
 
       - name: Run tests
         run: uv run pytest tests/ -q
+
+  plugin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build the plugin
+        run: python3 scripts/build_claude_plugin.py "$RUNNER_TEMP/plugin"
+
+      - name: Install Python 3.9 and 3.12
+        run: |
+          uv python install 3.9
+          uv python install 3.12
+
+      - name: Render every fixture through the built plugin
+        run: |
+          py39=$(uv python find 3.9)
+          py312=$(uv python find 3.12)
+          for v in 39 312; do mkdir -p "$RUNNER_TEMP/out$v"; done
+          find tests/fixtures -name '*.mmd' | sort | while read -r f; do
+            name=$(echo "$f" | tr '/' '_')
+            for v in 39 312; do
+              if [ "$v" = 39 ]; then py=$py39; else py=$py312; fi
+              {
+                "$py" -I -S "$RUNNER_TEMP/plugin/scripts/termaid.py" "$f" 2>&1
+                echo "exit code: $?"
+              } > "$RUNNER_TEMP/out$v/$name.txt" || true
+            done
+          done
+          diff -r "$RUNNER_TEMP/out39" "$RUNNER_TEMP/out312"
