@@ -46,7 +46,15 @@ The plugin calls the `termaid` command, so install that first with `brew install
 /plugin install termaid --marketplace fasouto/termaid
 ```
 
-Claude Code then draws the Mermaid diagrams in Claude's replies. [Claude Code](#claude-code) covers older versions and a setup without the plugin.
+Claude Code then draws the Mermaid diagrams in Claude's replies. Ask for a diagram in plain words, for example:
+
+- "Draw a diagram of the main components of this app and how they connect"
+- "Show what happens when a user logs in, as a sequence diagram"
+- "Draw the database models and how they relate"
+- "Draw the states an order goes through, from cart to delivery"
+- "Turn this migration plan into a gantt chart"
+
+[Claude Code](#claude-code) covers older versions and a setup without the plugin.
 
 ## Quick start
 
