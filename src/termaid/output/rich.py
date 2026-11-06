@@ -1,7 +1,7 @@
 """Rich renderable output adapter (optional dependency)."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Iterator
 
 from ..graph.model import Graph
 from ..renderer.canvas import Canvas
@@ -55,6 +55,23 @@ def _css_to_rich_text_style(props: dict[str, str]) -> str | None:
     """Rich style for a node's label text: Mermaid's `color` property."""
     color = props.get("color")
     return _hex_to_rich_color(color) if color else None
+
+
+def _cell_spans(row: list[tuple[str, str]], line_length: int) -> Iterator[tuple[int, int, str, str]]:
+    """Yield ``(start, end, cell, style_key)`` string offsets for a canvas row.
+
+    A cell holds a letter with its marks (several code points) or a wide
+    character's shadow (none), so offsets follow the cell text, not the
+    column. Stops at *line_length*, the row's length after rstrip.
+    """
+    start = 0
+    for cell, style_key in row:
+        if start >= line_length:
+            return
+        end = start + len(cell)
+        if cell:
+            yield start, end, cell, style_key
+        start = end
 
 
 def render_graph_rich(
@@ -149,9 +166,7 @@ def render_graph_rich(
         if row_idx >= len(lines):
             break
         line = lines[row_idx]
-        for col_idx, (ch, style_key) in enumerate(row):
-            if col_idx >= len(line):
-                break
+        for start, end, ch, style_key in _cell_spans(row, len(line)):
             if is_solid:
                 # Solid themes: apply bg to every cell, fg to non-space cells.
                 # sectionfg: styles are foreground-only (no bg fill).
@@ -169,13 +184,13 @@ def render_graph_rich(
                     fg = style_map.get(style_key, "") if ch != " " else ""
                     style_str = f"{fg} {bg}".strip() if fg else bg
                 if style_str:
-                    text.stylize(style_str, pos + col_idx, pos + col_idx + 1)
+                    text.stylize(style_str, pos + start, pos + end)
             else:
                 # Text themes: only style non-space characters
                 if style_key in style_map and style_map[style_key]:
                     if ch != " " or style_key.startswith("section:"):
                         if style_key in style_map:
-                            text.stylize(style_map[style_key], pos + col_idx, pos + col_idx + 1)
+                            text.stylize(style_map[style_key], pos + start, pos + end)
         pos += len(line) + 1  # +1 for newline
 
     return text
@@ -245,9 +260,7 @@ def render_sequence_rich(
         if row_idx >= len(lines):
             break
         line = lines[row_idx]
-        for col_idx, (ch, style_key) in enumerate(row):
-            if col_idx >= len(line):
-                break
+        for start, end, ch, style_key in _cell_spans(row, len(line)):
             if is_solid:
                 if style_key.startswith("sectionfg:"):
                     # Foreground-only section (timeline)
@@ -265,11 +278,11 @@ def render_sequence_rich(
                     fg = style_map.get(style_key, "") if ch != " " else ""
                     style_str = fg
                 if style_str:
-                    text.stylize(style_str, pos + col_idx, pos + col_idx + 1)
+                    text.stylize(style_str, pos + start, pos + end)
             else:
                 if style_key in style_map and style_map[style_key]:
                     if ch != " " or style_key.startswith("section:"):
-                        text.stylize(style_map[style_key], pos + col_idx, pos + col_idx + 1)
+                        text.stylize(style_map[style_key], pos + start, pos + end)
         pos += len(line) + 1
 
     return text
