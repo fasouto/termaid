@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from itertools import chain
 from typing import Callable
 
 from ..graph.model import Direction, Edge, Graph
@@ -126,6 +127,22 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
         if src is not None and tgt is not None and not graph.edges[i].is_self_reference
     }
 
+    # Routed paths do not change while routing, so each edge's cell axes
+    # are worked out once, the first time a later edge needs them.
+    axes_by_index: dict[int, dict[tuple[int, int], bool | None]] = {}
+
+    def cell_axes(re: RoutedEdge) -> dict[tuple[int, int], bool | None]:
+        if re.index not in axes_by_index:
+            axes_by_index[re.index] = _cell_axes(re)
+        return axes_by_index[re.index]
+
+    # Edges are only related when their ends share an id, so each edge
+    # tests just the edges standing on one of its ids.
+    edges_on: dict[str, set[int]] = {}
+    for j, (src_ids, tgt_ids) in enumerate(places):
+        for node_id in src_ids | tgt_ids:
+            edges_on.setdefault(node_id, set()).add(j)
+
     order = _routing_order(graph, layout, buses)
     for pos, i in enumerate(order):
         edge = graph.edges[i]
@@ -143,10 +160,14 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
         forbidden = _foreign_sg_cells(edge, graph, sg_regions)
         facing = _flow_facing_homes(edge, graph, src, tgt, sg_regions, direction)
         penalty = _side_exit_penalty(facing, sg_regions, direction)
+        related = {
+            j for node_id in places[i][0] | places[i][1] for j in edges_on[node_id]
+            if _related(places[i], places[j])
+        }
         shared, crossings, blocked = _occupancy(
-            [(r, _related(places[i], places[r.index])) for r in routed],
-            [ends[j] for j in order[pos + 1:]
-             if j in ends and not _related(places[i], places[j])],
+            [(r, r.index in related) for r in routed],
+            [ends[j] for j in order[pos + 1:] if j in ends and j not in related],
+            cell_axes,
         )
         bus = bus_cells.setdefault(edge.source, _BusCells()) if i in on_bus else _BusCells()
         re = _route_edge(
@@ -231,6 +252,7 @@ def _end_cells(
 def _occupancy(
     routed: list[tuple[RoutedEdge, bool]],
     pending_ends: list[list[tuple[tuple[int, int], bool]]],
+    cell_axes: Callable[[RoutedEdge], dict[tuple[int, int], bool | None]] | None = None,
 ) -> tuple[set[tuple[int, int]], dict[tuple[int, int], bool], set[tuple[int, int]]]:
     """Split the cells routed edges hold into what the next edge may share
     (those related to it), what it may only cross, and what it must avoid.
@@ -238,26 +260,23 @@ def _occupancy(
     An unrelated edge's straight run can be crossed; its corners and ends
     cannot. The cells where unrouted unrelated edges will leave or reach
     their nodes are held the same way, so this edge does not turn in them.
+    ``cell_axes`` lets the caller reuse each routed edge's axes.
     """
     shared: set[tuple[int, int]] = set()
     crossings: dict[tuple[int, int], bool] = {}
     blocked: set[tuple[int, int]] = set()
+    axes_of = cell_axes or _cell_axes
 
-    def hold(cell: tuple[int, int], horizontal: bool | None) -> None:
-        if horizontal is None or crossings.get(cell, horizontal) != horizontal:
-            blocked.add(cell)
-        else:
-            crossings[cell] = horizontal
-
+    held = []
     for other, related in routed:
         if related:
             shared.update(other.occupied_cells)
-            continue
-        for cell, horizontal in _cell_axes(other).items():
-            hold(cell, horizontal)
-    for ends in pending_ends:
-        for cell, horizontal in ends:
-            hold(cell, horizontal)
+        else:
+            held.append(axes_of(other).items())
+    held.extend(pending_ends)
+    for cell, horizontal in chain.from_iterable(held):
+        if horizontal is None or crossings.setdefault(cell, horizontal) != horizontal:
+            blocked.add(cell)
     for cell in blocked:
         crossings.pop(cell, None)
     return shared, crossings, blocked
