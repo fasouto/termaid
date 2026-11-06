@@ -2,6 +2,16 @@
 
 This plugin draws the Mermaid diagrams in Claude's replies as text diagrams, in place. They are fitted to the width of your terminal. Only the display changes. The transcript keeps the Mermaid source.
 
+## Install
+
+Run this in Claude Code 2.1.275 or later:
+
+```
+/plugin install termaid --marketplace fasouto/termaid
+```
+
+On older versions, run `/plugin marketplace add fasouto/termaid` first, then `/plugin install termaid@termaid`.
+
 ## Skill
 
 The `/termaid:mermaid` skill draws diagrams that live in files, Markdown documents and PR descriptions.
