@@ -98,3 +98,18 @@ def _no_new_syntax(source: str) -> bool:
 )
 def test_streaming_fixtures_draw_no_raw_syntax(fixture):
     assert _no_new_syntax(fixture.read_text().rstrip("\n"))
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["A -- t " * 2000, "C[" + "word " * 2000, "C " + "-" * 14000 + "x y"],
+    ids=["text links", "long label", "long link"],
+)
+def test_very_long_unfinished_line_is_quick(line):
+    import time
+
+    source = "graph LR\n  A --> B\n  " + line
+    start = time.perf_counter()
+    completed = complete_partial(source)
+    assert time.perf_counter() - start < 0.05
+    assert completed == "graph LR\n  A --> B"
