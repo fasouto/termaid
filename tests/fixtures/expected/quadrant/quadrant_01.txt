@@ -1,0 +1,24 @@
+                       Priority Matrix
+
+                                │
+                                │
+                                │
+             ● Cache            │
+                                │
+               Plan             │          Do First
+                                │
+                                │
+                                │
+                                │
+  ──────────────────────────────┼─────────────────────────────
+                                │
+                                │
+                                │               Rewrite●
+                                │
+             Delegate           │            Skip
+                                │
+                                │
+                                │
+                                │
+
+                   Low Effort -> High Effort

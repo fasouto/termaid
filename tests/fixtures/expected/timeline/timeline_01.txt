@@ -1,0 +1,14 @@
+History
+
+ ══ 2023 ══
+ │
+ ●── January
+ │   Kickoff
+ │
+ ●── March
+ │   Alpha
+ │
+ ══ 2024 ══
+ │
+ ●── January
+ │   v1.0

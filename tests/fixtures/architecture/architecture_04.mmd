@@ -1,0 +1,5 @@
+architecture-beta
+    group cloud(cloud)[Cloud Infra]
+    service web(server)[Web App] in cloud
+    service db(database)[Data Store] in cloud
+    web:R --> L:db
