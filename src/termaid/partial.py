@@ -35,6 +35,10 @@ _HOLD_BACK_KINDS = ("erDiagram", "classDiagram")
 
 _GRAPH_KINDS = ("graph", "flowchart", "stateDiagram")
 
+# Some patterns above take time that grows with the square of a line's length, so
+# a longer unfinished line just waits for its newline. Real lines are far shorter.
+_MAX_PARTIAL_LINE = 1000
+
 
 def _diagram_kind(text: str) -> str:
     for line in text.splitlines():
@@ -139,6 +143,8 @@ def complete_partial(source: str) -> str:
     head, _, last = text.rpartition("\n")
     if not head:  # still on the header line
         return text
+    if len(last) > _MAX_PARTIAL_LINE:
+        return head
     kind = _diagram_kind(head)
     completed = _complete_line(kind, last)
     return f"{head}\n{completed}" if completed.strip() else head
