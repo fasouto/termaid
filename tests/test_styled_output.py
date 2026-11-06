@@ -147,3 +147,23 @@ class TestCli:
         assert code == 2
         assert captured.out == ""
         assert "styled-json" in captured.err
+
+
+def _style_at(text, index: int) -> list[str]:
+    return [str(span.style) for span in text.spans if span.start <= index < span.end]
+
+
+@pytest.mark.parametrize("label", ["日本語 X", "ผู้ใช้ X"], ids=["cjk", "thai"])
+def test_rich_label_after_wide_or_marked_text_keeps_its_style(label: str):
+    from termaid import render_rich
+
+    flowchart = render_rich(f'graph LR\n  A["{label}"] --> B["end"]', theme="default")
+    sequence = render_rich(f"sequenceDiagram\n  participant A as {label}\n  participant B as end\n  A->>B: hi", theme="default")
+    for text in (flowchart, sequence):
+        index = text.plain.index("end")
+        assert _style_at(text, index) == _style_at(text, text.plain.index("X"))
+
+
+def test_styled_chunks_keep_a_thai_label_whole():
+    doc = render_styled('graph LR\n  A["ผู้ใช้"] --> B')
+    assert any("ผู้ใช้" in chunk["text"] for line in doc["lines"] for chunk in line)
