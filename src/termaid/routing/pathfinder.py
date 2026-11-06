@@ -8,17 +8,30 @@ an unrelated edge's straight line: a path may only pass it perpendicularly.
 from __future__ import annotations
 
 import heapq
-from dataclasses import dataclass, field
 from typing import Callable
 
 
-@dataclass(order=True)
-class _AStarNode:
-    f_cost: float
-    g_cost: float = field(compare=False)
-    col: int = field(compare=False)
-    row: int = field(compare=False)
-    parent: _AStarNode | None = field(default=None, compare=False, repr=False)
+class _AStarNode(float):
+    """Search node; the float value gives heap order by f_cost only."""
+
+    __slots__ = ("f_cost", "g_cost", "cell", "parent", "heading")
+
+    def __new__(
+        cls,
+        f_cost: float,
+        g_cost: float,
+        cell: tuple[int, int],
+        parent: _AStarNode | None = None,
+        heading: tuple[int, int] | None = None,
+    ) -> _AStarNode:
+        node = float.__new__(cls, f_cost)
+        node.f_cost = f_cost
+        node.g_cost = g_cost
+        node.cell = cell
+        node.parent = parent
+        # Direction of the step from parent into this node
+        node.heading = heading
+        return node
 
 
 # 4-directional movement
@@ -69,8 +82,7 @@ def find_path(
     start_node = _AStarNode(
         f_cost=heuristic(start_col, start_row, end_col, end_row),
         g_cost=0,
-        col=start_col,
-        row=start_row,
+        cell=(start_col, start_row),
     )
 
     open_set: list[_AStarNode] = [start_node]
@@ -79,34 +91,42 @@ def find_path(
     closed: set[tuple[int, ...]] = set()
     best_g: dict[tuple[int, ...], float] = {(start_col, start_row): 0}
 
+    heappush = heapq.heappush
+    heappop = heapq.heappop
+    closed_add = closed.add
+    best_g_get = best_g.get
+
     iterations = 0
     while open_set and iterations < max_iterations:
         iterations += 1
-        current = heapq.heappop(open_set)
+        current = heappop(open_set)
+        cell = current.cell
+        col, row = cell
 
-        if current.col == end_col and current.row == end_row:
+        if col == end_col and row == end_row:
             return _reconstruct(current)
 
-        heading = None
-        if current.parent is not None:
-            heading = (current.col - current.parent.col, current.row - current.parent.row)
-        key: tuple[int, ...] = (current.col, current.row)
-        if key in cross and heading is not None:
+        heading = current.heading
+        in_crossing = cell in cross
+        key: tuple[int, ...] = cell
+        if in_crossing and heading is not None:
             key += heading
         if key in closed:
             continue
-        closed.add(key)
+        closed_add(key)
+        current_g = current.g_cost
 
-        for dc, dr in DIRS:
-            nc, nr = current.col + dc, current.row + dr
+        directions = (heading,) if in_crossing and heading is not None else DIRS
+        for direction in directions:
+            dc, dr = direction
+            nc, nr = col + dc, row + dr
             nkey = (nc, nr)
             state: tuple[int, ...] = nkey
-            if nkey in cross:
-                if (dc == 0) != cross[nkey]:
+            cross_horizontal = cross.get(nkey)
+            if cross_horizontal is not None:
+                if (dc == 0) != cross_horizontal:
                     continue
-                state += (dc, dr)
-            if (current.col, current.row) in cross and heading not in (None, (dc, dr)):
-                continue
+                state += direction
 
             if state in closed:
                 continue
@@ -124,24 +144,25 @@ def find_path(
                 step_cost += penalty(nc, nr)
 
             # Corner penalty: if direction changes from parent's direction
-            if heading is not None and (dc, dr) != heading:
+            if heading is not None and direction != heading:
                 step_cost += 0.5  # slight corner penalty in g-cost too
 
-            new_g = current.g_cost + step_cost
+            new_g = current_g + step_cost
 
-            if state in best_g and best_g[state] <= new_g:
+            prev_g = best_g_get(state)
+            if prev_g is not None and prev_g <= new_g:
                 continue
             best_g[state] = new_g
 
             h = heuristic(nc, nr, end_col, end_row)
             neighbor = _AStarNode(
-                f_cost=new_g + h,
-                g_cost=new_g,
-                col=nc,
-                row=nr,
-                parent=current,
+                new_g + h,
+                new_g,
+                nkey,
+                current,
+                direction,
             )
-            heapq.heappush(open_set, neighbor)
+            heappush(open_set, neighbor)
 
     return None  # No path found
 
@@ -151,7 +172,7 @@ def _reconstruct(node: _AStarNode) -> list[tuple[int, int]]:
     path: list[tuple[int, int]] = []
     current: _AStarNode | None = node
     while current is not None:
-        path.append((current.col, current.row))
+        path.append(current.cell)
         current = current.parent
     path.reverse()
     return path
