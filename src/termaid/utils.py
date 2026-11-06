@@ -74,9 +74,10 @@ def display_width(text: str) -> int:
 def max_line_width(text: str) -> int:
     """Return the display width of the widest line in *text*."""
     lines = text.split("\n")
-    # An ASCII line's width is its length. Fitting measures every candidate
-    # drawing, and checking each character took longer than the renders did.
-    if text.isascii():
+    # Without wide or zero-width characters a line's width is its length.
+    # Fitting measures every candidate drawing, and checking each character
+    # took longer than the renders did.
+    if text.isascii() or not any(_is_wide(ch) or _is_zero_width(ch) for ch in set(text)):
         return max(map(len, lines))
     return max(display_width(line) for line in lines)
 

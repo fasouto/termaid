@@ -177,3 +177,17 @@ class TestClusterBoundaries:
     def test_truncate_keeps_whole_clusters(self):
         assert truncate_to_width("ผู้ใช้งาน", 3, ellipsis="") == "ผู้ใช้"
         assert truncate_to_width("ผู้ใช้งาน", 3) == "ผู้ใ."
+
+
+class TestMaxLineWidth:
+    def test_matches_per_line_display_width_on_a_thai_box(self):
+        drawing = "┌────────┐\n│ ผู้ใช้ 日本 │\n└────────┘"
+        assert max_line_width(drawing) == max(display_width(line) for line in drawing.split("\n"))
+
+    def test_box_drawing_without_wide_or_zero_width_chars_skips_the_cell_walk(self, monkeypatch):
+        # Fitting measures every candidate drawing; walking cells there is the slow path.
+        def walk_cells(_text):
+            raise AssertionError("iter_cells called on a drawing with no wide or zero-width char")
+
+        monkeypatch.setattr("termaid.utils.iter_cells", walk_cells)
+        assert max_line_width("┌──┐\n│ab│\n└──┘") == 4
