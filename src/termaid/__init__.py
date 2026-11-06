@@ -42,17 +42,23 @@ def _skip_directives(text: str) -> str:
     return text[_LEADING_DIRECTIVES_RE.match(text).end():]
 
 
-def parse(source: str) -> Graph:
+def parse(source: str, *, partial: bool = False) -> Graph:
     """Parse mermaid syntax and return a Graph model.
 
     Auto-detects diagram type (flowchart or state diagram).
 
     Args:
         source: Mermaid diagram source text
+        partial: The source is the start of a diagram that is still arriving
+            (see :func:`render`)
 
     Returns:
         Parsed Graph model
     """
+    if partial:
+        from .partial import complete_partial
+
+        source = complete_partial(source)
     text = _skip_directives(_prepare_source(source))
     if text.startswith("stateDiagram"):
         return parse_state_diagram(text)
@@ -77,6 +83,7 @@ def _render_canvas(
     inline_edge_labels: bool,
     max_label_width: int | None,
     arrow_style: str = "pointer",
+    partial: bool = False,
 ) -> _Rendered:
     """Parse source, pick the renderer for its diagram type, and draw it."""
     # Pass padding_x and gap only when they differ from the flowchart
@@ -92,6 +99,10 @@ def _render_canvas(
     # Every renderer draws with this one character set.
     cs = build_charset(use_ascii, arrow_style)
 
+    if partial:
+        from .partial import complete_partial
+
+        source = complete_partial(source)
     prepared = _prepare_source(source)
     text = _skip_directives(prepared)
     if text.startswith("sequenceDiagram"):
@@ -206,6 +217,7 @@ def render(
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
     arrow_style: str = "pointer",
+    partial: bool = False,
 ) -> str:
     """Render mermaid syntax as Unicode (or ASCII) art.
 
@@ -224,6 +236,11 @@ def render(
             (``▷ ◁ ▽ △``). Class diagrams keep solid dependency arrows with
             ``"outline"``, since open triangles mean inheritance there. ASCII
             output ignores it. Raises ``ValueError`` for an unknown style.
+        partial: The source is the start of a diagram that is still arriving,
+            such as a streamed reply. Its last line, unless it ends with a
+            newline, may be unfinished: open brackets and quotes are closed so
+            a label shows the text so far, and an edge or message whose target
+            hasn't arrived is left out until it has.
 
     Returns:
         Rendered diagram as a string
@@ -242,6 +259,7 @@ def render(
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
         arrow_style=arrow_style,
+        partial=partial,
     ).canvas
     return canvas.to_string() if canvas is not None else ""
 
@@ -258,6 +276,7 @@ def render_rich(
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
     arrow_style: str = "pointer",
+    partial: bool = False,
 ):
     """Render mermaid syntax as a Rich Text object with colors.
 
@@ -279,6 +298,11 @@ def render_rich(
             (``▷ ◁ ▽ △``). Class diagrams keep solid dependency arrows with
             ``"outline"``, since open triangles mean inheritance there. ASCII
             output ignores it. Raises ``ValueError`` for an unknown style.
+        partial: The source is the start of a diagram that is still arriving,
+            such as a streamed reply. Its last line, unless it ends with a
+            newline, may be unfinished: open brackets and quotes are closed so
+            a label shows the text so far, and an edge or message whose target
+            hasn't arrived is left out until it has.
 
     Returns:
         rich.text.Text object
@@ -295,6 +319,7 @@ def render_rich(
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
         arrow_style=arrow_style,
+        partial=partial,
     )
     if rendered.graph is not None:
         return render_graph_rich(rendered.canvas, rendered.graph, theme=theme)
@@ -312,6 +337,7 @@ def render_styled(
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
     arrow_style: str = "pointer",
+    partial: bool = False,
 ) -> StyledDocument:
     """Render mermaid syntax as theme-independent styled chunks.
 
@@ -320,6 +346,7 @@ def render_styled(
     are listed in :mod:`termaid.output.styled`.
 
     ``arrow_style`` works as in :func:`render`.
+    ``partial`` works as in :func:`render`.
 
     Returns:
         ``{"version": 1, "lines": [[{"text": ..., "style": ...}, ...], ...]}``
@@ -336,6 +363,7 @@ def render_styled(
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
         arrow_style=arrow_style,
+        partial=partial,
     ).canvas)
 
 

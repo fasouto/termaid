@@ -4,6 +4,7 @@
 
 ### New
 - Arrowhead styles: `arrow_style=` in `render()`, `render_rich()`, `render_styled()` and `MermaidWidget`, `--arrow-style` on the command line, and `--arrow-styles` to list them. `pointer` is the default and draws as before (`► ◄ ▼ ▲`); `triangle` uses solid triangles in all four directions (`▶ ◀ ▼ ▲`), matching the up and down arrows; `outline` uses open triangles (`▷ ◁ ▽ △`). Class-diagram dependency arrows never take the shape of the inheritance markers, so with `outline` they stay solid. ASCII output is unchanged
+- Streaming: `partial=True` on `render()`, `render_rich()`, `render_styled()` and `parse()` draws the start of a diagram that is still arriving, such as a streamed reply. Unless the source ends with a newline, its last line may be unfinished: open brackets and quotes are closed, so a label shows the text so far (`C[Send sess`), and an edge or message whose target hasn't arrived is left out until it has (`B -->|ye`), instead of being drawn as nodes made of raw syntax. Default output is unchanged
 
 ### Fixes
 - Claude Code hook: a diagram too wide for the pane now wraps its labels to fit, as `--width` does, so a sequence diagram with long messages no longer comes out wider than the terminal and wraps into a mess. When Claude Code tells the hook the pane width (`COLUMNS`) or `--width` is given, a diagram that still does not fit is shown as its Mermaid source

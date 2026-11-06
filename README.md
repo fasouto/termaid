@@ -550,6 +550,21 @@ packet
 
 **Features:** bit-aligned field layouts, boundary numbers, auto-increment (`+N`) syntax, separated boxes per row, truncated label legend with bit ranges, `packet` and `packet-beta` keywords
 
+## Streaming
+
+When Mermaid source arrives a piece at a time (an LLM writing a reply, a file being
+typed), pass `partial=True` to redraw it as it grows:
+
+```python
+from termaid import render
+
+print(render(source_so_far, partial=True))
+```
+
+The last line, unless the source ends with a newline, is treated as unfinished:
+open brackets and quotes are closed, so a node's label shows the text so far, and an
+edge or message whose target hasn't arrived yet is left out until it has.
+
 ## CLI options
 
 | Flag | Description |
