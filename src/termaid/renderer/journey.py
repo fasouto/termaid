@@ -9,6 +9,7 @@ from __future__ import annotations
 from ..model.journey import Journey
 from ..utils import display_width
 from .canvas import Canvas
+from .charset import CharSet, default_charset
 
 
 _FACE = {
@@ -32,6 +33,7 @@ def render_journey(
     diagram: Journey,
     *,
     use_ascii: bool = False,
+    cs: CharSet | None = None,
     padding_x: int = 2,
     gap: int = 1,
     rounded: bool = True,
@@ -49,7 +51,8 @@ def render_journey(
         tl, tr, bl, br = "╭", "╮", "╰", "╯"
     else:
         tl, tr, bl, br = "┌", "┐", "└", "┘"
-    arrow = ">" if use_ascii else "►"
+    cs = cs or default_charset(use_ascii)
+    arrow = cs.arrow_right
     dot = "o" if use_ascii else "●"
 
     # Collect all tasks and compute widths

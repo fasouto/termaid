@@ -1,6 +1,6 @@
 {
   "name": "termaid",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Draw the Mermaid diagrams in Claude's replies right in the terminal",
   "author": { "name": "Fabio Souto", "url": "https://github.com/fasouto" },
   "license": "MIT",

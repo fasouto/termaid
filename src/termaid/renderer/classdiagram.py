@@ -9,7 +9,7 @@ from collections import deque
 
 from ..model.classdiagram import ClassDef, ClassDiagram, Note, Relationship
 from .canvas import Canvas
-from .charset import ASCII, UNICODE, CharSet
+from .charset import ASCII, CharSet, default_charset
 from .relation_tracks import assign_tracks
 from ..utils import display_width
 
@@ -444,28 +444,18 @@ def _draw_routed_line(
             canvas.put(mid_row, c2, corner2, merge=False, style=style)
 
 
-def _marker_char(marker: str, direction: str) -> str:
+def _marker_char(marker: str, direction: str, cs: CharSet) -> str:
     """Return the display character for a relationship marker."""
     if marker == "|>" or marker == "<|":
         # Open triangle (inheritance)
-        if direction == "down":
-            return "▽"
-        elif direction == "up":
-            return "△"
-        elif direction == "right":
-            return "▷"
-        else:
-            return "◁"
+        return {
+            "down": cs.inherit_down, "up": cs.inherit_up, "right": cs.inherit_right,
+        }.get(direction, cs.inherit_left)
     elif marker == ">" or marker == "<":
         # Filled arrow (dependency)
-        if direction == "down":
-            return "▼"
-        elif direction == "up":
-            return "▲"
-        elif direction == "right":
-            return "►"
-        else:
-            return "◄"
+        return {
+            "down": cs.dependency_down, "up": cs.dependency_up, "right": cs.dependency_right,
+        }.get(direction, cs.dependency_left)
     elif marker == "*":
         return "◆"
     elif marker == "o":
@@ -571,8 +561,8 @@ def _draw_relationship(
 
         # Draw markers at endpoints
         if not use_ascii:
-            src_marker_ch = _marker_char(rel.source_marker, src_dir)
-            tgt_marker_ch = _marker_char(rel.target_marker, tgt_dir)
+            src_marker_ch = _marker_char(rel.source_marker, src_dir, cs)
+            tgt_marker_ch = _marker_char(rel.target_marker, tgt_dir, cs)
             if src_marker_ch:
                 canvas.put(start_row, start_col, src_marker_ch, merge=False, style="arrow")
             if tgt_marker_ch:
@@ -819,9 +809,9 @@ def _layout_notes(
     return note_positions, adjusted, max_w + _MARGIN, max_h + _MARGIN
 
 
-def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padding_x: int = 2, gap: int = 4) -> Canvas:
+def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padding_x: int = 2, gap: int = 4, cs: CharSet | None = None) -> Canvas:
     """Render a ClassDiagram to a Canvas."""
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     positions, sizes, width, height, layer_of, run_rows = _compute_layout(diagram, padding_x=padding_x, gap=gap)
     if width <= 1 and not diagram.notes:

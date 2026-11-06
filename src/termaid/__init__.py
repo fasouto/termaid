@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .renderer.canvas import Canvas
 
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 _LEADING_DIRECTIVES_RE = re.compile(rf"(?:{DIRECTIVE}|%%[^\n]*|\s+)*")
@@ -42,17 +42,23 @@ def _skip_directives(text: str) -> str:
     return text[_LEADING_DIRECTIVES_RE.match(text).end():]
 
 
-def parse(source: str) -> Graph:
+def parse(source: str, *, partial: bool = False) -> Graph:
     """Parse mermaid syntax and return a Graph model.
 
     Auto-detects diagram type (flowchart or state diagram).
 
     Args:
         source: Mermaid diagram source text
+        partial: The source is the start of a diagram that is still arriving
+            (see :func:`render`)
 
     Returns:
         Parsed Graph model
     """
+    if partial:
+        from .partial import complete_partial
+
+        source = complete_partial(source)
     text = _skip_directives(_prepare_source(source))
     if text.startswith("stateDiagram"):
         return parse_state_diagram(text)
@@ -76,6 +82,8 @@ def _render_canvas(
     gap: int,
     inline_edge_labels: bool,
     max_label_width: int | None,
+    arrow_style: str = "pointer",
+    partial: bool = False,
 ) -> _Rendered:
     """Parse source, pick the renderer for its diagram type, and draw it."""
     # Pass padding_x and gap only when they differ from the flowchart
@@ -86,36 +94,45 @@ def _render_canvas(
     if gap != 4:
         extra["gap"] = gap
 
+    from .renderer.charset import build_charset
+
+    # Every renderer draws with this one character set.
+    cs = build_charset(use_ascii, arrow_style)
+
+    if partial:
+        from .partial import complete_partial
+
+        source = complete_partial(source)
     prepared = _prepare_source(source)
     text = _skip_directives(prepared)
     if text.startswith("sequenceDiagram"):
         from .parser.sequence import parse_sequence_diagram
         from .renderer.sequence import render_sequence
         return _Rendered(render_sequence(
-            parse_sequence_diagram(text), use_ascii=use_ascii,
+            parse_sequence_diagram(text), use_ascii=use_ascii, cs=cs,
             max_label_width=max_label_width, **extra,
         ))
 
     if text.startswith("classDiagram"):
         from .parser.classdiagram import parse_class_diagram
         from .renderer.classdiagram import render_class_diagram
-        return _Rendered(render_class_diagram(parse_class_diagram(text), use_ascii=use_ascii, **extra))
+        return _Rendered(render_class_diagram(parse_class_diagram(text), use_ascii=use_ascii, cs=cs, **extra))
 
     if text.startswith("erDiagram"):
         from .parser.erdiagram import parse_er_diagram
         from .renderer.erdiagram import render_er_diagram
-        return _Rendered(render_er_diagram(parse_er_diagram(text), use_ascii=use_ascii, **extra))
+        return _Rendered(render_er_diagram(parse_er_diagram(text), use_ascii=use_ascii, cs=cs, **extra))
 
     if text.startswith("block"):
         from .parser.blockdiagram import parse_block_diagram
         from .renderer.blockdiagram import render_block_diagram
-        return _Rendered(render_block_diagram(parse_block_diagram(text), use_ascii=use_ascii, **extra))
+        return _Rendered(render_block_diagram(parse_block_diagram(text), use_ascii=use_ascii, cs=cs, **extra))
 
     if text.startswith("gitGraph"):
         from .parser.gitgraph import parse_git_graph
         from .renderer.gitgraph import render_git_graph
         # gitGraph reads mainBranchName from its %%{init}%% directive.
-        return _Rendered(render_git_graph(parse_git_graph(prepared), use_ascii=use_ascii))
+        return _Rendered(render_git_graph(parse_git_graph(prepared), use_ascii=use_ascii, cs=cs))
 
     if text.startswith("gantt"):
         from .parser.gantt import parse_gantt
@@ -130,7 +147,7 @@ def _render_canvas(
     if text.startswith("treemap"):
         from .parser.treemap import parse_treemap
         from .renderer.treemap import render_treemap
-        return _Rendered(render_treemap(parse_treemap(text), use_ascii=use_ascii))
+        return _Rendered(render_treemap(parse_treemap(text), use_ascii=use_ascii, cs=cs))
 
     if text.startswith("mindmap"):
         from .parser.mindmap import parse_mindmap
@@ -151,17 +168,17 @@ def _render_canvas(
     if text.startswith("journey"):
         from .parser.journey import parse_journey
         from .renderer.journey import render_journey
-        return _Rendered(render_journey(parse_journey(text), use_ascii=use_ascii, rounded=rounded_edges, **extra))
+        return _Rendered(render_journey(parse_journey(text), use_ascii=use_ascii, cs=cs, rounded=rounded_edges, **extra))
 
     if text.startswith("timeline"):
         from .parser.timeline import parse_timeline
         from .renderer.timeline import render_timeline
-        return _Rendered(render_timeline(parse_timeline(text), use_ascii=use_ascii))
+        return _Rendered(render_timeline(parse_timeline(text), use_ascii=use_ascii, cs=cs))
 
     if text.startswith("kanban"):
         from .parser.kanban import parse_kanban
         from .renderer.kanban import render_kanban
-        return _Rendered(render_kanban(parse_kanban(text), use_ascii=use_ascii, **extra))
+        return _Rendered(render_kanban(parse_kanban(text), use_ascii=use_ascii, cs=cs, **extra))
 
     if text.startswith("quadrantChart"):
         from .parser.quadrant import parse_quadrant
@@ -177,6 +194,7 @@ def _render_canvas(
         graph = parse(text)
     canvas = draw.render_graph_canvas(
         graph,
+        cs=cs,
         use_ascii=use_ascii,
         padding_x=padding_x,
         padding_y=padding_y,
@@ -198,6 +216,8 @@ def render(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    arrow_style: str = "pointer",
+    partial: bool = False,
 ) -> str:
     """Render mermaid syntax as Unicode (or ASCII) art.
 
@@ -211,6 +231,16 @@ def render(
         max_label_width: Wrap labels wider than this many columns at word
             boundaries. Applies to flowcharts (default 20) and sequence
             diagrams (unwrapped by default); other diagram types ignore it.
+        arrow_style: Arrowheads for Unicode output: ``"pointer"`` (default,
+            ``► ◄ ▼ ▲``), ``"triangle"`` (``▶ ◀ ▼ ▲``) or ``"outline"``
+            (``▷ ◁ ▽ △``). Class diagrams keep solid dependency arrows with
+            ``"outline"``, since open triangles mean inheritance there. ASCII
+            output ignores it. Raises ``ValueError`` for an unknown style.
+        partial: The source is the start of a diagram that is still arriving,
+            such as a streamed reply. Its last line, unless it ends with a
+            newline, may be unfinished: open brackets and quotes are closed so
+            a label shows the text so far, and an edge or message whose target
+            hasn't arrived is left out until it has.
 
     Returns:
         Rendered diagram as a string
@@ -228,6 +258,8 @@ def render(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        arrow_style=arrow_style,
+        partial=partial,
     ).canvas
     return canvas.to_string() if canvas is not None else ""
 
@@ -243,6 +275,8 @@ def render_rich(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    arrow_style: str = "pointer",
+    partial: bool = False,
 ):
     """Render mermaid syntax as a Rich Text object with colors.
 
@@ -259,6 +293,16 @@ def render_rich(
         max_label_width: Wrap labels wider than this many columns at word
             boundaries. Applies to flowcharts (default 20) and sequence
             diagrams (unwrapped by default); other diagram types ignore it.
+        arrow_style: Arrowheads for Unicode output: ``"pointer"`` (default,
+            ``► ◄ ▼ ▲``), ``"triangle"`` (``▶ ◀ ▼ ▲``) or ``"outline"``
+            (``▷ ◁ ▽ △``). Class diagrams keep solid dependency arrows with
+            ``"outline"``, since open triangles mean inheritance there. ASCII
+            output ignores it. Raises ``ValueError`` for an unknown style.
+        partial: The source is the start of a diagram that is still arriving,
+            such as a streamed reply. Its last line, unless it ends with a
+            newline, may be unfinished: open brackets and quotes are closed so
+            a label shows the text so far, and an edge or message whose target
+            hasn't arrived is left out until it has.
 
     Returns:
         rich.text.Text object
@@ -274,6 +318,8 @@ def render_rich(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        arrow_style=arrow_style,
+        partial=partial,
     )
     if rendered.graph is not None:
         return render_graph_rich(rendered.canvas, rendered.graph, theme=theme)
@@ -290,12 +336,17 @@ def render_styled(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    arrow_style: str = "pointer",
+    partial: bool = False,
 ) -> StyledDocument:
     """Render mermaid syntax as theme-independent styled chunks.
 
     Each line of the result is a list of ``{"text", "style"}`` chunks whose
     joined text equals the matching line of :func:`render`. The style keys
     are listed in :mod:`termaid.output.styled`.
+
+    ``arrow_style`` works as in :func:`render`.
+    ``partial`` works as in :func:`render`.
 
     Returns:
         ``{"version": 1, "lines": [[{"text": ..., "style": ...}, ...], ...]}``
@@ -311,6 +362,8 @@ def render_styled(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        arrow_style=arrow_style,
+        partial=partial,
     ).canvas)
 
 

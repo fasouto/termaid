@@ -9,6 +9,7 @@ import stat
 import pytest
 
 from termaid.claude_hook import StreamRenderer, run_claude_hook
+from termaid.utils import display_width
 
 
 FLOW = "```mermaid\ngraph LR\n  A[Start] --> B[End]\n```\n"
@@ -89,9 +90,9 @@ def _event(delta: str, *, message_id: str, index: int, final: bool) -> str:
     })
 
 
-def _run(delta: str, **kw) -> str:
+def _run(delta: str, width: int | None = 60, **kw) -> str:
     out = io.StringIO()
-    rc = run_claude_hook(io.StringIO(_event(delta, **kw)), out, width=60)
+    rc = run_claude_hook(io.StringIO(_event(delta, **kw)), out, width=width)
     assert rc == 0
     return json.loads(out.getvalue())["hookSpecificOutput"]["displayContent"]
 
@@ -111,6 +112,48 @@ def test_hook_single_call_mode_draws_whole_message(tmp_path, monkeypatch):
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
     out = _run("a\n" + FLOW + "b", message_id="m", index=0, final=True)
     assert out.startswith("a\n```\n") and out.endswith("```\nb")
+
+
+LONG_LABELS = (
+    "sequenceDiagram\n"
+    "  participant Gateway\n  participant Orders\n"
+    "  Gateway->>Orders: please fetch the complete order history for this customer\n"
+    "  Orders-->>Gateway: the rows, or an empty list when nothing matched\n"
+)
+TOO_WIDE = "graph LR\n  " + " --> ".join(f"N{i}" for i in range(30)) + "\n"
+
+
+def _fenced(source: str) -> str:
+    return "Before\n```mermaid\n" + source + "```\nAfter\n"
+
+
+def _widest(text: str) -> int:
+    return max(display_width(line) for line in text.split("\n"))
+
+
+def test_hook_wraps_long_labels_to_fit_the_width(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    out = _run(_fenced(LONG_LABELS), message_id="m", index=0, final=True)
+    assert "```mermaid" not in out and "history" in out
+    assert _widest(out) <= 60
+
+
+@pytest.mark.parametrize("env, width", [({"COLUMNS": "44"}, None), ({}, 40)])
+def test_hook_leaves_a_diagram_too_wide_for_a_known_width_as_source(tmp_path, monkeypatch, env, width):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.delenv("COLUMNS", raising=False)
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    text = _fenced(TOO_WIDE)
+    assert _run(text, width=width, message_id="m", index=0, final=True) == text
+
+
+def test_hook_still_draws_a_wide_diagram_when_the_width_is_unknown(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.delenv("COLUMNS", raising=False)
+    out = _run(_fenced(TOO_WIDE), width=None, message_id="m", index=0, final=True)
+    assert "```mermaid" not in out and "N29" in out
+    assert _widest(out) > 80
 
 
 def test_hook_ignores_bad_input():

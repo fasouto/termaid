@@ -5,6 +5,16 @@
 ### Fixes
 - Flowchart: stadium nodes (`([text])`) draw as a capsule whose corners step in (`╭╯ … ╰╮`) when there is room for straight sides beside the label. Shorter, they keep the rounded box with ornament parentheses for sides (`❨ Done ❩`), in place of `( )` under rounded corners, which could look like a broken box in some fonts. ASCII draws the capsule with diagonal steps (`/  \`) and keeps `( )` sides for the short form
 - Flowchart: with `padding_y` below 2, a cylinder's lid gets its own row instead of sharing the label's row (`│╰─Database─╯│`), and the label is centred in the body below it
+## 0.12.0 (2026-11-06)
+
+### New
+- Arrowhead styles: `arrow_style=` in `render()`, `render_rich()`, `render_styled()` and `MermaidWidget`, `--arrow-style` on the command line, and `--arrow-styles` to list them. `pointer` is the default and draws as before (`► ◄ ▼ ▲`); `triangle` uses solid triangles in all four directions (`▶ ◀ ▼ ▲`), matching the up and down arrows; `outline` uses open triangles (`▷ ◁ ▽ △`). Class-diagram dependency arrows never take the shape of the inheritance markers, so with `outline` they stay solid. ASCII output is unchanged (#36, #37, thanks @visionik)
+- Streaming: `partial=True` on `render()`, `render_rich()`, `render_styled()` and `parse()` draws the start of a diagram that is still arriving, such as a streamed reply. Unless the source ends with a newline, its last line may be unfinished: open brackets and quotes are closed, so a label shows the text so far (`C[Send sess`), and an edge or message whose target hasn't arrived is left out until it has (`B -->|ye`), instead of being drawn as nodes made of raw syntax. Default output is unchanged. An unfinished line longer than 1,000 characters waits for its newline (#38, thanks @visionik)
+
+### Fixes
+- Flowchart: a longer link such as `A ---> B` or `A ===> B`, which spans an extra rank, no longer fails with "division by zero". It broke in 0.9.1
+- Flowchart: edge routing is faster. A chain of 100 nodes draws in about 15 ms instead of 22, and a cycle of two-way links in 6 ms instead of 10. The drawings are unchanged (#39, #40, thanks @dexhunter)
+- Claude Code hook: a diagram too wide for the pane now wraps its labels to fit, as `--width` does, so a sequence diagram with long messages no longer comes out wider than the terminal and wraps into a mess. When Claude Code tells the hook the pane width (`COLUMNS`) or `--width` is given, a diagram that still does not fit is shown as its Mermaid source
 
 ## 0.11.0 (2026-11-06)
 

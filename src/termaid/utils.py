@@ -36,6 +36,60 @@ def display_width(text: str) -> int:
     return w
 
 
+def max_line_width(text: str) -> int:
+    """Return the display width of the widest line in *text*."""
+    lines = text.split("\n")
+    # Without wide characters a line's width is its length. Fitting measures
+    # every candidate drawing, and checking each character took longer than
+    # the renders did.
+    if not any(_is_wide(ch) for ch in set(text)):
+        return max(map(len, lines))
+    return max(display_width(line) for line in lines)
+
+
+def fit_to_width(render, result, target_width: int, *, gap: int = 4, padding_x: int = 4, plain=str):
+    """Fit a drawing to *target_width* columns, or get as close as it can.
+
+    *render* draws the diagram with keyword overrides (``gap``,
+    ``padding_x``, ``max_label_width``) and *result* is its drawing at
+    *gap* and *padding_x*. Spacing shrinks one step at a time. If that is
+    not enough, labels wrap at word boundaries, at the widest label width
+    that fits. When nothing fits, the narrowest drawing tried comes back.
+    *plain* gives a drawing's text, for drawings that are not strings.
+    """
+    def width_of(candidate) -> int:
+        return max_line_width(plain(candidate))
+
+    if width_of(result) <= target_width:
+        return result
+
+    for step_gap, step_padding in ((min(gap, 2), padding_x), (1, padding_x), (1, 2), (1, 0)):
+        if step_gap >= gap and step_padding >= padding_x:
+            continue
+        candidate = render(gap=step_gap, padding_x=step_padding)
+        if width_of(candidate) <= target_width:
+            return candidate
+        result = candidate
+
+    # Spacing alone was not enough: wrap labels and keep the widest label
+    # width that fits. Width 1 goes first: if it changes nothing, this diagram
+    # type ignores label width; if it still overflows, nothing will fit.
+    narrowest = render(gap=1, padding_x=0, max_label_width=1)
+    if plain(narrowest) != plain(result):
+        result = narrowest
+        if width_of(narrowest) <= target_width:
+            low, high = 2, min(target_width, 64)
+            while low <= high:
+                label_width = (low + high) // 2
+                candidate = render(gap=1, padding_x=0, max_label_width=label_width)
+                if width_of(candidate) <= target_width:
+                    result = candidate
+                    low = label_width + 1
+                else:
+                    high = label_width - 1
+    return result
+
+
 def _text_break(text: str, cell_limit_end: int) -> int:
     """Find the last word or identifier boundary inside a display-cell budget.
 

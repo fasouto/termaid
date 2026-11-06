@@ -27,16 +27,20 @@ def _get_widget_class():
             self,
             source: str = "",
             use_ascii: bool = False,
+            arrow_style: str = "pointer",
             **kwargs,
         ) -> None:
             super().__init__(**kwargs)
             self.source = source
             self._use_ascii = use_ascii
+            self._arrow_style = arrow_style
 
         def render(self) -> str:
             if not self.source:
                 return ""
             from .. import render as _render
-            return _render(self.source, use_ascii=self._use_ascii)
+            return _render(
+                self.source, use_ascii=self._use_ascii, arrow_style=self._arrow_style
+            )
 
     return MermaidWidget

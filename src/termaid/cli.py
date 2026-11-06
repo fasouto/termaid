@@ -9,7 +9,7 @@ import sys
 from typing import NoReturn
 
 from .diagnostics import Diagnostic
-from .utils import display_width
+from .utils import display_width, fit_to_width, max_line_width
 
 
 def _get_version() -> str:
@@ -46,11 +46,6 @@ def _report(
     return diagnostic.emit(args.diagnostics_format)
 
 
-def _max_line_width(text: str) -> int:
-    """Return the width of the longest line in text."""
-    return max((display_width(line) for line in text.split("\n")), default=0)
-
-
 def _plain(result) -> str:
     """Plain-text view of a render result (str, rich.text.Text or StyledDocument)."""
     if isinstance(result, dict):
@@ -65,7 +60,7 @@ def _auto_fit(
     render_fn,
     target_width: int | None = None,
 ):
-    """Re-render with smaller gap/padding if the diagram exceeds target width.
+    """Fit the diagram to the target width, warning when it still does not fit.
 
     target_width: explicit width limit (from --width), or None to use
     terminal width.  Disabled when --no-auto-fit is set or output is
@@ -76,12 +71,6 @@ def _auto_fit(
             return result
         target_width = shutil.get_terminal_size().columns
 
-    def width_of(candidate) -> int:
-        return _max_line_width(_plain(candidate))
-
-    if width_of(result) <= target_width:
-        return result
-
     def render(**overrides):
         return render_fn(
             source,
@@ -89,46 +78,13 @@ def _auto_fit(
             padding_y=args.padding_y,
             rounded_edges=not args.sharp_edges,
             inline_edge_labels=args.inline_edge_labels,
+            arrow_style=args.arrow_style,
             **overrides,
         )
 
-    # Progressively compact: reduce gap, then padding
-    compact_steps = [
-        {"gap": min(args.gap, 2)},
-        {"gap": 1},
-        {"gap": 1, "padding_x": 2},
-        {"gap": 1, "padding_x": 0},
-    ]
+    result = fit_to_width(render, result, target_width, gap=args.gap, padding_x=args.padding_x, plain=_plain)
 
-    for overrides in compact_steps:
-        gap = overrides.get("gap", args.gap)
-        px = overrides.get("padding_x", args.padding_x)
-        if gap >= args.gap and px >= args.padding_x:
-            continue
-        candidate = render(gap=gap, padding_x=px)
-        if width_of(candidate) <= target_width:
-            return candidate
-        result = candidate
-
-    # Spacing alone was not enough: wrap labels and keep the widest label
-    # width that fits. Width 1 goes first: if it changes nothing, this diagram
-    # type ignores label width; if it still overflows, nothing will fit.
-    narrowest = render(gap=1, padding_x=0, max_label_width=1)
-    if _plain(narrowest) != _plain(result):
-        result = narrowest
-        if width_of(narrowest) <= target_width:
-            low, high = 2, min(target_width, 64)
-            while low <= high:
-                label_width = (low + high) // 2
-                candidate = render(gap=1, padding_x=0, max_label_width=label_width)
-                if width_of(candidate) <= target_width:
-                    result = candidate
-                    low = label_width + 1
-                else:
-                    high = label_width - 1
-            return result
-
-    actual_width = width_of(result)
+    actual_width = max_line_width(_plain(result))
     if actual_width > target_width and not args.strict_width:
         _report(
             args,
@@ -211,6 +167,12 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=2,
         help="Vertical padding inside node boxes (default: 2)",
+    )
+    parser.add_argument(
+        "--arrow-style",
+        choices=("pointer", "triangle", "outline"),
+        default="pointer",
+        help="Arrowheads: pointer (default, ► ◄ ▼ ▲), triangle (▶ ◀ ▼ ▲) or outline (▷ ◁ ▽ △). See --arrow-styles",
     )
     parser.add_argument(
         "--gap",
@@ -308,6 +270,11 @@ def main(argv: list[str] | None = None) -> int:
              "response as JSON on stdin and draw its Mermaid blocks in place.",
     )
     parser.add_argument(
+        "--arrow-styles",
+        action="store_true",
+        help="List available arrowhead styles and exit.",
+    )
+    parser.add_argument(
         "--themes",
         action="store_true",
         help="List available color themes and exit.",
@@ -343,6 +310,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.themes:
         return _list_themes()
+
+    if args.arrow_styles:
+        return _list_arrow_styles()
 
     if args.demo is not None:
         return _run_demo(args)
@@ -424,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
                         console = Console(
                             file=f,
                             force_terminal=True,
-                            width=max(_max_line_width(_plain(rich_result)), 80),
+                            width=max(max_line_width(_plain(rich_result)), 80),
                         )
                         console.print(rich_result)
                 except OSError as e:
@@ -450,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def _check_output(text: str, args: argparse.Namespace) -> int | None:
     """Apply --strict-width and --max-height to the final output; 2 when violated."""
-    width = _max_line_width(text)
+    width = max_line_width(text)
     height = len(text.split("\n"))
     if args.strict_width and width > args.width:
         return _report(
@@ -479,6 +449,7 @@ def _render_one(source: str, args: argparse.Namespace, render_fn, target_width: 
         rounded_edges=not args.sharp_edges,
         gap=args.gap,
         inline_edge_labels=args.inline_edge_labels,
+        arrow_style=args.arrow_style,
     )
     return _auto_fit(result, source, args, render_fn=render_fn, target_width=target_width)
 
@@ -569,6 +540,7 @@ def _run_tui(source: str, args: argparse.Namespace) -> int:
                 padding_y=args.padding_y,
                 rounded_edges=not args.sharp_edges,
                 gap=args.gap,
+                arrow_style=args.arrow_style,
             ))
 
     DiagramApp().run()
@@ -625,6 +597,20 @@ def _list_themes() -> int:
         print(f"  {name:12s} {tag:8s} {desc}")
     return 0
 
+
+
+def _list_arrow_styles() -> int:
+    """List available arrowhead styles."""
+    from .renderer.charset import ARROW_STYLES
+
+    descriptions = {
+        "pointer": "Pointers (default)",
+        "triangle": "Solid triangles, matching the up and down arrows",
+        "outline": "Open triangles",
+    }
+    for name, (right, left, down, up) in ARROW_STYLES.items():
+        print(f"  {name:10s} {right} {left} {down} {up}   {descriptions.get(name, '')}")
+    return 0
 
 _DEMO_SOURCES = {
     "flowchart": ("Flowchart", "graph TD\n  A[Start] --> B{Decision}\n  B -->|Yes| C[Process]\n  B -->|No| D[End]\n  C --> D"),

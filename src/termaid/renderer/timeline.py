@@ -8,16 +8,17 @@ from __future__ import annotations
 from ..model.timeline import Timeline
 from ..utils import display_width
 from .canvas import Canvas
-from .charset import ASCII, UNICODE, CharSet
+from .charset import CharSet, default_charset
 
 
 def render_timeline(
     diagram: Timeline,
     *,
     use_ascii: bool = False,
+    cs: CharSet | None = None,
 ) -> Canvas:
     """Render a Timeline model to a Canvas."""
-    cs = ASCII if use_ascii else UNICODE
+    cs = cs or default_charset(use_ascii)
 
     if not diagram.sections:
         return Canvas(1, 1)

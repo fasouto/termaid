@@ -1,6 +1,6 @@
 <h1 align="center">termaid</h1>
 
-<p align="center">Render Mermaid diagrams in your terminal or Python app.</p>
+<p align="center">Render Mermaid diagrams in your terminal, in Claude Code, or in your Python app.</p>
 
 <p align="center">
   <img src="termaid-demo.gif" alt="termaid demo" width="800">
@@ -10,17 +10,13 @@
 
 ## Features
 
+- **Draws the Mermaid diagrams in Claude Code's replies as they stream** ([setup](#claude-code-plugin)). It also draws the Mermaid blocks in Markdown files
 - 18 diagram types: flowcharts, sequence, class, ER, state, block, git, gantt, architecture, pie, treemap, mindmap, timeline, kanban, quadrant, XY chart, user journey, and packet
 - No dependencies. The core is pure Python
 - Fits the terminal width: it tightens spacing first, then wraps labels at word boundaries
 - Colored output with Rich and a TUI widget for Textual, as optional extras, with 11 themes
 - `--ascii` for terminals without box-drawing characters
 - Reads from a file or stdin: `cat diagram.mmd | termaid`
-- Draws the Mermaid blocks in a Markdown file, or in Claude Code's replies, in place
-
-## Why?
-
-Mermaid is great for documentation, but rendering it usually means spinning up a browser or calling an external service. termaid lets you render diagrams over SSH, in CI logs, inside TUI apps, or anywhere you have a Python environment. I built it because the existing tools in this space, like [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) (Go) and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) (TypeScript), don't offer a native Python library you can import and call directly.
 
 ## Install
 
@@ -41,6 +37,24 @@ Or try it without installing:
 ```bash
 uvx termaid diagram.mmd
 ```
+
+### Claude Code plugin
+
+The plugin calls the `termaid` command, so install that first with `brew install termaid` or `uv tool install termaid`. Then run this in Claude Code 2.1.275 or later:
+
+```
+/plugin install termaid --marketplace fasouto/termaid
+```
+
+Claude Code then draws the Mermaid diagrams in Claude's replies. Ask for a diagram in plain words, for example:
+
+- "Draw a diagram of the main components of this app and how they connect"
+- "Show what happens when a user logs in, as a sequence diagram"
+- "Draw the database models and how they relate"
+- "Draw the states an order goes through, from cart to delivery"
+- "Turn this migration plan into a gantt chart"
+
+[Claude Code](#claude-code) covers older versions and a setup without the plugin.
 
 ## Quick start
 
@@ -536,6 +550,21 @@ packet
 
 **Features:** bit-aligned field layouts, boundary numbers, auto-increment (`+N`) syntax, separated boxes per row, truncated label legend with bit ranges, `packet` and `packet-beta` keywords
 
+## Streaming
+
+When Mermaid source arrives a piece at a time (an LLM writing a reply, a file being
+typed), pass `partial=True` to redraw it as it grows:
+
+```python
+from termaid import render
+
+print(render(source_so_far, partial=True))
+```
+
+The last line, unless the source ends with a newline, is treated as unfinished:
+open brackets and quotes are closed, so a node's label shows the text so far, and an
+edge or message whose target hasn't arrived yet is left out until it has.
+
 ## CLI options
 
 | Flag | Description |
@@ -547,6 +576,8 @@ packet
 | `--padding-x N` | Horizontal padding inside boxes (default: 4) |
 | `--padding-y N` | Vertical padding inside boxes (default: 2) |
 | `--gap N` | Space between nodes (default: 4). Use `1` or `2` for compact diagrams |
+| `--arrow-style STYLE` | Arrowheads: `pointer` (default, `► ◄ ▼ ▲`), `triangle` (`▶ ◀ ▼ ▲`) or `outline` (`▷ ◁ ▽ △`). Also `arrow_style=` in `render()`, `render_rich()`, `render_styled()` and `MermaidWidget` |
+| `--arrow-styles` | List the arrowhead styles |
 | `--inline-edge-labels` | Attach flowchart labels directly to their edges |
 | `--width N` | Max output width. Re-renders with smaller gap/padding, then wraps labels, if exceeded |
 | `--strict-width` | Exit with status 2 instead of a warning when the output is still wider than `--width` |
@@ -622,9 +653,9 @@ pip install termaid[textual]   # Textual TUI widget
 
 ## Claude Code
 
-Claude draws Mermaid diagrams all the time. With the termaid plugin they show up
-in the terminal as diagrams instead of code fences, while Claude keeps seeing the
-Mermaid source. One command on Claude Code 2.1.275 or later:
+Claude often answers with Mermaid diagrams. With the termaid plugin, Claude Code shows
+them as drawings instead of code fences, and Claude still sees the Mermaid source.
+On Claude Code 2.1.275 or later, install it with one command:
 
 ```
 /plugin install termaid --marketplace fasouto/termaid
@@ -705,6 +736,10 @@ actual and target widths in `details`. With `--strict-width` it is an error.
 ## Gallery
 
 See the [examples page](https://fasouto.github.io/termaid-web/examples.html) for rendered examples of all 18 supported diagram types.
+
+## Why?
+
+Rendering Mermaid usually takes a browser or an external service. termaid draws diagrams as text, so they work over SSH, in CI logs, in TUI apps, and anywhere Python runs. I built it because the other text renderers, [mermaid-ascii](https://github.com/AlexanderGrooff/mermaid-ascii) (Go) and [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid) (TypeScript), have no Python library to import.
 
 ## Acknowledgements
 

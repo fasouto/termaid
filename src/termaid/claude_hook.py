@@ -26,9 +26,10 @@ import stat
 import sys
 import tempfile
 from dataclasses import asdict, dataclass, field
+from functools import partial
 
 from .markdown import _OPEN, _dedent
-from .utils import display_width
+from .utils import display_width, fit_to_width, max_line_width
 
 _DEFAULT_WIDTH = 80
 _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
@@ -124,18 +125,19 @@ class StreamRenderer:
         if not source.strip():
             return None
         width = self.width
+        # Claude Code sets COLUMNS to the pane width; older versions did not.
+        columns = os.environ.get("COLUMNS", "").strip()
+        known = width is not None or (columns.isdigit() and int(columns) > 0)
         if width is None:
             width = max(shutil.get_terminal_size((_DEFAULT_WIDTH, 24)).columns - _MARGIN, 20)
         width = max(width - display_width(self.indent), 20)
         try:
-            text = render(source, use_ascii=self.use_ascii)
-            for gap, pad in ((2, 4), (1, 2), (1, 0)):
-                if _widest(text) <= width:
-                    break
-                text = render(source, use_ascii=self.use_ascii, gap=gap, padding_x=pad)
+            draw = partial(render, source, use_ascii=self.use_ascii)
+            text = fit_to_width(draw, draw(), width)
         except Exception:
             return None
-        if not text.strip():
+        # A drawing wider than the pane wraps into a garble; the source reads better.
+        if not text.strip() or (known and max_line_width(text) > width):
             return None
         # A code fence keeps the box characters monospaced and unformatted
         # when the display renders Markdown.
@@ -154,10 +156,6 @@ class StreamRenderer:
         self.held = list(saved.get("held", []))
         self.held_size = sum(len(line) + 1 for line in self.held)
         self.carry = saved.get("carry", "")
-
-
-def _widest(text: str) -> int:
-    return max((display_width(line) for line in text.split("\n")), default=0)
 
 
 def _state_dir() -> str | None:

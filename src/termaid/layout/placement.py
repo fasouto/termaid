@@ -50,6 +50,9 @@ def _aligned_slots(graph: Graph, layer_order: list[list[str]]) -> dict[str, int]
 
     def _sweep(order: list[list[str]], neighbours: dict[str, list[str]]) -> None:
         for nodes in order:
+            if not nodes:
+                # A longer link (A ---> B) leaves its middle ranks empty.
+                continue
             wants: list[float] = []
             for nid in nodes:
                 anchors = [slots[n] for n in neighbours[nid]]
