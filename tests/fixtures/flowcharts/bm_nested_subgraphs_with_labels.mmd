@@ -1,0 +1,10 @@
+graph TD
+A[Web Server] --> B[API Gateway]
+B --> C[Web Server]
+subgraph Frontend
+A
+end
+subgraph Backend
+B
+C
+end

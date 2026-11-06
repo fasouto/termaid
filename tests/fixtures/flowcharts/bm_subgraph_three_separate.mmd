@@ -1,0 +1,12 @@
+graph LR
+subgraph Frontend
+    UI
+end
+subgraph Backend
+    API
+end
+subgraph Database
+    DB
+end
+UI --> API
+API --> DB

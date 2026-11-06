@@ -1,0 +1,16 @@
+graph LR
+Start
+subgraph Processing
+    A --> B
+    B --> C
+end
+subgraph Storage
+    D
+    E
+end
+Start --> A
+C --> D
+C --> E
+D --> End
+E --> End
+End
