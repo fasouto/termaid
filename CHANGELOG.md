@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### New
+- Arrowhead styles: `arrow_style=` in `render()`, `render_rich()`, `render_styled()` and `MermaidWidget`, `--arrow-style` on the command line, and `--arrow-styles` to list them. `pointer` is the default and draws as before (`► ◄ ▼ ▲`); `triangle` uses solid triangles in all four directions (`▶ ◀ ▼ ▲`), matching the up and down arrows; `outline` uses open triangles (`▷ ◁ ▽ △`). Class-diagram dependency arrows never take the shape of the inheritance markers, so with `outline` they stay solid. ASCII output is unchanged
+
 ### Fixes
 - Claude Code hook: a diagram too wide for the pane now wraps its labels to fit, as `--width` does, so a sequence diagram with long messages no longer comes out wider than the terminal and wraps into a mess. When Claude Code tells the hook the pane width (`COLUMNS`) or `--width` is given, a diagram that still does not fit is shown as its Mermaid source
 

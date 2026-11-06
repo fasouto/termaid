@@ -1,7 +1,7 @@
 """Character sets for Unicode and ASCII rendering."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,13 @@ class CharSet:
     inherit_left: str
     inherit_down: str
     inherit_up: str
+
+    # Class-diagram dependency arrows: the arrowheads, unless those would look
+    # like the inheritance markers (see build_charset)
+    dependency_right: str
+    dependency_left: str
+    dependency_down: str
+    dependency_up: str
 
     # Edge line styles
     line_horizontal: str
@@ -90,6 +97,7 @@ UNICODE = CharSet(
     # Arrows
     arrow_right="►", arrow_left="◄", arrow_down="▼", arrow_up="▲",
     inherit_right="▷", inherit_left="◁", inherit_down="▽", inherit_up="△",
+    dependency_right="►", dependency_left="◄", dependency_down="▼", dependency_up="▲",
     # Edge lines
     line_horizontal="─", line_vertical="│",
     line_dotted_h="┄", line_dotted_v="┆",
@@ -122,6 +130,7 @@ ASCII = CharSet(
     # Arrows
     arrow_right=">", arrow_left="<", arrow_down="v", arrow_up="^",
     inherit_right=">", inherit_left="<", inherit_down="v", inherit_up="^",
+    dependency_right=">", dependency_left="<", dependency_down="v", dependency_up="^",
     # Edge lines
     line_horizontal="-", line_vertical="|",
     line_dotted_h=".", line_dotted_v=":",
@@ -145,6 +154,40 @@ ASCII = CharSet(
 )
 
 
+ARROW_STYLES: dict[str, tuple[str, str, str, str]] = {
+    # name: (right, left, down, up)
+    "pointer": ("►", "◄", "▼", "▲"),   # the default
+    "triangle": ("▶", "◀", "▼", "▲"),  # solid triangles, matching ▼ ▲
+    "outline": ("▷", "◁", "▽", "△"),   # open triangles
+}
+"""Unicode arrowhead styles, for ``arrow_style=``. ASCII always uses ``> < v ^``."""
+
+
 def default_charset(use_ascii: bool) -> CharSet:
     """The built-in character set: ASCII, or Unicode box drawing."""
     return ASCII if use_ascii else UNICODE
+
+
+def build_charset(use_ascii: bool = False, arrow_style: str = "pointer") -> CharSet:
+    """The character set for a render: ASCII, or Unicode with an arrowhead style.
+
+    Raises:
+        ValueError: ``arrow_style`` isn't one of ``ARROW_STYLES``.
+    """
+    if arrow_style not in ARROW_STYLES:
+        raise ValueError(
+            f"unknown arrow style {arrow_style!r}; expected one of {', '.join(ARROW_STYLES)}"
+        )
+    if use_ascii or arrow_style == "pointer":
+        return default_charset(use_ascii)
+    right, left, down, up = ARROW_STYLES[arrow_style]
+    arrows = (right, left, down, up)
+    inheritance = (UNICODE.inherit_right, UNICODE.inherit_left, UNICODE.inherit_down, UNICODE.inherit_up)
+    # A class-diagram dependency must never look like inheritance.
+    dependency = ARROW_STYLES["triangle"] if arrows == inheritance else arrows
+    return replace(
+        UNICODE,
+        arrow_right=right, arrow_left=left, arrow_down=down, arrow_up=up,
+        dependency_right=dependency[0], dependency_left=dependency[1],
+        dependency_down=dependency[2], dependency_up=dependency[3],
+    )

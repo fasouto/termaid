@@ -76,6 +76,7 @@ def _render_canvas(
     gap: int,
     inline_edge_labels: bool,
     max_label_width: int | None,
+    arrow_style: str = "pointer",
 ) -> _Rendered:
     """Parse source, pick the renderer for its diagram type, and draw it."""
     # Pass padding_x and gap only when they differ from the flowchart
@@ -86,10 +87,10 @@ def _render_canvas(
     if gap != 4:
         extra["gap"] = gap
 
-    from .renderer.charset import default_charset
+    from .renderer.charset import build_charset
 
     # Every renderer draws with this one character set.
-    cs = default_charset(use_ascii)
+    cs = build_charset(use_ascii, arrow_style)
 
     prepared = _prepare_source(source)
     text = _skip_directives(prepared)
@@ -204,6 +205,7 @@ def render(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    arrow_style: str = "pointer",
 ) -> str:
     """Render mermaid syntax as Unicode (or ASCII) art.
 
@@ -217,6 +219,11 @@ def render(
         max_label_width: Wrap labels wider than this many columns at word
             boundaries. Applies to flowcharts (default 20) and sequence
             diagrams (unwrapped by default); other diagram types ignore it.
+        arrow_style: Arrowheads for Unicode output: ``"pointer"`` (default,
+            ``► ◄ ▼ ▲``), ``"triangle"`` (``▶ ◀ ▼ ▲``) or ``"outline"``
+            (``▷ ◁ ▽ △``). Class diagrams keep solid dependency arrows with
+            ``"outline"``, since open triangles mean inheritance there. ASCII
+            output ignores it. Raises ``ValueError`` for an unknown style.
 
     Returns:
         Rendered diagram as a string
@@ -234,6 +241,7 @@ def render(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        arrow_style=arrow_style,
     ).canvas
     return canvas.to_string() if canvas is not None else ""
 
@@ -249,6 +257,7 @@ def render_rich(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    arrow_style: str = "pointer",
 ):
     """Render mermaid syntax as a Rich Text object with colors.
 
@@ -265,6 +274,11 @@ def render_rich(
         max_label_width: Wrap labels wider than this many columns at word
             boundaries. Applies to flowcharts (default 20) and sequence
             diagrams (unwrapped by default); other diagram types ignore it.
+        arrow_style: Arrowheads for Unicode output: ``"pointer"`` (default,
+            ``► ◄ ▼ ▲``), ``"triangle"`` (``▶ ◀ ▼ ▲``) or ``"outline"``
+            (``▷ ◁ ▽ △``). Class diagrams keep solid dependency arrows with
+            ``"outline"``, since open triangles mean inheritance there. ASCII
+            output ignores it. Raises ``ValueError`` for an unknown style.
 
     Returns:
         rich.text.Text object
@@ -280,6 +294,7 @@ def render_rich(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        arrow_style=arrow_style,
     )
     if rendered.graph is not None:
         return render_graph_rich(rendered.canvas, rendered.graph, theme=theme)
@@ -296,12 +311,15 @@ def render_styled(
     gap: int = 4,
     inline_edge_labels: bool = False,
     max_label_width: int | None = None,
+    arrow_style: str = "pointer",
 ) -> StyledDocument:
     """Render mermaid syntax as theme-independent styled chunks.
 
     Each line of the result is a list of ``{"text", "style"}`` chunks whose
     joined text equals the matching line of :func:`render`. The style keys
     are listed in :mod:`termaid.output.styled`.
+
+    ``arrow_style`` works as in :func:`render`.
 
     Returns:
         ``{"version": 1, "lines": [[{"text": ..., "style": ...}, ...], ...]}``
@@ -317,6 +335,7 @@ def render_styled(
         gap=gap,
         inline_edge_labels=inline_edge_labels,
         max_label_width=max_label_width,
+        arrow_style=arrow_style,
     ).canvas)
 
 

@@ -454,8 +454,8 @@ def _marker_char(marker: str, direction: str, cs: CharSet) -> str:
     elif marker == ">" or marker == "<":
         # Filled arrow (dependency)
         return {
-            "down": cs.arrow_down, "up": cs.arrow_up, "right": cs.arrow_right,
-        }.get(direction, cs.arrow_left)
+            "down": cs.dependency_down, "up": cs.dependency_up, "right": cs.dependency_right,
+        }.get(direction, cs.dependency_left)
     elif marker == "*":
         return "◆"
     elif marker == "o":
