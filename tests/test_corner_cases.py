@@ -916,3 +916,24 @@ class TestGitGraphInitConfig:
         nested = "[" * 100_000 + "]" * 100_000
         out = render('%%{init: {"x": ' + nested + '}}%%\ngitGraph\n  commit id: "a"')
         assert "main" in out
+
+
+class TestLongerLinks:
+    """Extra dashes make a link span more ranks (``A ---> B``), as in Mermaid."""
+
+    @pytest.mark.parametrize("direction", ["LR", "TD"])
+    @pytest.mark.parametrize("link", ["--->", "---->", "-.->", "===>"])
+    def test_longer_link_renders(self, direction, link):
+        out = render(f"graph {direction}\n  A {link} B")
+        assert "A" in out and "B" in out
+
+    @pytest.mark.parametrize("direction", ["LR", "TD"])
+    def test_longer_link_is_longer(self, direction):
+        short = render(f"graph {direction}\n  A --> B")
+        long = render(f"graph {direction}\n  A ---> B")
+        size = (lambda s: len(s.splitlines()[0])) if direction == "LR" else (lambda s: len(s.splitlines()))
+        assert size(long) > size(short)
+
+    def test_longer_link_beside_other_nodes(self):
+        out = render("graph LR\n  A --> B\n  C ----> D")
+        assert all(name in out for name in "ABCD")
