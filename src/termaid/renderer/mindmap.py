@@ -19,6 +19,16 @@ from ..utils import display_width
 _OVERFLOW_THRESHOLD = 6
 
 
+def _pad_left(text: str, width: int) -> str:
+    """Right-align *text* in *width* terminal columns."""
+    return " " * (width - display_width(text)) + text
+
+
+def _pad_right(text: str, width: int) -> str:
+    """Left-align *text* in *width* terminal columns."""
+    return text + " " * (width - display_width(text))
+
+
 @dataclass(frozen=True)
 class _Chars:
     """Branch drawing characters, varying by ascii/rounded mode."""
@@ -110,7 +120,7 @@ def _render_subtree_right(node: MindmapNode, ch: _Chars) -> tuple[list[str], int
     child_block, child_conn = _stack_right(node.children, ch)
 
     connector = node.label + " " + ch.h + ch.h
-    pad = " " * len(connector)
+    pad = " " * display_width(connector)
     result: list[str] = []
     for i, line in enumerate(child_block):
         if i == child_conn:
@@ -185,10 +195,10 @@ def _render_subtree_left(node: MindmapNode, ch: _Chars) -> tuple[list[str], int]
 
     child_block, child_conn = _stack_left(node.children, ch)
     child_width = max(display_width(line) for line in child_block)
-    child_block = [line.rjust(child_width) for line in child_block]
+    child_block = [_pad_left(line, child_width) for line in child_block]
 
     connector = ch.h + ch.h + " " + node.label
-    pad = " " * len(connector)
+    pad = " " * display_width(connector)
     result: list[str] = []
     for i, line in enumerate(child_block):
         if i == child_conn:
@@ -206,9 +216,9 @@ def _stack_left(children: list[MindmapNode], ch: _Chars) -> tuple[list[str], int
         result = []
         for i, line in enumerate(sub):
             if i == sc:
-                result.append(line.rjust(w) + " " + ch.h + ch.h)
+                result.append(_pad_left(line, w) + " " + ch.h + ch.h)
             else:
-                result.append(line.rjust(w) + "   ")
+                result.append(_pad_left(line, w) + "   ")
         return result, sc
 
     blocks: list[tuple[list[str], int]] = []
@@ -225,7 +235,7 @@ def _stack_left(children: list[MindmapNode], ch: _Chars) -> tuple[list[str], int
         base = len(result)
 
         for li, line in enumerate(block):
-            padded = line.rjust(max_w)
+            padded = _pad_left(line, max_w)
             if li == bc:
                 conn_rows.append(base + li)
                 if is_first:
@@ -281,12 +291,12 @@ def _render_both_sides(
     root_row = total // 2
 
     root_part = ch.h + ch.h + " " + root_label + " " + ch.h + ch.h
-    pad = " " * len(root_part)
+    pad = " " * display_width(root_part)
 
     result: list[str] = []
     for row in range(total):
         li = row - l_off
-        left = left_block[li].ljust(left_width) if 0 <= li < lh else " " * left_width
+        left = _pad_right(left_block[li], left_width) if 0 <= li < lh else " " * left_width
         ri = row - r_off
         right = right_block[ri] if 0 <= ri < rh else ""
         center = root_part if row == root_row else pad

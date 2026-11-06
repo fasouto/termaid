@@ -56,9 +56,9 @@ def _sort_branches(diagram: GitGraph) -> list[str]:
 
 def _commit_footprint(c: Commit) -> int:
     """Return the half-width of the widest text (label or tag) for a commit."""
-    w = len(c.label)
+    w = display_width(c.label)
     if c.tag:
-        w = max(w, len(c.tag) + 2)  # "[tag]"
+        w = max(w, display_width(c.tag) + 2)  # "[tag]"
     return (w + 1) // 2  # ceil half
 
 
@@ -119,7 +119,7 @@ def _compute_layout_lr(
 
     branch_label_width = 0
     for name in sorted_branches:
-        branch_label_width = max(branch_label_width, len(name))
+        branch_label_width = max(branch_label_width, display_width(name))
     left_offset = _MARGIN + branch_label_width + 2
 
     # Adaptive per-commit column placement:
@@ -171,7 +171,7 @@ def _draw_lr(
 
     commit_map: dict[str, Commit] = {c.id: c for c in diagram.commits}
 
-    branch_label_width = max((len(b) for b in sorted_branches), default=0)
+    branch_label_width = max((display_width(b) for b in sorted_branches), default=0)
     line_start_col = _MARGIN + branch_label_width + 1
 
     # Compute branch line extents (with merge/fork extensions)
@@ -256,11 +256,11 @@ def _draw_tb(
     # Compute column gap based on max label width
     max_label = 0
     for b in sorted_branches:
-        max_label = max(max_label, len(b))
+        max_label = max(max_label, display_width(b))
     for c in diagram.commits:
-        max_label = max(max_label, len(c.label))
+        max_label = max(max_label, display_width(c.label))
         if c.tag:
-            max_label = max(max_label, len(c.tag) + 2)
+            max_label = max(max_label, display_width(c.tag) + 2)
 
     col_gap = max(max_label + 4, 10)
 
@@ -269,8 +269,8 @@ def _draw_tb(
     first = sorted_branches[0]
     first_col = max(
         _MARGIN,
-        len(first) // 2,
-        *(len(c.label) // 2 for c in branch_commits[first]),
+        display_width(first) // 2,
+        *(display_width(c.label) // 2 for c in branch_commits[first]),
         *(display_width(f"[{c.tag}]") // 2 for c in branch_commits[first] if c.tag),
     )
 
@@ -342,7 +342,7 @@ def _draw_tb(
         label_row = _MARGIN
     for name in sorted_branches:
         col = branch_col[name]
-        label_col = col - len(name) // 2
+        label_col = col - display_width(name) // 2
         canvas.put_text(label_row, label_col, name, style="subgraph")
 
     # 2. Draw branch lines (vertical)
@@ -383,7 +383,7 @@ def _draw_tb(
 
         canvas.put(row, col, marker, merge=False, style="node")
 
-        label_col = col - len(c.label) // 2
+        label_col = col - display_width(c.label) // 2
         if bottom_to_top:
             canvas.put_text(row - 1, label_col, c.label, style="label")
             if c.tag:
