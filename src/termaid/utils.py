@@ -135,6 +135,8 @@ def _text_break(text: str, cell_limit_end: int) -> int:
     for index in range(1, min(cell_limit_end + 1, len(text))):
         previous = text[index - 1]
         current = text[index]
+        if _is_zero_width(current):
+            continue
         following = text[index + 1:index + 2]
         member_access = (
             current == "." and not previous.isdigit()
@@ -196,20 +198,19 @@ def wrap_display_text(
             used = 0
             end = 0
             last_space = -1
-            for index, ch in enumerate(remaining):
-                char_width = 2 if _is_wide(ch) else 1
-                if used + char_width > max_width:
+            for cell, cell_width in iter_cells(remaining):
+                if used + cell_width > max_width:
                     break
-                used += char_width
-                end = index + 1
-                if ch.isspace():
+                used += cell_width
+                end += len(cell)
+                if cell.isspace():
                     last_space = end
 
             # A width of one cannot contain a wide glyph. Keep the glyph
             # intact and let the caller decide that the constraint is
             # unsatisfiable rather than looping forever or corrupting UTF-8.
             if end == 0:
-                end = 1
+                end = len(next(iter_cells(remaining))[0])
 
             # A word ending exactly at the limit fits even if its following
             # space lies outside the scan. Commas may be better boundaries
@@ -254,11 +255,10 @@ def truncate_to_width(text: str, width: int, ellipsis: str = ".") -> str:
     def clip(s: str, cols: int) -> str:
         out: list[str] = []
         w = 0
-        for ch in s:
-            cw = 2 if _is_wide(ch) else 1
+        for cell, cw in iter_cells(s):
             if w + cw > cols:
                 break
-            out.append(ch)
+            out.append(cell)
             w += cw
         return "".join(out)
 

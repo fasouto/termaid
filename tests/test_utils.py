@@ -5,7 +5,14 @@ import unicodedata
 
 import pytest
 
-from termaid.utils import display_width, iter_cells, max_line_width, truncate_to_width, wrap_display_text
+from termaid.utils import (
+    _is_zero_width,
+    display_width,
+    iter_cells,
+    max_line_width,
+    truncate_to_width,
+    wrap_display_text,
+)
 
 
 def clusters(text: str) -> list[str]:
@@ -158,3 +165,15 @@ class TestWrapDisplayText:
     ])
     def test_clause_breaks_and_exact_fit_words(self, text, width, expected):
         assert wrap_display_text(text, width) == expected
+
+
+class TestClusterBoundaries:
+    def test_wrap_never_starts_a_line_with_a_mark(self):
+        lines = wrap_display_text("สวัสดีครับผู้ใช้ทุกคน", 4)
+        assert all(not _is_zero_width(line[0]) for line in lines)
+        assert all(display_width(line) <= 4 for line in lines)
+        assert "".join(lines) == "สวัสดีครับผู้ใช้ทุกคน"
+
+    def test_truncate_keeps_whole_clusters(self):
+        assert truncate_to_width("ผู้ใช้งาน", 3, ellipsis="") == "ผู้ใช้"
+        assert truncate_to_width("ผู้ใช้งาน", 3) == "ผู้ใ."
