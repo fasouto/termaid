@@ -5,8 +5,13 @@
   "plugins": [
     {
       "name": "termaid",
-      "source": "./claude-plugin",
-      "description": "Draw the Mermaid diagrams in Claude's replies right in the terminal"
+      "source": { "source": "github", "repo": "fasouto/termaid", "ref": "claude-plugin" },
+      "description": "Draw the Mermaid diagrams in Claude's replies right in the terminal",
+      "author": { "name": "Fabio Souto", "url": "https://github.com/fasouto" },
+      "homepage": "https://termaid.com",
+      "repository": "https://github.com/fasouto/termaid",
+      "license": "MIT",
+      "keywords": ["mermaid", "diagrams", "terminal", "ascii", "unicode"]
     }
   ]
 }
