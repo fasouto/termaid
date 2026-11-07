@@ -5,6 +5,9 @@
 ### Changes
 - The Claude Code plugin now carries its own copy of termaid, so it no longer needs the `termaid` command, only Python 3.9 or later as `python3`. The plugin is installed from the `claude-plugin` branch, which each release rebuilds
 
+### Fixes
+- Flowchart: a back-edge whose target sits beside it (in another column in TD, another row in LR) can now leave from the side facing the target and enter its near side, instead of always looping round the far side. Each such edge is tried both ways and the near side is kept only when the whole drawing scores better (shorter, with no more bends, crossings, shared labelled lines or runs through other subgraphs), so it never pushes another edge into a detour
+
 ## 0.12.0 (2026-11-06)
 
 ### New
