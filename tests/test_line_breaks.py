@@ -80,3 +80,14 @@ def test_wrapping_measures_each_line():
     """With a width, a label already split by <br> wraps line by line."""
     out = render("flowchart LR\n  A -->|short<br/>also short| B", max_label_width=12)
     assert "short" in out and "also short" in out
+
+
+def test_a_block_label_with_no_clean_spot_is_still_drawn():
+    """With tight padding a two-line label found no clean spot and vanished;
+    the last-resort pass now lets it cross an edge line, like a one-line label."""
+    source = (
+        "flowchart LR\n  subgraph S[Console]\n    A --> B\n  end\n"
+        "  B -->|too big?<br>shrink 30%| B2[_shrink]\n  B -->|fits| C[x]"
+    )
+    out = render(source, padding_x=2, padding_y=0, gap=2)
+    assert "too big?" in out and "shrink 30%" in out
