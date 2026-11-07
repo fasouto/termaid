@@ -80,7 +80,100 @@ def layout_and_route(
         if sum(bool(r.crowded) for r in next_routed) >= sum(bool(r.crowded) for r in routed):
             break
         extra, layout, routed = grown, next_layout, next_routed
+
+    # Back-edges loop round the far side of their boxes by default. Try each
+    # one on its near side instead, and keep it when the drawing as a whole
+    # scores better: a shorter edge that pushes another into a detour, or
+    # merges two labelled lines, isn't kept.
+    candidates = _near_side_candidates(graph, layout, routed)[:_MAX_NEAR_SIDE_TRIALS]
+    if candidates:
+        near: frozenset[int] = frozenset()
+        best = _route_score(graph, routed, layout)
+        for i in candidates:
+            trial = near | {i}
+            trial_layout = compute_layout(graph, padding_x, padding_y, gap, max_label_width, extra or None)
+            trial_routed = route_edges(graph, trial_layout, trial)
+            score = _route_score(graph, trial_routed, trial_layout)
+            if score < best:
+                near, best, layout, routed = trial, score, trial_layout, trial_routed
     return layout, routed
+
+
+_MAX_NEAR_SIDE_TRIALS = 12
+"""Each trial routes the whole diagram again: a cap keeps big diagrams quick."""
+
+
+_NEAR_SIDE_SAVING = 4
+"""Only try the near sides when they could save at least this many cells."""
+
+
+def _near_side_candidates(graph: Graph, layout: GridLayout, routed: list[RoutedEdge]) -> list[int]:
+    """Edges that could attach on their near sides (see _near_side_directions)
+    and whose current route is clearly longer than a direct one would be, so
+    trying them could pay off."""
+    direction = graph.direction.normalized()
+    placements = layout.placements
+    length = {
+        re.index: sum(abs(c2 - c1) + abs(r2 - r1) for (c1, r1), (c2, r2) in zip(re.grid_path, re.grid_path[1:]))
+        for re in routed
+    }
+    found = []
+    for i, edge in enumerate(graph.edges):
+        if edge.is_self_reference or edge.source_is_subgraph or edge.target_is_subgraph:
+            continue
+        src, tgt = placements.get(edge.source), placements.get(edge.target)
+        if src is None or tgt is None:
+            continue
+        near = _near_side_directions(src, tgt, direction)
+        if near is None:
+            continue
+        (sc, sr), (tc, tr) = _get_attach_point(src, near[0]), _get_attach_point(tgt, near[1])
+        direct = abs(tc - sc) + abs(tr - sr)
+        if length.get(i, 0) >= direct + _NEAR_SIDE_SAVING:
+            found.append(i)
+    return found
+
+
+# How much each thing costs a drawing, in grid cells of edge length.
+_BEND_COST = 2.0
+_CROSSING_COST = 4.0
+_LABELLED_SHARE_COST = 8.0
+
+
+_FOREIGN_SG_COST = 6.0
+
+
+def _route_score(graph: Graph, routed: list[RoutedEdge], layout: GridLayout) -> float:
+    """Lower is better: total edge length, plus bends, crossings, pairs of
+    labelled edges sharing a line (whose labels then read as either's), and
+    cells inside a subgraph box neither end of the edge belongs to."""
+    sg_bounds = {sb.subgraph.id: sb for sb in layout.subgraph_bounds}
+    sg_regions = _compute_sg_regions(layout, sg_bounds)
+    total = 0.0
+    cells_of: list[tuple[set[tuple[int, int]], bool, set[str]]] = []
+    for re in routed:
+        path = re.grid_path
+        total += sum(abs(c2 - c1) + abs(r2 - r1) for (c1, r1), (c2, r2) in zip(path, path[1:]))
+        total += _BEND_COST * max(0, len(path) - 2)
+        cells = set(re.occupied_cells)
+        if sg_regions:
+            total += _FOREIGN_SG_COST * len(cells & _foreign_sg_cells(re.edge, graph, sg_regions))
+        cells_of.append((cells, bool(re.label), {re.edge.source, re.edge.target}))
+    for a in range(len(cells_of)):
+        cells_a, labelled_a, ends_a = cells_of[a]
+        for b in range(a + 1, len(cells_of)):
+            cells_b, labelled_b, ends_b = cells_of[b]
+            common = cells_a & cells_b
+            if not common:
+                continue
+            if ends_a & ends_b:
+                # Related edges may share a trunk; two labelled ones sharing
+                # it leave it unclear which label is whose.
+                if labelled_a and labelled_b:
+                    total += _LABELLED_SHARE_COST
+            else:
+                total += _CROSSING_COST * len(common)
+    return total
 
 
 def _crowded_gaps(
@@ -99,8 +192,14 @@ def _crowded_gaps(
     return gaps
 
 
-def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
-    """Route all edges in the graph."""
+def route_edges(
+    graph: Graph, layout: GridLayout, near_side: frozenset[int] = frozenset(),
+) -> list[RoutedEdge]:
+    """Route all edges in the graph.
+
+    Edges whose index is in ``near_side`` attach on their near sides (see
+    _near_side_directions) instead of looping round.
+    """
     direction = graph.direction.normalized()
     routed: list[RoutedEdge] = []
     vertical = direction.is_vertical
@@ -122,7 +221,7 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
     endpoints = [_resolve_endpoints(edge, layout, sg_bounds) for edge in graph.edges]
     places = [_endpoint_places(edge, graph) for edge in graph.edges]
     ends = {
-        i: _end_cells(src, tgt, direction)
+        i: _end_cells(src, tgt, direction, i in near_side)
         for i, (src, tgt) in enumerate(endpoints)
         if src is not None and tgt is not None and not graph.edges[i].is_self_reference
     }
@@ -173,6 +272,7 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
         re = _route_edge(
             edge, src, tgt, layout, direction, (shared - bus.branches) | forbidden,
             _prefer_cells(bus.preferred, penalty), crossings, blocked,
+            near_side=i in near_side,
         )
         re.index = i
         routed.append(re)
@@ -236,11 +336,11 @@ def _related(a: _Places, b: _Places) -> bool:
 
 
 def _end_cells(
-    src: NodePlacement, tgt: NodePlacement, direction: Direction,
+    src: NodePlacement, tgt: NodePlacement, direction: Direction, near_side: bool = False,
 ) -> list[tuple[tuple[int, int], bool]]:
     """The cells just outside an edge's preferred attachment points, each
     with whether the edge runs horizontally there."""
-    (s_dir, t_dir), _ = _determine_directions(src, tgt, direction)
+    (s_dir, t_dir), _ = _directions(src, tgt, direction, near_side)
     cells = []
     for placement, attach in ((src, s_dir), (tgt, t_dir)):
         c, r = _get_attach_point(placement, attach)
@@ -881,6 +981,42 @@ def _get_attach_point(
         return (gc.col + 1, gc.row)
 
 
+def _near_side_directions(
+    src: NodePlacement,
+    tgt: NodePlacement,
+    direction: Direction,
+) -> tuple[AttachDir, AttachDir] | None:
+    """For a back-edge whose target sits beside it (another column in TD,
+    another row in LR): leave from the side facing the target and enter the
+    target's near side. ``None`` for any other edge.
+
+    Back-edges normally loop round the far side (see _determine_directions),
+    which keeps them apart but can be much longer; route_layout tries this
+    instead and keeps it when the whole drawing scores better.
+    """
+    sc, sr = src.grid.col, src.grid.row
+    tc, tr = tgt.grid.col, tgt.grid.row
+    if direction.is_horizontal:
+        if tc < sc and tr != sr:
+            return (AttachDir.BOTTOM, AttachDir.TOP) if tr > sr else (AttachDir.TOP, AttachDir.BOTTOM)
+    elif tr < sr and tc != sc:
+        return (AttachDir.RIGHT, AttachDir.LEFT) if tc > sc else (AttachDir.LEFT, AttachDir.RIGHT)
+    return None
+
+
+def _directions(
+    src: NodePlacement,
+    tgt: NodePlacement,
+    direction: Direction,
+    near_side: bool = False,
+) -> tuple[tuple[AttachDir, AttachDir], tuple[AttachDir, AttachDir]]:
+    """Preferred and alternative attachments, or only the near sides when
+    ``near_side`` is set and the edge has them."""
+    if near_side and (near := _near_side_directions(src, tgt, direction)) is not None:
+        return near, near
+    return _determine_directions(src, tgt, direction)
+
+
 def _determine_directions(
     src: NodePlacement,
     tgt: NodePlacement,
@@ -940,6 +1076,7 @@ def _route_edge(
     penalty: Callable[[int, int], float] | None,
     crossings: dict[tuple[int, int], bool],
     blocked: set[tuple[int, int]],
+    near_side: bool = False,
 ) -> RoutedEdge:
     """Route a single edge between two nodes.
 
@@ -947,7 +1084,7 @@ def _route_edge(
     perpendicularly. When neither attachment allows that, it takes the
     path through the fewest such cells.
     """
-    preferred, alt = _determine_directions(src, tgt, direction)
+    preferred, alt = _directions(src, tgt, direction, near_side)
 
     # Try preferred path
     # Don't exclude source/target from obstacles — edges must not route
