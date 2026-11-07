@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from ..model.erdiagram import Attribute, Entity, ERDiagram, Relationship
+from ..utils import line_breaks
 
 # Direction line
 _DIRECTION_RE = re.compile(r"^\s*direction\s+(TB|LR|BT|RL|TD)\s*$", re.IGNORECASE)
@@ -147,7 +148,7 @@ def parse_er_diagram(text: str) -> ERDiagram:
             line = m.group(4)
             card2 = m.group(5)
             e2 = _entity_name(m.group(6), m.group(7))
-            label = m.group(8).strip().strip('"')
+            label = line_breaks(m.group(8).strip().strip('"'), " ")  # drawn on one row
 
             _ensure_entity(diagram, e1)
             _ensure_entity(diagram, e2)
@@ -172,7 +173,7 @@ def parse_er_diagram(text: str) -> ERDiagram:
             line_text = m.group(4).strip().lower()
             card2_text = m.group(5)
             e2 = _entity_name(m.group(6), m.group(7))
-            label = m.group(8).strip().strip('"')
+            label = line_breaks(m.group(8).strip().strip('"'), " ")  # drawn on one row
 
             card1 = _resolve_card_alias(card1_text, "left")
             card2 = _resolve_card_alias(card2_text, "right")

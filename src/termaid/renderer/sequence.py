@@ -114,7 +114,7 @@ def _participant_height(participant, lines: list[str]) -> int:
 
 def _collect_labels(diagram: SequenceDiagram, flat_events: list[_FlatEvent], max_label_width: int | None) -> _Labels:
     def wrap(text: str) -> list[str]:
-        return [text] if max_label_width is None else wrap_display_text(text, max_label_width)
+        return text.split("\n") if max_label_width is None else wrap_display_text(text, max_label_width)
 
     events: list[list[str]] = []
     msg_counter = 0

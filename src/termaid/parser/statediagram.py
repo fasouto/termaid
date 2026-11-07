@@ -10,6 +10,7 @@ import re
 
 from ..graph.model import Direction, Edge, EdgeStyle, Graph, GraphNote, Node, Subgraph
 from ..graph.shapes import NodeShape
+from ..utils import line_breaks
 
 
 _START_ID = "[*]_start"
@@ -88,7 +89,7 @@ class _StateDiagramParser:
         if note_match:
             position = note_match.group(1).lower().replace(" ", "")  # "rightof"/"leftof"
             target = note_match.group(2)
-            text = re.sub(r'<br\s*/?>', '\n', note_match.group(3).strip(), flags=re.IGNORECASE)
+            text = line_breaks(note_match.group(3).strip())
             if target not in self.graph.nodes:
                 self._ensure_node(target, self._aliases.get(target, target), NodeShape.ROUNDED)
             self.graph.notes.append(GraphNote(text=text, position=position, target=target))
@@ -106,7 +107,7 @@ class _StateDiagramParser:
             line,
         )
         if state_match:
-            label = state_match.group(1)
+            label = line_breaks(state_match.group(1), "\\n")  # node labels break on a backslash-n
             alias = state_match.group(2)
             stereotype = state_match.group(3)
             self._aliases[alias] = label
@@ -130,7 +131,7 @@ class _StateDiagramParser:
             sg_id = sg_label.replace(" ", "_")
             sg = Subgraph(
                 id=sg_id,
-                label=sg_label,
+                label=line_breaks(sg_label, " "),  # a title has one row
                 parent=self._subgraph_stack[-1] if self._subgraph_stack else None,
             )
             if self._subgraph_stack:
@@ -145,7 +146,7 @@ class _StateDiagramParser:
         if trans_match:
             src_raw = trans_match.group(1).strip()
             tgt_raw = trans_match.group(2).strip()
-            label = (trans_match.group(3) or "").strip()
+            label = line_breaks((trans_match.group(3) or "").strip())
 
             src_id = self._resolve_state(src_raw, is_source=True)
             tgt_id = self._resolve_state(tgt_raw, is_source=False)
