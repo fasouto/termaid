@@ -2,47 +2,82 @@
 from __future__ import annotations
 
 import unicodedata
+from typing import Iterator
 
 # A %%{...}%% directive, which may span lines. It ends at the next %%{, so an
 # unclosed one is not rescanned to the end of the source from every later %%{.
 DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
 
 
+_SOFT_HYPHEN = "­"
+_EMOJI_PRESENTATION = "️"
+# Hangul jamo vowels and finals, and the line and paragraph separators:
+# drawn at zero columns, though no mark category says so.
+_ZERO_WIDTH_RANGES = ((0x1160, 0x11FF), (0xD7B0, 0xD7FF), (0x2028, 0x2029))
+
+
+def _is_zero_width(ch: str) -> bool:
+    """Return True if a terminal draws *ch* at zero columns, on top of the
+    character before it (a combining mark) or not at all (a format char)."""
+    # Category, not combining class: Thai MAI HAN-AKAT and SARA I are Mn
+    # with combining class 0.
+    category = unicodedata.category(ch)
+    if category in ("Mn", "Me"):
+        return True
+    if category == "Cf":
+        return ch != _SOFT_HYPHEN
+    cp = ord(ch)
+    return any(low <= cp <= high for low, high in _ZERO_WIDTH_RANGES)
+
+
 def _is_wide(ch: str) -> bool:
     """Return True if *ch* occupies 2 terminal columns."""
-    if unicodedata.east_asian_width(ch) in ("F", "W"):
-        return True
-    # Emoji and symbols that render wide despite east_asian_width=N
-    cp = ord(ch)
-    if (
-        0x2600 <= cp <= 0x27BF      # Misc Symbols, Dingbats
-        or 0x1F300 <= cp <= 0x1FAFF  # Emoji blocks (Misc Symbols & Pictographs through Symbols Extended-A)
-        or 0xFE00 <= cp <= 0xFE0F   # Variation selectors
-    ):
-        return True
-    return False
+    return unicodedata.east_asian_width(ch) in ("F", "W")
+
+
+def _cluster_width(cluster: str) -> int:
+    if _is_wide(cluster[0]) or _EMOJI_PRESENTATION in cluster:
+        return 2
+    return 1
+
+
+def iter_cells(text: str) -> Iterator[tuple[str, int]]:
+    """Yield the terminal cells of *text* as ``(cluster, width)`` pairs.
+
+    A zero-width code point shares the cell of the code point before it,
+    so a Thai tone mark stays with its letter. Width is 1 or 2.
+    """
+    cluster = ""
+    for ch in text:
+        if cluster and _is_zero_width(ch):
+            cluster += ch
+            continue
+        if cluster:
+            yield cluster, _cluster_width(cluster)
+        cluster = ch
+    if cluster:
+        yield cluster, _cluster_width(cluster)
 
 
 def display_width(text: str) -> int:
     """Return the terminal display width of *text*.
 
-    East-Asian wide / fullwidth characters and emoji occupy 2 terminal
-    columns; everything else occupies 1.
+    East-Asian wide / fullwidth characters and emoji presentation occupy 2
+    terminal columns, combining marks 0, everything else 1.
     Uses only the stdlib ``unicodedata`` module.
     """
-    w = 0
-    for ch in text:
-        w += 2 if _is_wide(ch) else 1
-    return w
+    if text.isascii():
+        return len(text)
+    return sum(width for _, width in iter_cells(text))
 
 
 def max_line_width(text: str) -> int:
     """Return the display width of the widest line in *text*."""
     lines = text.split("\n")
-    # Without wide characters a line's width is its length. Fitting measures
-    # every candidate drawing, and checking each character took longer than
-    # the renders did.
-    if not any(_is_wide(ch) for ch in set(text)):
+    # Without wide or zero-width characters a line's width is its length.
+    # Fitting measures every candidate drawing, and checking each character
+    # took longer than the renders did.
+    if text.isascii() or not any(_is_wide(ch) or _is_zero_width(ch) for ch in set(text)):
         return max(map(len, lines))
     return max(display_width(line) for line in lines)
 
@@ -101,6 +136,8 @@ def _text_break(text: str, cell_limit_end: int) -> int:
     for index in range(1, min(cell_limit_end + 1, len(text))):
         previous = text[index - 1]
         current = text[index]
+        if _is_zero_width(current):
+            continue
         following = text[index + 1:index + 2]
         member_access = (
             current == "." and not previous.isdigit()
@@ -162,20 +199,19 @@ def wrap_display_text(
             used = 0
             end = 0
             last_space = -1
-            for index, ch in enumerate(remaining):
-                char_width = 2 if _is_wide(ch) else 1
-                if used + char_width > max_width:
+            for cell, cell_width in iter_cells(remaining):
+                if used + cell_width > max_width:
                     break
-                used += char_width
-                end = index + 1
-                if ch.isspace():
+                used += cell_width
+                end += len(cell)
+                if cell.isspace():
                     last_space = end
 
             # A width of one cannot contain a wide glyph. Keep the glyph
             # intact and let the caller decide that the constraint is
             # unsatisfiable rather than looping forever or corrupting UTF-8.
             if end == 0:
-                end = 1
+                end = len(next(iter_cells(remaining))[0])
 
             # A word ending exactly at the limit fits even if its following
             # space lies outside the scan. Commas may be better boundaries
@@ -220,11 +256,10 @@ def truncate_to_width(text: str, width: int, ellipsis: str = ".") -> str:
     def clip(s: str, cols: int) -> str:
         out: list[str] = []
         w = 0
-        for ch in s:
-            cw = 2 if _is_wide(ch) else 1
+        for cell, cw in iter_cells(s):
             if w + cw > cols:
                 break
-            out.append(ch)
+            out.append(cell)
             w += cw
         return "".join(out)
 

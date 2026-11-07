@@ -1,9 +1,63 @@
 """Tests for shared utility functions."""
 from __future__ import annotations
 
+import unicodedata
+
 import pytest
 
-from termaid.utils import display_width, truncate_to_width, wrap_display_text
+from termaid.utils import (
+    _is_zero_width,
+    display_width,
+    iter_cells,
+    max_line_width,
+    truncate_to_width,
+    wrap_display_text,
+)
+
+
+def clusters(text: str) -> list[str]:
+    return [cluster for cluster, _ in iter_cells(text)]
+
+
+class TestCells:
+    def test_thai_marks_share_the_letter_cell(self):
+        assert list(iter_cells("ผู้ใช้")) == [("ผู้", 1), ("ใ", 1), ("ช้", 1)]
+        assert clusters("น้ำแข็ง") == ["น้", "ำ", "แ", "ข็", "ง"]
+
+    def test_display_width_per_script(self):
+        cases = {
+            "สวัสดีครับ": 7,
+            "ภาษาไทย น้ำแข็ง": 13,
+            "ភាសាខ្មែរ": 8,
+            "שָׁלוֹם": 4,
+            "مَرْحَبًا": 5,
+            unicodedata.normalize("NFD", "Tiếng Việt"): 10,
+            unicodedata.normalize("NFD", "한국어"): 6,
+            "日本語": 6,
+            "日本ผู้": 5,
+            "का": 2,
+            "abc": 3,
+        }
+        for text, width in cases.items():
+            assert display_width(text) == width, text
+
+    def test_symbol_and_emoji_widths(self):
+        assert display_width("❤") == 1
+        assert display_width("★") == 1
+        assert display_width("❤️") == 2
+        thumb = "\U0001F44D\U0001F3FD"
+        assert display_width(thumb) == 4 and len(clusters(thumb)) == 2
+        family = "\U0001F468‍\U0001F469‍\U0001F467"
+        assert display_width(family) == 6 and len(clusters(family)) == 3
+
+    def test_lone_leading_mark_keeps_a_cell(self):
+        assert list(iter_cells("่ab")) == [("่", 1), ("a", 1), ("b", 1)]
+
+    def test_soft_hyphen_stays_visible(self):
+        assert display_width("a­b") == 3
+
+    def test_max_line_width_counts_marks_as_zero(self):
+        assert max_line_width("ผู้ใช้\nab") == 3
 
 
 class TestTruncateToWidth:
@@ -111,3 +165,29 @@ class TestWrapDisplayText:
     ])
     def test_clause_breaks_and_exact_fit_words(self, text, width, expected):
         assert wrap_display_text(text, width) == expected
+
+
+class TestClusterBoundaries:
+    def test_wrap_never_starts_a_line_with_a_mark(self):
+        lines = wrap_display_text("สวัสดีครับผู้ใช้ทุกคน", 4)
+        assert all(not _is_zero_width(line[0]) for line in lines)
+        assert all(display_width(line) <= 4 for line in lines)
+        assert "".join(lines) == "สวัสดีครับผู้ใช้ทุกคน"
+
+    def test_truncate_keeps_whole_clusters(self):
+        assert truncate_to_width("ผู้ใช้งาน", 3, ellipsis="") == "ผู้ใช้"
+        assert truncate_to_width("ผู้ใช้งาน", 3) == "ผู้ใ."
+
+
+class TestMaxLineWidth:
+    def test_matches_per_line_display_width_on_a_thai_box(self):
+        drawing = "┌────────┐\n│ ผู้ใช้ 日本 │\n└────────┘"
+        assert max_line_width(drawing) == max(display_width(line) for line in drawing.split("\n"))
+
+    def test_box_drawing_without_wide_or_zero_width_chars_skips_the_cell_walk(self, monkeypatch):
+        # Fitting measures every candidate drawing; walking cells there is the slow path.
+        def walk_cells(_text):
+            raise AssertionError("iter_cells called on a drawing with no wide or zero-width char")
+
+        monkeypatch.setattr("termaid.utils.iter_cells", walk_cells)
+        assert max_line_width("┌──┐\n│ab│\n└──┘") == 4
