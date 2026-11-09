@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixes
+- Flowchart: `<br>` inside a square-bracket label (`A[a<br/>b]`) is a line break again instead of turning the node into an asymmetric shape. Quoted text in the `-- "text" -->`, `-. "text" .->` and `== "text" ==>` forms is the edge label instead of a pair of empty quotes
+
 ### Changes
 - The Claude Code plugin now carries its own copy of termaid, so it no longer needs the `termaid` command, only Python 3.9 or later as `python3`. The plugin is installed from the `claude-plugin` branch, which each release rebuilds
 

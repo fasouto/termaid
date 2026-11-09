@@ -435,3 +435,16 @@ class TestEntityCodes:
             assert not [hex(ord(c)) for c in label if ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F]
         output = render(source)
         assert not [hex(ord(c)) for c in output if c != "\n" and (ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F)]
+
+
+class TestLabelsWithBreaksAndQuotedEdgeText:
+    def test_br_inside_square_brackets_is_a_line_break(self):
+        from termaid.graph.shapes import NodeShape
+        for br in ("<br>", "<br/>", "<br />"):
+            g = parse_flowchart(f"graph TD\n  A[a{br}b] --> B")
+            assert g.nodes["A"].label == "a\\nb"  # the layout's line break, as for quoted labels
+            assert g.nodes["A"].shape == NodeShape.RECTANGLE
+
+    def test_quoted_text_between_dashes_is_the_edge_label(self):
+        g = parse_flowchart('graph TD\n  A -- "yes" --> B\n  B -. "retry" .-> C\n  C == "go" ==> D')
+        assert [e.label for e in g.edges] == ["yes", "retry", "go"]

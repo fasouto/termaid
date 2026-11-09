@@ -641,7 +641,10 @@ class _FlowchartParser:
                     label = original_span[pipe_start + 1:pipe_end].strip()
                     label = _strip_quotes(label)
                 else:
-                    label = _masked_label
+                    # `-- "text" -->`: the masked label kept its place, so read
+                    # the same span from the original and drop the quotes.
+                    off = masked[pos:end].find(_masked_label)
+                    label = _strip_quotes(original_span[off:off + len(_masked_label)])
                 if best_match is None or pos < best_match[0]:
                     best_match = (pos, end, style, arr_start, arr_end, label, length, type_start, type_end)
 
@@ -812,7 +815,9 @@ class _FlowchartParser:
                 if rest.endswith(close_delim):
                     node_id = text[:idx].strip()
                     raw_label = rest[:-len(close_delim)].strip()
-                    if not node_id:
+                    # An id never holds an opening bracket: in `A[a<br>b]` the
+                    # `>` of <br> is inside a label, not an asymmetric shape.
+                    if not node_id or any(ch in node_id for ch in "[({"):
                         continue
                     self._shaped_node_ids.add(node_id)
                     # Check for markdown label
