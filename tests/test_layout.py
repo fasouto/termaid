@@ -361,3 +361,22 @@ class TestSubgraphWidth:
             content = max(b[3] for b in boxes) - min(b[2] for b in boxes) + 1
             widths[sg] = (right - left + 1, content + 2 * SG_BORDER_PAD + self.CORRIDOR)
         assert all(width <= bound for width, bound in widths.values()), widths
+
+
+class TestCycleInsideSubgraph:
+    """A back-edge inside a subgraph must not stretch or reorder it."""
+
+    SRC = ("graph TD\n"
+           "  subgraph X\n    A --> B --> C\n    C -.-> A\n  end\n"
+           "  subgraph Y\n    D --> E --> F\n    F -.-> D\n  end\n")
+
+    def test_order_follows_the_forward_edges(self):
+        layout = compute_layout(parse_flowchart(self.SRC))
+        rows = {n: layout.placements[n].grid.row for n in "ABCDEF"}
+        assert rows["A"] < rows["B"] < rows["C"]
+        assert rows["D"] < rows["E"] < rows["F"]
+
+    def test_no_empty_layers(self):
+        from termaid import render
+        out = render(self.SRC, padding_x=1, padding_y=0, gap=1)
+        assert sum(1 for line in out.splitlines() if not line.strip()) <= 5
