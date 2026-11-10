@@ -256,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         metavar="TYPE",
         choices=["treemap", "pie", "mindmap", "flowchart", "xychart"],
-        help="Read JSON/tabular data from stdin and render as TYPE (treemap, pie, mindmap, flowchart).",
+        help="Read JSON/tabular data from stdin and render as TYPE (treemap, pie, mindmap, flowchart, xychart).",
     )
     parser.add_argument(
         "--markdown",

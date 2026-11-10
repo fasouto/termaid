@@ -335,3 +335,10 @@ class TestThemeOptionInteractions:
         def max_width(text: str) -> int:
             return max(len(line) for line in text.splitlines())
         assert max_width(fitted) < max_width(full)
+
+
+def test_json_help_lists_all_types(capsys):
+    # --help must name every --json TYPE choice; xychart was missing.
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    assert "xychart" in capsys.readouterr().out
