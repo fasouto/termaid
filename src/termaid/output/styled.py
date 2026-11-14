@@ -46,21 +46,48 @@ class StyledDocument(TypedDict):
 
 def serialize_canvas(canvas: Canvas | None) -> StyledDocument:
     """Group a canvas into styled chunks, trimmed the way ``Canvas.to_string`` trims."""
+    if canvas is None:
+        return {"version": 1, "lines": []}
+
+    from ..renderer.canvas import Canvas
+
+    # Read built-in cells directly; honor custom pair conversion.
+    if type(canvas) is Canvas and "to_styled_pairs" not in vars(canvas):
+        rows = ((canvas.width, (canvas._grid[r], canvas._style_grid[r]))
+                for r in range(canvas.height))
+
+        def pair_at(row, column):
+            return row[0][column], row[1][column]
+    else:
+        rows = ((len(row), row) for row in canvas.to_styled_pairs())
+
+        def pair_at(row, column):
+            return row[column]
+
+    text_cache: dict[str, str] = {}
     lines: list[list[StyledChunk]] = []
-    for row in canvas.to_styled_pairs() if canvas is not None else []:
-        end = len(row)
-        while end and not row[end - 1][0].strip():
+    chunks: list[StyledChunk] = []
+    for end, row in rows:
+        while end and not pair_at(row, end - 1)[0].strip():
             end -= 1
-        chunks: list[StyledChunk] = []
-        for ch, style in row[:end]:
+        chunks.clear()
+        for column in range(end):
+            ch, style = pair_at(row, column)
             if not ch:
                 continue
             style = style or "default"
             if chunks and chunks[-1]["style"] == style:
-                chunks[-1]["text"] += ch
+                text = chunks[-1]["text"] + ch
+                chunks[-1]["text"] = (
+                    text_cache.get(text, text) if type(text) is str else text
+                )
             else:
                 chunks.append({"text": ch, "style": style})
-        lines.append(chunks)
+        for chunk in chunks:
+            text = chunk["text"]
+            if type(text) is str:
+                chunk["text"] = text_cache.setdefault(text, text)
+        lines.append(chunks.copy())
     while lines and not lines[-1]:
         lines.pop()
     return {"version": 1, "lines": lines}
