@@ -190,7 +190,7 @@ def _parse_markdown_label(text: str) -> tuple[str, list[LabelSegment]] | None:
                 i = end + 1
                 continue
         # Plain text: collect until next *
-        j = i
+        j = i + 1
         while j < len(md) and md[j] != "*":
             j += 1
         segments.append(LabelSegment(text=md[i:j]))
