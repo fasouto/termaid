@@ -1,11 +1,32 @@
 """Shared utility functions for termaid."""
 from __future__ import annotations
 
+import re
 import unicodedata
 
 # A %%{...}%% directive, which may span lines. It ends at the next %%{, so an
 # unclosed one is not rescanned to the end of the source from every later %%{.
 DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
+
+_BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
+
+
+def line_breaks(text: str, sep: str = "\n") -> str:
+    """Replace Mermaid's ``<br>``, ``<br/>`` and ``<br />`` (and the spaces around them) with *sep*.
+
+    Mermaid draws them as line breaks in every kind of label. Pass ``" "``
+    where a label has a single row.
+    """
+    parts = _BR.split(text)
+    if len(parts) == 1:
+        return text
+    # The spaces around a tag are stripped here, not matched by the pattern:
+    # `\s*<br` rescans a long run of spaces from each of its positions.
+    last = len(parts) - 1
+    return sep.join(
+        part.strip() if 0 < i < last else part.rstrip() if i == 0 else part.lstrip()
+        for i, part in enumerate(parts)
+    )
 
 
 def _is_wide(ch: str) -> bool:
