@@ -524,8 +524,10 @@ def _place_label(
     if col < 0 or row < 0:
         return False
     # A single line may write over unprotected cells (edge lines) that
-    # may_cover allows; a block must not land on anything.
-    strict = len(lines) > 1
+    # may_cover allows. A block of lines (from <br>) must not land on
+    # anything, except in the last-resort pass (may_cover None), where it
+    # crosses edge lines like a single line rather than being dropped.
+    strict = len(lines) > 1 and may_cover is not None
     for target_row in range(row, row + len(lines)):
         for target_col in range(col, col_end):
             if canvas.get(target_row, target_col) == " ":

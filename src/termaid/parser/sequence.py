@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 
+from ..utils import line_breaks
 from ..model.sequence import (
     ActivateEvent,
     Block,
@@ -167,7 +168,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             _ensure_participant(diagram, p1)
             if p2:
                 _ensure_participant(diagram, p2)
-            note_text = re.sub(r'<br\s*/?>', '\n', note_text.strip(), flags=re.IGNORECASE)
+            note_text = line_breaks(note_text.strip())
             event_stack[-1].append(Note(
                 text=note_text,
                 position=position,
@@ -187,7 +188,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         m = _PARTICIPANT_KIND_RE.match(stripped)
         if m:
             kind, pid, label = m.group(1).lower(), m.group(2), m.group(3)
-            label = label.strip() if label else pid
+            label = line_breaks(label.strip()) if label else pid
             found = False
             for p in diagram.participants:
                 if p.id == pid:
@@ -222,7 +223,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             event_stack[-1].append(Message(
                 source=source,
                 target=target,
-                label=label.strip() if label else "",
+                label=line_breaks(label.strip()) if label else "",
                 line_type=line_type,
                 arrow_type=arrow_type,
             ))

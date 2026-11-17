@@ -13,6 +13,7 @@ from dataclasses import dataclass, replace
 
 from ..graph.model import ArrowType, Direction, Edge, EdgeStyle, Graph, LabelSegment, Node, Subgraph
 from ..graph.shapes import NodeShape
+from ..utils import line_breaks
 
 
 # Arrow patterns ordered by specificity (longest match first)
@@ -241,8 +242,8 @@ def _decode_entities(text: str) -> str:
 
 
 def _line_breaks(label: str) -> str:
-    """Turn Mermaid's <br>, <br/> and <br /> into the \\n line breaks the layout uses."""
-    return re.sub(r"<br\s*/?>", r"\\n", label, flags=re.IGNORECASE)
+    """<br> in a node label: the \n line breaks node labels use."""
+    return line_breaks(label, "\\n")
 
 
 def _strip_quotes(text: str) -> str:
@@ -383,7 +384,7 @@ class _FlowchartParser:
         sg_label = rest
 
         # Check for 'id [label]' pattern
-        bracket_match = re.match(r'(\S+)\s+\[(.+)\]', rest)
+        bracket_match = re.match(r'([^\s\[]+)\s*\[(.+)\]', rest)  # 'id [label]' or 'id[label]'
         if bracket_match:
             sg_id = bracket_match.group(1)
             sg_label = bracket_match.group(2)
@@ -394,7 +395,7 @@ class _FlowchartParser:
             sg_label = rest
 
         sg_id = _strip_quotes(sg_id)
-        sg_label = _decode_entities(_strip_quotes(sg_label))
+        sg_label = _decode_entities(line_breaks(_strip_quotes(sg_label), " "))  # a title has one row
 
         sg = Subgraph(
             id=sg_id,
@@ -641,7 +642,10 @@ class _FlowchartParser:
                     label = original_span[pipe_start + 1:pipe_end].strip()
                     label = _strip_quotes(label)
                 else:
-                    label = _masked_label
+                    # `-- text -->`: the masked text keeps every index, so the
+                    # label sits at the same place in the original.
+                    at = masked.find(_masked_label, pos, end)
+                    label = _strip_quotes(remaining[at:at + len(_masked_label)])
                 if best_match is None or pos < best_match[0]:
                     best_match = (pos, end, style, arr_start, arr_end, label, length, type_start, type_end)
 
@@ -675,7 +679,7 @@ class _FlowchartParser:
                 has_arrow_end=arr_end,
                 arrow_type_start=type_start,
                 arrow_type_end=type_end,
-                label=_decode_entities(label),
+                label=_decode_entities(line_breaks(label)),
                 min_length=length,
             ))
 

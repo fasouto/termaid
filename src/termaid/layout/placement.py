@@ -195,7 +195,8 @@ def compute_sizes(
         max_label_width = MAX_LABEL_WIDTH
     else:
         for edge in graph.edges:
-            if display_width(edge.label) > max_label_width:
+            # Measured per line: a <br> in the label has already split it.
+            if any(display_width(line) > max_label_width for line in edge.label.split("\n")):
                 edge.label = "\n".join(
                     wrap_display_text(edge.label, max_label_width, hard_break=False)
                 )
