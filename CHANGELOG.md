@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1 (2026-11-18)
 
 ### Changes
 - The Claude Code plugin now carries its own copy of termaid, so it no longer needs the `termaid` command, only Python 3.9 or later as `python3`. The plugin is installed from the `claude-plugin` branch, which each release rebuilds
