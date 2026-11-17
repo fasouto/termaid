@@ -471,7 +471,9 @@ def _draw_participant_header(
         draw_rectangle(canvas, bx, y, bw, h, "\n".join(lines), cs, style="node")
 
 
-def _compute_activation_ranges(flat_events: list[_FlatEvent], row_offsets: list[int]) -> dict[str, list[tuple[int, int]]]:
+def _compute_activation_ranges(
+    flat_events: list[_FlatEvent], row_offsets: list[int], labels: _Labels,
+) -> dict[str, list[tuple[int, int]]]:
     """Compute activation ranges per participant from flattened events.
 
     Returns {participant_id: [(start_row, end_row), ...]}.
@@ -479,11 +481,19 @@ def _compute_activation_ranges(flat_events: list[_FlatEvent], row_offsets: list[
     # Track open activations per participant
     open_activations: dict[str, list[int]] = {}  # pid -> [start_rows...]
     ranges: dict[str, list[tuple[int, int]]] = {}
+    # An activation change right after a message takes effect at that
+    # message's arrowhead row, not at the row of the next event.
+    message_row: int | None = None
 
     for idx, ev in enumerate(flat_events):
-        if not isinstance(ev, ActivateEvent):
+        if isinstance(ev, Message):
+            loop_rows = 1 if ev.source == ev.target else 0
+            message_row = row_offsets[idx] + _extra_rows(labels.events[idx]) + loop_rows
             continue
-        row = row_offsets[idx]
+        if not isinstance(ev, ActivateEvent):
+            message_row = None
+            continue
+        row = row_offsets[idx] if message_row is None else message_row
         pid = ev.participant
         if ev.active:
             open_activations.setdefault(pid, []).append(row)
@@ -541,7 +551,7 @@ def render_sequence(
     canvas = Canvas(width, height)
 
     # Compute activation ranges
-    activation_ranges = _compute_activation_ranges(flat_events, row_offsets)
+    activation_ranges = _compute_activation_ranges(flat_events, row_offsets, labels)
 
     # ── 1. Draw participant headers at top ────────────────────────
     for i, p in enumerate(diagram.participants):
