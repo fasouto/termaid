@@ -57,6 +57,7 @@ class StreamRenderer:
     indent: str = ""
     held: list[str] = field(default_factory=list)   # original lines, fence included
     carry: str = ""        # a final batch may end mid-line
+    other_fence: str = ""  # an open block of another language, passed through unsearched
     held_size: int = field(default=0, init=False, repr=False, compare=False)  # held's characters, line breaks included
 
     def __post_init__(self) -> None:
@@ -83,6 +84,7 @@ class StreamRenderer:
                 if tail and self.held and self.held[-1] == tail:
                     shown = shown.rstrip("\n")
                 self._reset()
+            self.other_fence = ""
         return shown
 
     def _line(self, line: str) -> list[str]:
@@ -103,6 +105,13 @@ class StreamRenderer:
             held, self.held = self.held, []
             self._reset()
             return drawn if drawn is not None else held
+        if self.other_fence:
+            close = re.compile(
+                r"^[ \t]*" + re.escape(self.other_fence[0]) + "{" + str(len(self.other_fence)) + r",}[ \t]*\r?$"
+            )
+            if close.match(line):
+                self.other_fence = ""
+            return [line]
         match = _OPEN.match(line)
         if match and not (match.group("fence")[0] == "`" and "`" in match.group("info")):
             words = match.group("info").split()
@@ -112,6 +121,7 @@ class StreamRenderer:
                 self.held = [line]
                 self.held_size = len(line) + 1
                 return []
+            self.other_fence = match.group("fence")
         return [line]
 
     def _reset(self) -> None:
@@ -161,7 +171,7 @@ class StreamRenderer:
         return [self.indent + fence] + [self.indent + ln for ln in text.split("\n")] + [self.indent + fence]
 
     def to_json(self) -> str:
-        return json.dumps({k: v for k, v in asdict(self).items() if k in ("fence", "indent", "held", "carry")})
+        return json.dumps({k: v for k, v in asdict(self).items() if k in ("fence", "indent", "held", "carry", "other_fence")})
 
     def load(self, data: str) -> None:
         saved = json.loads(data)
@@ -170,6 +180,7 @@ class StreamRenderer:
         self.held = list(saved.get("held", []))
         self.held_size = sum(len(line) + 1 for line in self.held)
         self.carry = saved.get("carry", "")
+        self.other_fence = saved.get("other_fence", "")
 
 
 def _state_dir() -> str | None:
@@ -257,7 +268,7 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     shown = renderer.feed(delta, final=final)
 
     if path:
-        if final or not (renderer.fence or renderer.carry):
+        if final or not (renderer.fence or renderer.other_fence or renderer.carry):
             try:
                 os.remove(path)
             except OSError:
