@@ -91,3 +91,16 @@ def test_a_block_label_with_no_clean_spot_is_still_drawn():
     )
     out = render(source, padding_x=2, padding_y=0, gap=2)
     assert "too big?" in out and "shrink 30%" in out
+
+
+def test_spaces_around_a_tag_are_dropped():
+    assert line_breaks("  one  <br/>  two  <BR>three  ") == "  one\ntwo\nthree  "
+    assert line_breaks("no tag  here ") == "no tag  here "
+    assert line_breaks("<br>") == "\n"
+
+
+def test_a_long_run_of_spaces_is_not_rescanned():
+    """The pattern once began with \\s*, which took seconds on this label."""
+    text = "x" + " " * 200_000 + "y"
+    assert line_breaks(text) == text
+    assert line_breaks(text + "<br>z") == text + "\nz"
