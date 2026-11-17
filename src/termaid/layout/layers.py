@@ -93,6 +93,7 @@ def assign_layers(graph: Graph) -> dict[str, int]:
     for nid in graph.node_order:
         if nid not in visited:
             visited.add(nid)
+            layers.setdefault(nid, 0)  # a component with no root (a cycle) starts here, or its layers never propagate
             queue.append(nid)
             while queue:
                 node = queue.popleft()
@@ -174,6 +175,34 @@ def assign_layers(graph: Graph) -> dict[str, int]:
                 layers[nid] = 0
 
     return layers
+
+
+def _without_back_edges(nodes: list[str], edges: list[Edge]) -> list[Edge]:
+    """Drop the edges that close a cycle (DFS in definition order).
+
+    Longest-path layering over a cycle grows the layers on every pass until
+    the pass limit, which stretches the subgraph and reverses its order.
+    """
+    succs: dict[str, list[Edge]] = {n: [] for n in nodes}
+    for e in edges:
+        succs.setdefault(e.source, []).append(e)
+    state: dict[str, int] = {}  # 1 = on the DFS stack, 2 = done
+    back: set[int] = set()
+
+    def visit(n: str) -> None:
+        state[n] = 1
+        for e in succs.get(n, []):
+            if state.get(e.target) == 1:
+                back.add(id(e))
+            elif e.target not in state:
+                visit(e.target)
+        state[n] = 2
+
+    targets = {e.target for e in edges}
+    for n in [n for n in nodes if n not in targets] + nodes:
+        if n not in state:
+            visit(n)
+    return [e for e in edges if id(e) not in back]
 
 
 def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, int]:
@@ -277,6 +306,7 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
         int_edges = [e for e in graph.edges
                      if e.source in sg_member and e.target in sg_member
                      and not e.is_self_reference]
+        int_edges = _without_back_edges(sg_nodes, int_edges)
 
         # Internal roots: nodes with no incoming internal edge
         int_targets = {e.target for e in int_edges}

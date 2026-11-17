@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixes
+- Flowchart: a cycle inside a subgraph (`A --> B --> C`, `C -.-> A`) no longer stretches the subgraph with dozens of empty rows and draws its nodes in reverse order. A cycle with no root outside subgraphs no longer puts every node on the first rank
+
 ### Changes
 - The Claude Code plugin now carries its own copy of termaid, so it no longer needs the `termaid` command, only Python 3.9 or later as `python3`. The plugin is installed from the `claude-plugin` branch, which each release rebuilds
 
