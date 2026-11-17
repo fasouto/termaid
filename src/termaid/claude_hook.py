@@ -228,7 +228,9 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     folder that another user could read or write. When the state can't be
     saved, the lines held so far are shown as written.
     """
-    stdin = stdin or sys.stdin
+    # Claude Code sends UTF-8, but sys.stdin decodes with the locale
+    # encoding, so read the bytes and let json detect the encoding.
+    stdin = stdin or getattr(sys.stdin, "buffer", sys.stdin)
     stdout = stdout or sys.stdout
     try:
         event = json.load(stdin)
