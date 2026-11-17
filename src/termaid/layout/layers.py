@@ -189,19 +189,26 @@ def _without_back_edges(nodes: list[str], edges: list[Edge]) -> list[Edge]:
     state: dict[str, int] = {}  # 1 = on the DFS stack, 2 = done
     back: set[int] = set()
 
-    def visit(n: str) -> None:
-        state[n] = 1
-        for e in succs.get(n, []):
-            if state.get(e.target) == 1:
-                back.add(id(e))
-            elif e.target not in state:
-                visit(e.target)
-        state[n] = 2
-
     targets = {e.target for e in edges}
-    for n in [n for n in nodes if n not in targets] + nodes:
-        if n not in state:
-            visit(n)
+    for root in [n for n in nodes if n not in targets] + nodes:
+        if root in state:
+            continue
+        # An explicit stack, not recursion: a chain of a thousand nodes
+        # would pass Python's recursion limit.
+        state[root] = 1
+        stack = [(root, iter(succs.get(root, [])))]
+        while stack:
+            node, outgoing = stack[-1]
+            for e in outgoing:
+                if state.get(e.target) == 1:
+                    back.add(id(e))
+                elif e.target not in state:
+                    state[e.target] = 1
+                    stack.append((e.target, iter(succs.get(e.target, []))))
+                    break
+            else:
+                state[node] = 2
+                stack.pop()
     return [e for e in edges if id(e) not in back]
 
 

@@ -380,3 +380,11 @@ class TestCycleInsideSubgraph:
         from termaid import render
         out = render(self.SRC, padding_x=1, padding_y=0, gap=1)
         assert sum(1 for line in out.splitlines() if not line.strip()) <= 5
+
+    def test_a_long_chain_does_not_hit_the_recursion_limit(self):
+        n = 3000
+        chain = "".join(f"    n{i} --> n{i + 1}\n" for i in range(n))
+        source = (f"graph TD\n  subgraph S\n{chain}    n{n} --> n0\n  end\n"
+                  "  subgraph T\n    x --> y\n    y --> x\n  end\n  n0 --> x\n")
+        layout = compute_layout(parse_flowchart(source))
+        assert layout.placements["n0"].grid.row < layout.placements[f"n{n}"].grid.row
