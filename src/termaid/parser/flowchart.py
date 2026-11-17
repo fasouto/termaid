@@ -691,7 +691,7 @@ class _FlowchartParser:
         """Find arrows with labels: -->|text| or -- text --> or == text ==>.
         Returns (start, end, style, arr_start, arr_end, label, min_length, type_start, type_end)."""
         # Pattern: -->|text|
-        m = re.search(r'(<--|<-\.|-\.|-+|=+|<)([-=.]+)(>?)(\|)([^|]*)(\|)', text)
+        m = re.search(r'(<|[-=])([-=.]+)(>?)(\|)([^|]*)(\|)', text)
         if m:
             label = m.group(5).strip()
             # Parse the arrow part (everything before the first |)
