@@ -2,14 +2,14 @@
 
 ## Unreleased
 
-### Fixes
-- Flowchart: a cycle inside a subgraph (`A --> B --> C`, `C -.-> A`) no longer stretches the subgraph with dozens of empty rows and draws its nodes in reverse order. A cycle with no root outside subgraphs no longer puts every node on the first rank
-
 ### Changes
 - The Claude Code plugin now carries its own copy of termaid, so it no longer needs the `termaid` command, only Python 3.9 or later as `python3`. The plugin is installed from the `claude-plugin` branch, which each release rebuilds
 
 ### Fixes
-- Flowchart: a `>` inside an unquoted square-bracket label, such as `A[x > 0]`, `A[a -> b]` or the `<br/>` in `A[one<br/>two]`, no longer turns the node into an asymmetric (`>text]`) node with a broken id. The label stays on its rectangle and edges reach the right node
+- Flowchart: a `>` inside an unquoted square-bracket label, such as `A[x > 0]`, `A[a -> b]` or the `<br/>` in `A[one<br/>two]`, no longer turns the node into an asymmetric (`>text]`) node with a broken id. The label stays on its rectangle and edges reach the right node (#44, thanks @visionik)
+- `<br>`, `<br/>` and `<br />` now break lines in every kind of label, not only node labels and notes: flowchart edge labels, sequence messages and participant aliases, state transitions and `state "name" as id`. In a subgraph title or an ER relationship label, which have one row, the tag becomes a space. A multi-line edge label that finds no clean spot is drawn across an edge line instead of being dropped (#46, thanks @visionik)
+- Flowchart: quoted text between dashes, as in `A -- "yes" --> B`, is the edge label again; it drew as a pair of empty quotes. `subgraph S["Title"]` with no space before the bracket takes `Title` as its title (#46, thanks @visionik)
+- Flowchart: a cycle inside a subgraph (`A --> B --> C`, `C -.-> A`) no longer stretches the subgraph with dozens of empty rows and draws its nodes in reverse order. A cycle with no root outside subgraphs no longer puts every node on the first rank (#48, thanks @fivepeople-art)
 
 ## 0.12.0 (2026-11-06)
 
