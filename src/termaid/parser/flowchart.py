@@ -812,7 +812,10 @@ class _FlowchartParser:
                 if rest.endswith(close_delim):
                     node_id = text[:idx].strip()
                     raw_label = rest[:-len(close_delim)].strip()
-                    if not node_id:
+                    # A delimiter inside an earlier shape's label isn't this shape's
+                    # opening: in A[x > 0] or A[one<br/>two] the > belongs to the
+                    # rectangle's label, so the asymmetric shape doesn't match.
+                    if not node_id or any(ch in node_id for ch in "[](){}<>"):
                         continue
                     self._shaped_node_ids.add(node_id)
                     # Check for markdown label

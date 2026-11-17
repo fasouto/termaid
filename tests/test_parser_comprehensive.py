@@ -338,6 +338,26 @@ class TestEdgeCases:
         assert g.nodes["A"].label == "one\\ntwo"
         assert g.nodes["B"].label == "x\\ny"
 
+    @pytest.mark.parametrize("br", ["<br>", "<br/>", "<br />"])
+    def test_br_in_an_unquoted_label(self, br):
+        g = parse_flowchart(f"graph TD\n  A --> N[one{br}two]")
+        assert set(g.nodes) == {"A", "N"}
+        assert g.nodes["N"].label == "one\\ntwo"
+        assert g.nodes["N"].shape == NodeShape.RECTANGLE
+        assert (g.edges[0].source, g.edges[0].target) == ("A", "N")
+
+    @pytest.mark.parametrize("label", ["x > 0", "a -> b", "a >= b"])
+    def test_greater_than_in_an_unquoted_label(self, label):
+        g = parse_flowchart(f"graph LR\n  A[{label}]")
+        assert list(g.nodes) == ["A"]
+        assert g.nodes["A"].label == label
+        assert g.nodes["A"].shape == NodeShape.RECTANGLE
+
+    def test_asymmetric_shape_still_parses(self):
+        g = parse_flowchart("graph LR\n  A>flag] --> B>other one]")
+        assert g.nodes["A"].shape == NodeShape.ASYMMETRIC and g.nodes["A"].label == "flag"
+        assert g.nodes["B"].shape == NodeShape.ASYMMETRIC and g.nodes["B"].label == "other one"
+
     def test_unicode_label(self):
         g = parse_flowchart('graph LR\n  A["日本語"]')
         assert g.nodes["A"].label == "日本語"
