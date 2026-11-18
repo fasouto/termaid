@@ -10,6 +10,7 @@ import re
 import pytest
 
 from termaid import render
+from tests.conftest import FIXTURES_DIR
 
 
 class TestTrailingDanglingCharacters:
@@ -542,3 +543,14 @@ class TestGapParameter:
         out = render(src, gap=2)
         assert "yes" in out
         assert "no" in out
+
+
+class TestEdgesKeepOffSubgraphBottomBorders:
+    def test_a_line_crosses_a_bottom_border_but_does_not_run_along_it(self):
+        src = (FIXTURES_DIR / "flowcharts" / "subgraph_link_mixed.mmd").read_text(encoding="utf-8")
+        out = render(src)
+        borders = [re.search(r"└\S*", line).group() for line in out.split("\n")
+                   if line.lstrip().startswith("└")]
+        assert len(borders) == 2, out
+        for border in borders:
+            assert border.endswith("┘") and set(border) <= set("└─┘┼┬"), out
