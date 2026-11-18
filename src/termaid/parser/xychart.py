@@ -19,6 +19,9 @@ from ..model.xychart import XYChart, XYDataset
 
 # A number that float() is guaranteed to accept (rejects e.g. "0.1.2")
 _NUM = r"-?\d+(?:\.\d+)?"
+# Values past this are skipped: the axis range and tick values built from
+# them would leave float range.
+_MAX_VALUE = 1e300
 
 
 def parse_xychart(text: str) -> XYChart:
@@ -52,11 +55,11 @@ def parse_xychart(text: str) -> XYChart:
         elif lower.startswith("y-axis "):
             _parse_axis(stripped[7:].strip(), chart, is_x=False)
         elif lower.startswith("bar "):
-            values = _parse_number_list(stripped[4:].strip())
+            values = _parse_number_list(stripped[4:].strip(), chart)
             if values:
                 chart.datasets.append(XYDataset(values=values, chart_type="bar"))
         elif lower.startswith("line "):
-            values = _parse_number_list(stripped[5:].strip())
+            values = _parse_number_list(stripped[5:].strip(), chart)
             if values:
                 chart.datasets.append(XYDataset(values=values, chart_type="line"))
 
@@ -87,18 +90,23 @@ def _parse_axis(rest: str, chart: XYChart, is_x: bool) -> None:
     if m:
         label = m.group(1) or m.group(2)
         lo, hi = float(m.group(3)), float(m.group(4))
+        drawable = _drawable(lo, hi, chart)
         if is_x:
             chart.x_label = label
-            chart.x_range = (lo, hi)
+            if drawable:
+                chart.x_range = (lo, hi)
         else:
             chart.y_label = label
-            chart.y_range = (lo, hi)
+            if drawable:
+                chart.y_range = (lo, hi)
         return
 
     # Try: min --> max (no title)
     m = re.match(rf'^({_NUM})\s*-->\s*({_NUM})', rest)
     if m:
         lo, hi = float(m.group(1)), float(m.group(2))
+        if not _drawable(lo, hi, chart):
+            return
         if is_x:
             chart.x_range = (lo, hi)
         else:
@@ -127,7 +135,15 @@ def _parse_bracket_list(text: str) -> list[str] | None:
     return [_strip_quotes(item.strip()) for item in items if item.strip()]
 
 
-def _parse_number_list(text: str) -> list[float]:
+def _drawable(lo: float, hi: float, chart: XYChart) -> bool:
+    """Whether an axis range is small enough to draw; warns when it is not."""
+    if abs(lo) <= _MAX_VALUE and abs(hi) <= _MAX_VALUE:
+        return True
+    chart.warnings.append(f"Axis range is too large: {lo:g} --> {hi:g}")
+    return False
+
+
+def _parse_number_list(text: str, chart: XYChart) -> list[float]:
     """Parse [1, 2, 3] into a list of floats."""
     m = re.match(r'\[(.+)\]', text)
     if not m:
@@ -137,7 +153,11 @@ def _parse_number_list(text: str) -> list[float]:
     for item in items:
         item = item.strip().lstrip("+")
         try:
-            result.append(float(item))
+            value = float(item)
         except ValueError:
             continue
+        if not abs(value) <= _MAX_VALUE:  # also catches nan
+            chart.warnings.append(f"Value cannot be drawn: {value:g}")
+            continue
+        result.append(value)
     return result
