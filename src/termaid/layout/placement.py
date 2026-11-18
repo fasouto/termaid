@@ -415,3 +415,32 @@ def _expand_gaps_for_edge_labels(graph: Graph, layout: GridLayout) -> None:
             needed = rows_per_src[src_id] + 1  # each label's rows + spacing
             cur = layout.row_heights.get(gap_row, 3)
             layout.row_heights[gap_row] = max(cur, needed)
+        _space_back_edge_lanes(graph, layout)
+
+
+def _space_back_edge_lanes(graph: Graph, layout: GridLayout) -> None:
+    """Keep the next back edge's lane clear of the first one's label.
+
+    A back edge leaves its source on the right, runs up the middle of the
+    column right of its nodes and turns left into its target. Its label
+    goes over that last arrow when the arrow is long enough, and beside
+    the line otherwise. The next back edge runs one column further out.
+    Right of the last node column that column holds nothing else, so
+    widening it costs nothing until a second lane is drawn there. Back
+    edges are routed in edge order, so the first one takes the inner lane.
+    """
+    lane = max(p.grid.col for p in layout.placements.values()) + 2
+    width = layout.col_widths.get(lane, 1)
+    for edge in graph.edges:
+        src = layout.placements.get(edge.source)
+        tgt = layout.placements.get(edge.target)
+        if not src or not tgt or tgt.grid.row >= src.grid.row:
+            continue
+        if max(src.grid.col, tgt.grid.col) + 2 != lane:
+            continue
+        text_width = max(display_width(line) for line in edge.label.split("\n"))
+        arrow = sum(layout.col_widths.get(c, 1) for c in range(tgt.grid.col + 1, lane)) + width // 2
+        short = text_width + 1 - (width - width // 2 - 1)
+        if edge.label and arrow < text_width + 2 and short > 0:
+            layout.col_widths[lane + 1] = max(layout.col_widths.get(lane + 1, 1), 2 * short)
+        return
