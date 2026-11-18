@@ -36,6 +36,11 @@ _LINK_SIMPLE_RE = re.compile(
 # than any terminal, so larger column counts and spans are capped.
 _MAX_COLUMNS = 64
 
+# Groups are parsed and drawn recursively, so groups nested deeper than this
+# are left out to stay well inside Python's recursion limit.
+_MAX_DEPTH = 100
+_GROUP_RE = re.compile(r"block\s*:\s*(\w+)(?:\s*:\s*(\d+))?$", re.IGNORECASE)
+
 # Counter for anonymous group IDs
 _anon_counter = 0
 
@@ -76,7 +81,24 @@ def _next_anon_id() -> str:
     return f"_anon_group_{_anon_counter}"
 
 
-def _parse_group(lines: list[str], i: int) -> tuple[list[Block], list[BlockLink], int, int]:
+def _skip_group(lines: list[str], i: int) -> int:
+    """The index after the ``end`` of the group whose body starts at line ``i``."""
+    open_groups = 1
+    while i < len(lines):
+        lower = lines[i].lower()
+        if lower == "end":
+            open_groups -= 1
+            if open_groups == 0:
+                return i + 1
+        elif lower == "block" or _GROUP_RE.match(lines[i]):
+            open_groups += 1
+        i += 1
+    return i
+
+
+def _parse_group(
+    lines: list[str], i: int, depth: int = 0,
+) -> tuple[list[Block], list[BlockLink], int, int]:
     """Parse a group of lines into blocks, links, column count, and next line index.
 
     Handles nested block:ID ... end and anonymous block ... end groups recursively.
@@ -105,12 +127,16 @@ def _parse_group(lines: list[str], i: int) -> tuple[list[Block], list[BlockLink]
             i += 1
             continue
 
+        m = _GROUP_RE.match(line)
+        if depth >= _MAX_DEPTH and (m or lower == "block"):
+            i = _skip_group(lines, i + 1)
+            continue
+
         # Named nested group: block:ID or block:ID:N
-        m = re.match(r"block\s*:\s*(\w+)(?:\s*:\s*(\d+))?$", line, re.IGNORECASE)
         if m:
             group_id = m.group(1)
             col_span = int(m.group(2)) if m.group(2) else 1
-            children, child_links, child_cols, i = _parse_group(lines, i + 1)
+            children, child_links, child_cols, i = _parse_group(lines, i + 1, depth + 1)
             blocks.append(Block(
                 id=group_id,
                 label=group_id,
@@ -125,7 +151,7 @@ def _parse_group(lines: list[str], i: int) -> tuple[list[Block], list[BlockLink]
         # Anonymous nested group: bare "block" on its own line
         if lower == "block":
             group_id = _next_anon_id()
-            children, child_links, child_cols, i = _parse_group(lines, i + 1)
+            children, child_links, child_cols, i = _parse_group(lines, i + 1, depth + 1)
             blocks.append(Block(
                 id=group_id,
                 label="",
