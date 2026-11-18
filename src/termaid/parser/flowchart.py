@@ -309,6 +309,7 @@ class _FlowchartParser:
         self.graph = Graph()
         self._subgraph_stack: list[Subgraph] = []
         self._shaped_node_ids: set[str] = set()  # nodes with explicit shapes
+        self._edge_ids: set[str] = set()
 
     def parse(self) -> Graph:
         lines = self._preprocess(self.text)
@@ -543,7 +544,10 @@ class _FlowchartParser:
                 continue
 
             # Parse node group (handles &)
-            node_group = self._split_ampersand(seg.text)
+            text = seg.text
+            if i + 1 < len(segments):
+                text = self._strip_edge_id(text)
+            node_group = self._split_ampersand(text)
             current_nodes: list[str] = []
             for node_text in node_group:
                 node = self._parse_node(node_text.strip())
@@ -572,6 +576,14 @@ class _FlowchartParser:
 
             prev_nodes = current_nodes
             i += 1
+
+    def _strip_edge_id(self, text: str) -> str:
+        """Drop the id of the edge that follows: the e1@ in 'A e1@--> B'."""
+        parts = text.rsplit(None, 1)
+        if len(parts) == 2 and len(parts[1]) > 1 and parts[1].endswith("@") and '"' not in parts[1]:
+            self._edge_ids.add(parts[1][:-1])
+            return parts[0]
+        return text
 
     def _register_in_subgraph(self, node_id: str) -> None:
         """Register a node in the current subgraph if inside one."""
@@ -834,6 +846,9 @@ class _FlowchartParser:
         at_match = re.match(r'^([^\s@\[\](){}<>]+)\s*@\{(.+)\}$', text, re.DOTALL)
         if at_match:
             node_id = at_match.group(1)
+            if node_id in self._edge_ids:
+                # e1@{ animate: true } sets an edge's animation, which isn't drawn.
+                return None
             body = at_match.group(2)
             props = _parse_at_shape_props(body)
             shape_name = props.get("shape", "rect")
