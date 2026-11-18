@@ -469,23 +469,23 @@ class _FlowchartParser:
         parts = line.split(None, 2)
         if len(parts) < 3:
             return
-        name = parts[1]
         props_str = parts[2]
         props: dict[str, str] = {}
         for prop in props_str.split(","):
             if ":" in prop:
                 k, v = prop.split(":", 1)
                 props[k.strip()] = v.strip()
-        self.graph.class_defs[name] = props
+        for name in filter(None, parts[1].split(",")):
+            self.graph.class_defs[name] = dict(props)
 
     def _parse_class_assignment(self, line: str) -> None:
         """Parse 'class nodeId className'."""
         parts = line.split()
         if len(parts) >= 3:
-            node_id = parts[1]
             class_name = parts[2]
-            if node_id in self.graph.nodes:
-                self.graph.nodes[node_id].style_class = class_name
+            for node_id in parts[1].split(","):
+                if node_id in self.graph.nodes:
+                    self.graph.nodes[node_id].style_class = class_name
 
     def _parse_style(self, line: str) -> None:
         """Parse 'style nodeId prop1:val1,prop2:val2'."""
