@@ -797,7 +797,7 @@ class _FlowchartParser:
             (r'-+o(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CIRCLE),
             (r'-+x(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CROSS),
             (r'~~~',       EdgeStyle.INVISIBLE, False, False, ArrowType.ARROW, ArrowType.ARROW),
-            (r'-\.-',      EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
+            (r'-\.+-',     EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
             (r'={3,}',     EdgeStyle.THICK, False, False, ArrowType.ARROW, ArrowType.ARROW),
             (r'-{3,}',     EdgeStyle.SOLID, False, False, ArrowType.ARROW, ArrowType.ARROW),
         ]
