@@ -5,6 +5,8 @@ Each test is marked with xfail until the corresponding bug is fixed.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from termaid import render
@@ -220,6 +222,73 @@ class TestLabelsKeepOffOtherLines:
             top, bottom, left, right = find_box(lines, name)
             inside = " ".join(line[left + 1:right] for line in lines[top + 1:bottom])
             assert inside.split() == [name], out
+        for label in labels:
+            assert label in out, out
+
+    def test_label_keeps_off_a_subgraph_title(self):
+        """Titles were drawn after the labels, over any label that had
+        taken the title's cells: `│ Servicesk│`."""
+        src = (
+            "flowchart TD\n"
+            "  U[User request] --> GW{API gateway}\n"
+            "  subgraph Edge\n"
+            "    GW -->|static| CDN[CDN cache]\n"
+            "    GW -->|api| AUTH[Auth check]\n"
+            "  end\n"
+            "  subgraph Services\n"
+            "    AUTH -->|ok| ORD[Orders]\n"
+            "    AUTH -->|ok| CAT[Catalog]\n"
+            "    ORD --> PAY[Payments]\n"
+            "    ORD --> INV[Inventory]\n"
+            "  end\n"
+            "  subgraph Data\n"
+            "    PAY --> PG[(Postgres)]\n"
+            "    INV --> PG\n"
+            "    CAT --> RD[(Redis)]\n"
+            "    ORD --> MQ[[Event queue]]\n"
+            "  end\n"
+            "  MQ --> MAIL[Email worker]\n"
+            "  MQ --> AN[Analytics]\n"
+            "  AUTH -->|denied| ERR[401 response]"
+        )
+        out = render(src)
+        assert "│ Services " in out, out
+        assert len(re.findall(r"\bok\b", out)) == 2, out
+
+    @pytest.mark.parametrize(
+        "src,kwargs,title,labels",
+        [
+            (
+                "stateDiagram-v2\n"
+                "  state Approved {\n"
+                "    [*] --> Queued\n"
+                "    Queued --> Building : runner free\n"
+                "    Building --> Testing : build ok\n"
+                "  }",
+                {},
+                "Approved",
+                ["runner free", "build ok"],
+            ),
+            (
+                "flowchart LR\n  subgraph S[Console]\n    A --> B\n  end\n"
+                "  B -->|too big?<br>shrink 30%| B2[_shrink]\n  B -->|fits| C[x]",
+                {"padding_x": 2, "padding_y": 0, "gap": 2},
+                "Console",
+                ["too big?", "shrink 30%", "fits"],
+            ),
+        ],
+        ids=["composite-state", "block-label"],
+    )
+    def test_label_never_cuts_a_subgraph_border(self, src, kwargs, title, labels):
+        """With no room inside a subgraph, the last-resort spot ran the label
+        through the subgraph's side: `│        │runner free`."""
+        from tests.conftest import find_box
+
+        out = render(src, **kwargs)
+        lines = out.split("\n")
+        top, bottom, left, right = find_box(lines, title)
+        for line in lines[top + 1:bottom]:
+            assert line[left] in "│├┼" and line[right:right + 1] in ("│", "┤", "┼"), out
         for label in labels:
             assert label in out, out
 
