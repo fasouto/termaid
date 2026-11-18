@@ -248,8 +248,9 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     if event.get("hook_event_name") not in (None, "MessageDisplay"):
         return 0
     delta = event.get("delta") or ""
-    final = bool(event.get("final", True))
     message_id = str(event.get("message_id") or "")
+    # Without a message_id there is nowhere to keep held lines for the next batch.
+    final = bool(event.get("final", True)) or not message_id
 
     renderer = StreamRenderer(width=width, use_ascii=use_ascii)
     path = None
