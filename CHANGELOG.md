@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 (2026-11-18)
 
 ### Behavior changes
 - A source whose first line names no diagram termaid draws is no longer drawn as a flowchart. A Mermaid type with no renderer here (`sankey-beta`, `C4Context`, `radar-beta`, `zenuml`, `requirementDiagram`) and a mistyped keyword (`grpah LR`) used to come out as boxes of raw syntax, or as a top-down flowchart; `render()` now returns an empty string for them, the command line exits 1 and says why (`termaid does not draw sankey diagrams.`, `Unknown diagram type 'grpah'. Start the diagram with its type, such as flowchart TD, sequenceDiagram or classDiagram.`), and the Claude Code hook shows the Mermaid source. `termaid.type_problem(source)` returns that message, or `None`
