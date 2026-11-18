@@ -113,7 +113,11 @@ def _read_source(args: argparse.Namespace) -> str | None:
             _report(args, "input_missing", f"Error reading file: {e}", path=args.file)
             return None
     elif not sys.stdin.isatty():
-        return sys.stdin.read()
+        try:
+            return sys.stdin.read()
+        except UnicodeDecodeError as e:
+            _report(args, "input_missing", f"Error reading input: {e}")
+            return None
     else:
         _report(
             args,
@@ -136,6 +140,15 @@ def _use_color(args: argparse.Namespace) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
+    # Pipes and redirects use the locale encoding, which on Windows is a
+    # code page that cannot encode box-drawing characters.
+    # A stream that is not a text file, or was already read, keeps its own.
+    for stream in (sys.stdin, sys.stdout):
+        try:
+            stream.reconfigure(encoding="utf-8", errors=stream.errors)
+        except (AttributeError, OSError, ValueError):
+            pass
+
     # Read --diagnostics-format first, so argument errors honour it too.
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("--diagnostics-format", default="text")

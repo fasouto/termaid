@@ -97,7 +97,7 @@ def _no_new_syntax(source: str) -> bool:
     ids=lambda p: p.stem,
 )
 def test_streaming_fixtures_draw_no_raw_syntax(fixture):
-    assert _no_new_syntax(fixture.read_text().rstrip("\n"))
+    assert _no_new_syntax(fixture.read_text(encoding="utf-8").rstrip("\n"))
 
 
 @pytest.mark.parametrize(

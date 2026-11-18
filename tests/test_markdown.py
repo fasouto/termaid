@@ -136,7 +136,7 @@ class TestCliMarkdown:
     def test_output_file(self, tmp_path: Path):
         out = tmp_path / "out.txt"
         assert self._run(tmp_path, _md("x", FENCE + "mermaid", "graph LR", "  A --> B", FENCE), "-o", str(out)) == 0
-        assert "┌" in out.read_text()
+        assert "┌" in out.read_text(encoding="utf-8")
 
     def test_theme(self, tmp_path: Path, monkeypatch):
         pytest.importorskip("rich")
@@ -144,7 +144,7 @@ class TestCliMarkdown:
         out = tmp_path / "out.txt"
         text = _md("intro [not markup]", "1. step", "   ```mermaid", "   graph LR", "     A --> B", "   ```")
         assert self._run(tmp_path, text, "--theme", "neon", "-o", str(out)) == 0
-        plain = re.sub(r"\x1b\[[0-9;]*m", "", out.read_text())
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", out.read_text(encoding="utf-8"))
         assert "intro [not markup]" in plain
         assert "   ┌" in plain
 

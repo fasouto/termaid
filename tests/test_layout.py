@@ -328,7 +328,7 @@ class TestStackedSubgraphBorders:
         from termaid.layout.grid import SG_BORDER_PAD
         from tests.conftest import FLOWCHARTS_DIR, find_box
 
-        lines = render((FLOWCHARTS_DIR / "subgraph_stacked_borders.mmd").read_text()).split("\n")
+        lines = render((FLOWCHARTS_DIR / "subgraph_stacked_borders.mmd").read_text(encoding="utf-8")).split("\n")
         r_bottom = find_box(lines, "r")[1]
         a_bottom = find_box(lines, "A")[1]
         b_top = find_box(lines, "B")[0]
@@ -353,7 +353,7 @@ class TestSubgraphWidth:
         from termaid.layout.grid import SG_BORDER_PAD
         from tests.conftest import FLOWCHARTS_DIR, find_box
 
-        lines = render((FLOWCHARTS_DIR / "subgraph_pipeline.mmd").read_text()).split("\n")
+        lines = render((FLOWCHARTS_DIR / "subgraph_pipeline.mmd").read_text(encoding="utf-8")).split("\n")
         widths = {}
         for sg, labels in self.OWNED.items():
             _, _, left, right = find_box(lines, sg)

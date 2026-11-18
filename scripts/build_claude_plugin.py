@@ -26,9 +26,9 @@ IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 
 def check_versions():
-    with open(os.path.join(REPO, "claude-plugin/.claude-plugin/plugin.json")) as f:
+    with open(os.path.join(REPO, "claude-plugin/.claude-plugin/plugin.json"), encoding="utf-8") as f:
         plugin_version = json.load(f)["version"]
-    with open(os.path.join(REPO, "src/termaid/__init__.py")) as f:
+    with open(os.path.join(REPO, "src/termaid/__init__.py"), encoding="utf-8") as f:
         match = re.search(r'^__version__\s*=\s*"([^"]+)"', f.read(), re.M)
     if not match:
         sys.exit("build: no __version__ found in src/termaid/__init__.py")

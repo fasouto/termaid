@@ -101,7 +101,7 @@ def test_autonumber_prefix_stays_on_the_first_line():
 @pytest.mark.parametrize("width", [6, 10, 14])
 @pytest.mark.parametrize("path", SEQUENCE_FIXTURES, ids=[p.stem for p in SEQUENCE_FIXTURES])
 def test_wrapping_never_merges_labels_into_lifelines(path, width):
-    source = path.read_text().strip()
+    source = path.read_text(encoding="utf-8").strip()
     wrapped = render(source, max_label_width=width)
     rows = wrapped.splitlines()
     columns = _lifeline_columns(wrapped)
@@ -138,8 +138,8 @@ def test_wrapped_labels_crossing_lifelines_draw_no_markers(width):
 
 @pytest.mark.parametrize("path", SEQUENCE_FIXTURES, ids=[p.stem for p in SEQUENCE_FIXTURES])
 def test_no_max_label_width_matches_snapshot(path):
-    expected = (FIXTURES / "expected" / "sequence" / f"{path.stem}.txt").read_text().rstrip("\n")
-    assert render(path.read_text().strip(), max_label_width=None) == expected
+    expected = (FIXTURES / "expected" / "sequence" / f"{path.stem}.txt").read_text(encoding="utf-8").rstrip("\n")
+    assert render(path.read_text(encoding="utf-8").strip(), max_label_width=None) == expected
 
 
 def test_identifier_labels_keep_member_name_together():
