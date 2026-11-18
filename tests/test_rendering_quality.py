@@ -374,6 +374,30 @@ class TestLayoutLeavesRoomForLabels:
         assert edge_targets(lines, "Queued", names) == {"Building"}, out
         assert edge_targets(lines, "Building", names) == {"Testing"}, out
 
+    def test_back_edge_label_fits_between_two_lanes(self):
+        """The second back edge's lane ran ten columns right of the first,
+        so `changes requested` was written across it."""
+        from tests.conftest import edge_targets, find_box
+
+        src = (
+            "stateDiagram-v2\n"
+            "  Draft --> Review : submit\n"
+            "  Review --> Draft : changes requested\n"
+            "  Review --> Approved : approve\n"
+            "  Approved --> Draft : build or tests fail"
+        )
+        out = render(src)
+        lines = out.split("\n")
+        names = ["Draft", "Review", "Approved"]
+        assert edge_targets(lines, "Review", names) == {"Draft", "Approved"}, out
+        assert edge_targets(lines, "Approved", names) == {"Draft"}, out
+        boxes = [find_box(lines, name) for name in names]
+        for label in ("changes requested", "build or tests fail"):
+            row, col = _find_label(lines, label)
+            for top, bottom, left, right in boxes:
+                if top <= row <= bottom:
+                    assert col - 1 != right and col + len(label) != left, out
+
 
 class TestBackEdgesIntoOneNode:
     """Two back-edges spread along one border of the node they both reach."""
