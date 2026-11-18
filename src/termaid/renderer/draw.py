@@ -1,14 +1,13 @@
 """Draw orchestrator: combines layout, routing, and rendering into final output.
 
 Drawing order (back to front):
-1. Subgraphs (background)
+1. Subgraphs (background), with their titles
 2. Nodes (boxes)
 3. Edge lines
 4. Edge corners
 5. Arrow heads
 6. T-junctions (where edges leave nodes)
 7. Edge labels
-8. Subgraph labels
 """
 from __future__ import annotations
 
@@ -103,8 +102,10 @@ def render_graph_canvas(
             height = max(height, y + 2)
     canvas = Canvas(width, height)
 
-    # 1. Draw subgraph borders (background layer)
+    # 1. Draw subgraphs (background layer)
     _draw_subgraph_borders(canvas, layout, cs)
+    _draw_subgraph_labels(canvas, layout, cs)
+    _protect_subgraphs(canvas, layout)
 
     # 2. Draw nodes
     _draw_nodes(canvas, graph, layout, cs)
@@ -116,10 +117,7 @@ def render_graph_canvas(
         inline_edge_labels=inline_edge_labels,
     )
 
-    # 4. Draw subgraph labels (on top of everything else)
-    _draw_subgraph_labels(canvas, layout, cs)
-
-    # 5. Draw notes (on top of everything else)
+    # 4. Draw notes (on top of everything else)
     _draw_notes(canvas, graph, layout, cs)
 
     # Flip if needed
@@ -179,6 +177,24 @@ def _draw_subgraph_labels(canvas: Canvas, layout: GridLayout, cs: CharSet) -> No
         label = sb.subgraph.label
         if label:
             canvas.put_text(y + 1, x + 2, label, style="subgraph_label")
+
+
+def _protect_subgraphs(canvas: Canvas, layout: GridLayout) -> None:
+    """Protect each subgraph's border and title, so edges only join them
+    and edge labels keep off them."""
+    for sb in layout.subgraph_bounds:
+        if sb.width <= 0 or sb.height <= 0:
+            continue
+        x, y = max(0, sb.x), max(0, sb.y)
+        right, bottom = x + sb.width - 1, y + sb.height - 1
+        for c in range(x, right + 1):
+            canvas.protect(y, c)
+            canvas.protect(bottom, c)
+        for r in range(y + 1, bottom):
+            canvas.protect(r, x)
+            canvas.protect(r, right)
+        for c in range(x + 2, x + 2 + display_width(sb.subgraph.label)):
+            canvas.protect(y + 1, c)
 
 
 def _draw_nodes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -> None:
