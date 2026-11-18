@@ -1,9 +1,13 @@
 """Tests for shared utility functions."""
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
-from termaid.utils import display_width, truncate_to_width, wrap_display_text
+from termaid import _layout_width, render
+from termaid.utils import display_width, max_line_width, truncate_to_width, wrap_display_text
 
 
 class TestTruncateToWidth:
@@ -111,3 +115,22 @@ class TestWrapDisplayText:
     ])
     def test_clause_breaks_and_exact_fit_words(self, text, width, expected):
         assert wrap_display_text(text, width) == expected
+
+
+_GRAPH_FIXTURES = sorted(
+    p for kind in ("flowcharts", "statediagram", "architecture")
+    for p in (Path(__file__).parent / "fixtures" / kind).glob("*.mmd")
+)
+
+
+@pytest.mark.parametrize("path", _GRAPH_FIXTURES, ids=lambda p: f"{p.parent.name}/{p.stem}")
+def test_layout_width_never_exceeds_the_drawing(path):
+    """fit_to_width skips drawing a candidate wider than this, so it must be a floor."""
+    source = path.read_text(encoding="utf-8")
+    sources = [source]
+    header = re.match(r"\s*(?:flowchart|graph)\s+(TD|TB|LR|RL|BT)\b", source)
+    if header:
+        sources.append(source[:header.start(1)] + "RL" + source[header.end(1):])
+    for text in sources:
+        for options in ({}, {"gap": 1, "padding_x": 0, "max_label_width": 8}):
+            assert _layout_width(text, **options) <= max_line_width(render(text, **options))

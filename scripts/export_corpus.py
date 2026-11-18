@@ -15,7 +15,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
-from termaid import render  # noqa: E402
+from termaid import _layout_width, render  # noqa: E402
 from termaid.utils import fit_to_width  # noqa: E402
 
 FIXTURES = REPO / "tests" / "fixtures"
@@ -59,7 +59,7 @@ def cases():
                 "source": source,
                 "options": {},
                 "fit_width": width,
-                "expected": fit_to_width(draw, draw(), width),
+                "expected": fit_to_width(draw, draw(), width, measure=partial(_layout_width, source)),
             }
 
 

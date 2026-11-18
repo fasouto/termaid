@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from ..graph.model import ArrowType, EdgeStyle, Graph, GraphNote
 from ..graph.shapes import NodeShape
-from ..layout.grid import GridLayout, NodePlacement, SubgraphBounds
+from ..layout.grid import GridLayout, NodePlacement, SubgraphBounds, compute_layout
 from ..routing.router import AttachDir, RoutedEdge, layout_and_route
 from .canvas import Canvas
 from ..utils import display_width
@@ -116,6 +116,24 @@ def render_graph_canvas(
     _draw_notes(canvas, notes, cs)
 
     return canvas
+
+
+def layout_width(
+    graph: Graph, padding_x: int, padding_y: int, gap: int, max_label_width: int | None,
+) -> int:
+    """Columns a drawing of *graph* takes at least, from its layout alone.
+
+    Boxes and subgraph borders are drawn out to their right edges, and
+    routing and labels only add columns. RL turns the drawing around, so
+    there the box nearest the left edge ends up against the right one.
+    """
+    layout = compute_layout(graph, padding_x, padding_y, gap, max_label_width)
+    lefts = [p.draw_x for p in layout.placements.values()] + [b.x for b in layout.subgraph_bounds]
+    if not lefts:
+        return 0
+    if graph.direction.is_reversed and not graph.direction.is_vertical:
+        return layout.canvas_width - min(lefts)
+    return layout.canvas_width
 
 
 def _mirror(

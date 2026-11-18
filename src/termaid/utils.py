@@ -68,7 +68,9 @@ def max_line_width(text: str) -> int:
     return max(display_width(line) for line in lines)
 
 
-def fit_to_width(render, result, target_width: int, *, gap: int = 4, padding_x: int = 4, plain=str):
+def fit_to_width(
+    render, result, target_width: int, *, gap: int = 4, padding_x: int = 4, plain=str, measure=None,
+):
     """Fit a drawing to *target_width* columns, or get as close as it can.
 
     *render* draws the diagram with keyword overrides (``gap``,
@@ -77,37 +79,41 @@ def fit_to_width(render, result, target_width: int, *, gap: int = 4, padding_x: 
     not enough, labels wrap at word boundaries, at the widest label width
     that fits. When nothing fits, the narrowest drawing tried comes back.
     *plain* gives a drawing's text, for drawings that are not strings.
+    *measure*, when given, takes the same overrides and returns a width the
+    drawing cannot be narrower than, without drawing it. A candidate it
+    already puts over the target is not drawn.
     """
-    def width_of(candidate) -> int:
-        return max_line_width(plain(candidate))
+    def fitting(**overrides):
+        """The drawing with *overrides* when it fits, else None."""
+        if measure is not None and measure(**overrides) > target_width:
+            return None
+        candidate = render(**overrides)
+        return candidate if max_line_width(plain(candidate)) <= target_width else None
 
-    if width_of(result) <= target_width:
+    if max_line_width(plain(result)) <= target_width:
         return result
 
     for step_gap, step_padding in ((min(gap, 2), padding_x), (1, padding_x), (1, 2), (1, 0)):
         if step_gap >= gap and step_padding >= padding_x:
             continue
-        candidate = render(gap=step_gap, padding_x=step_padding)
-        if width_of(candidate) <= target_width:
+        candidate = fitting(gap=step_gap, padding_x=step_padding)
+        if candidate is not None:
             return candidate
-        result = candidate
 
     # Spacing alone was not enough: wrap labels and keep the widest label
-    # width that fits. Width 1 goes first: if it changes nothing, this diagram
-    # type ignores label width; if it still overflows, nothing will fit.
-    narrowest = render(gap=1, padding_x=0, max_label_width=1)
-    if plain(narrowest) != plain(result):
-        result = narrowest
-        if width_of(narrowest) <= target_width:
-            low, high = 2, min(target_width, 64)
-            while low <= high:
-                label_width = (low + high) // 2
-                candidate = render(gap=1, padding_x=0, max_label_width=label_width)
-                if width_of(candidate) <= target_width:
-                    result = candidate
-                    low = label_width + 1
-                else:
-                    high = label_width - 1
+    # width that fits. Width 1 goes first: if it still overflows, nothing
+    # will fit, and it comes back.
+    result = render(gap=1, padding_x=0, max_label_width=1)
+    if max_line_width(plain(result)) <= target_width:
+        low, high = 2, min(target_width, 64)
+        while low <= high:
+            label_width = (low + high) // 2
+            candidate = fitting(gap=1, padding_x=0, max_label_width=label_width)
+            if candidate is not None:
+                result = candidate
+                low = label_width + 1
+            else:
+                high = label_width - 1
     return result
 
 
