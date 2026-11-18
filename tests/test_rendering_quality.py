@@ -454,6 +454,55 @@ class TestBackEdgesIntoOneNode:
         assert "┼" not in out, f"The back-edges cross:\n{out}"
 
 
+_RETRY_CHAIN = (
+    "  A --> B\n  B --> C\n  C --> D\n  D --> E\n"
+    "  B --> A\n  C --> A\n  D --> B\n  E --> C"
+)
+
+
+class TestBackEdgesLeavingAndReachingOneNode:
+    """B --> A left B on the row where D --> B arrived and went on along the
+    same lane, so the two read as one line: `│  B  ├◄──────────┤`."""
+
+    @pytest.mark.parametrize(
+        "src",
+        [
+            "stateDiagram-v2\n  A --> B : go\n  B --> C : go\n  C --> D : go\n  D --> E : go\n"
+            "  B --> A : first retry\n  C --> A : second retry here\n"
+            "  D --> B : third and final retry\n  E --> C : x",
+            "flowchart LR\n" + _RETRY_CHAIN,
+        ],
+        ids=["state-TD", "flowchart-LR"],
+    )
+    def test_no_arrow_sits_on_a_departing_line(self, src):
+        from tests.conftest import find_box
+
+        out = render(src)
+        lines = out.split("\n")
+        for name in "ABCDE":
+            top, bottom, left, right = find_box(lines, name)
+            sides = [(r, right, 0, 1, "├", "◄") for r in range(top, bottom + 1)]
+            sides += [(r, left, 0, -1, "┤", "►") for r in range(top, bottom + 1)]
+            sides += [(bottom, c, 1, 0, "┬", "▲") for c in range(left, right + 1)]
+            sides += [(top, c, -1, 0, "┴", "▼") for c in range(left, right + 1)]
+            for r, c, dr, dc, leaves, arrives in sides:
+                assert not (lines[r][c] == leaves and lines[r + dr][c + dc] == arrives), (
+                    f"An edge reaches {name} on the cell where another leaves it:\n{out}"
+                )
+
+    @pytest.mark.parametrize("direction", ["TD", "LR"])
+    def test_each_back_edge_leads_only_to_its_own_target(self, direction):
+        from tests.conftest import edge_targets
+
+        out = render(f"flowchart {direction}\n" + _RETRY_CHAIN)
+        lines = out.split("\n")
+        names = list("ABCDE")
+        targets = {name: edge_targets(lines, name, names) for name in names}
+        assert targets == {
+            "A": {"B"}, "B": {"A", "C"}, "C": {"A", "D"}, "D": {"B", "E"}, "E": {"C"},
+        }, out
+
+
 class TestEdgesKeepOffSubgraphTitles:
     """A line may cross a subgraph's title row on its way down, but never
     run along it: `│ Long─subgraph─title │`."""

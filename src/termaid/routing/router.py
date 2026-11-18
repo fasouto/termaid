@@ -472,12 +472,21 @@ def _spread_shared_endpoints(
     from collections import defaultdict
 
     end_groups: dict[tuple[int, int], list[RoutedEdge]] = defaultdict(list)
+    leaving: dict[tuple[int, int], list[RoutedEdge]] = defaultdict(list)
     for re in routed:
         if len(re.draw_path) >= 2:
             end_groups[re.draw_path[-1]].append(re)
+            leaving[re.draw_path[0]].append(re)
 
     for point, edges in end_groups.items():
-        if len(edges) <= 1:
+        departures = leaving.get(point, [])
+        # The two directions of one link share a line on purpose: ◄──►.
+        two_way = any(
+            (d.edge.source, d.edge.target) == (a.edge.target, a.edge.source)
+            for d in departures for a in edges
+        )
+        departure = departures[0] if departures and not two_way else None
+        if len(edges) + (departure is not None) <= 1:
             continue
         tgt_id = edges[0].edge.target
         tgt = layout.placements.get(tgt_id)
@@ -490,16 +499,20 @@ def _spread_shared_endpoints(
             )
         if not tgt:
             continue
-        _apply_spread(edges, point, tgt, is_start=False)
+        _apply_spread(edges, point, tgt, departure)
 
 
 def _apply_spread(
     edges: list[RoutedEdge],
     point: tuple[int, int],
     placement: NodePlacement,
-    is_start: bool,
+    departure: RoutedEdge | None,
 ) -> None:
     """Offset each edge's endpoint along the node border.
+
+    An edge that leaves from the same point keeps it, since moving a start
+    leaves a jog across the border, and the arrivals take the slots beside
+    it so that no arrival reads as part of the departing line.
 
     For TOP/BOTTOM attachment (horizontal spread): shifts the adjacent
     corner point to match the new x, avoiding backward horizontal jog
@@ -510,10 +523,6 @@ def _apply_spread(
     at its x when the approach is straight, so the last segment stays
     horizontal and the arrow direction is correct.
     """
-    if is_start:
-        return  # start spreading disabled; causes border artifacts
-
-    n = len(edges)
     px, py = point
     attach = edges[0].end_dir
     along = 0 if attach in (AttachDir.TOP, AttachDir.BOTTOM) else 1
@@ -521,25 +530,38 @@ def _apply_spread(
     def lane_order(re: RoutedEdge) -> tuple[int, int]:
         # An edge whose last lane comes from one side takes a slot on that
         # side, and the deeper of two lanes from the same side takes the
-        # slot farther from it, so neither crosses the other's lane.
-        corner = re.draw_path[-2]
-        before = re.draw_path[-3] if len(re.draw_path) > 2 else corner
+        # slot farther from it, so neither crosses the other's lane. The
+        # departure's first lane counts the same way.
+        path = re.draw_path[::-1] if re is departure else re.draw_path
+        corner = path[-2]
+        before = path[-3] if len(path) > 2 else corner
         side = (before[along] > corner[along]) - (before[along] < corner[along])
         depth = abs(corner[1 - along] - point[1 - along])
         return side, -side * depth
 
-    edges = sorted(edges, key=lane_order)
+    order = sorted(edges + ([departure] if departure else []), key=lane_order)
+    n = len(order)
+
+    def offsets(lo: int, hi: int, pos: int) -> list[int] | None:
+        if hi - lo < n - 1:
+            return None
+        if departure is None:
+            step = min(2, (hi - lo) // max(n - 1, 1))
+            return [int((i - (n - 1) / 2) * step) for i in range(n)]
+        k = order.index(departure)
+        for step in (2, 1):
+            if lo <= pos - k * step and pos + (n - 1 - k) * step <= hi:
+                return [(i - k) * step for i in range(n)]
+        return None
 
     if attach in (AttachDir.TOP, AttachDir.BOTTOM):
         # Vertical arrival: spread horizontally along the border.
         min_x = placement.draw_x + 1
         max_x = placement.draw_x + placement.draw_width - 2
-        spread_range = max_x - min_x
-        if spread_range < n - 1:
+        shifts = offsets(min_x, max_x, px)
+        if shifts is None:
             return
-        step = min(2, spread_range // max(n - 1, 1))
-        for i, re in enumerate(edges):
-            offset = int((i - (n - 1) / 2) * step)
+        for re, offset in zip(order, shifts):
             if offset == 0:
                 continue
             new_x = max(min_x, min(max_x, px + offset))
@@ -553,16 +575,16 @@ def _apply_spread(
         # to the endpoint).  Tight gaps produce cramped ╭► patterns.
         min_y = placement.draw_y + 1
         max_y = placement.draw_y + placement.draw_height - 2
-        spread_range = max_y - min_y
-        if spread_range < n - 1:
+        shifts = offsets(min_y, max_y, py)
+        if shifts is None:
             return
-        # Check that all edges have enough approach distance
+        # Check that all edges have enough approach distance. Beside a
+        # departure one cell less will do: unspread, the arrival reads as
+        # part of the departing line.
         min_gap = min(abs(px - re.draw_path[-2][0]) for re in edges)
-        if min_gap < 4:
+        if min_gap < (3 if departure else 4):
             return  # not enough room for clean corner + arrow
-        step = min(2, spread_range // max(n - 1, 1))
-        for i, re in enumerate(edges):
-            offset = int((i - (n - 1) / 2) * step)
+        for re, offset in zip(order, shifts):
             if offset == 0:
                 continue
             new_y = max(min_y, min(max_y, py + offset))
