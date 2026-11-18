@@ -13,9 +13,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..graph.model import ArrowType, Direction, EdgeStyle, Graph, GraphNote
+from ..graph.model import ArrowType, EdgeStyle, Graph, GraphNote
 from ..graph.shapes import NodeShape
-from ..layout.grid import GridLayout, NodePlacement
+from ..layout.grid import GridLayout, NodePlacement, SubgraphBounds
 from ..routing.router import AttachDir, RoutedEdge, layout_and_route
 from .canvas import Canvas
 from ..utils import display_width
@@ -78,28 +78,23 @@ def render_graph_canvas(
 
     cs = cs or default_charset(use_ascii)
 
-    # Need to handle BT/RL by rendering as TB/LR then flipping
-    direction = graph.direction
-    needs_v_flip = direction == Direction.BT
-    needs_h_flip = direction == Direction.RL
-
-    # Normalize direction for layout
-    if needs_v_flip:
-        graph.direction = Direction.TB
-    elif needs_h_flip:
-        graph.direction = Direction.LR
-
     layout, routed = layout_and_route(graph, padding_x, padding_y, gap, max_label_width)
+    notes = _place_notes(graph, layout)
+    if graph.direction.is_reversed:
+        _mirror(layout, routed, notes, vertical=graph.direction.is_vertical)
 
     # Create canvas (add some margin)
-    # Account for edge paths that may extend beyond node boundaries
-    # (e.g. back edges routed to the right/below of all nodes)
+    # Account for edge paths and notes that may extend beyond node
+    # boundaries (e.g. back edges routed to the right/below of all nodes)
     width = layout.canvas_width + 4
     height = layout.canvas_height + 4
     for re in routed:
         for x, y in re.draw_path:
             width = max(width, x + 2)
             height = max(height, y + 2)
+    for b in notes:
+        width = max(width, b.x + b.width + 2)
+        height = max(height, b.y + b.height + 2)
     canvas = Canvas(width, height)
 
     # 1. Draw subgraphs (background layer)
@@ -118,17 +113,49 @@ def render_graph_canvas(
     )
 
     # 4. Draw notes (on top of everything else)
-    _draw_notes(canvas, graph, layout, cs)
-
-    # Flip if needed
-    if needs_v_flip:
-        canvas.flip_vertical()
-        graph.direction = Direction.BT
-    elif needs_h_flip:
-        canvas.flip_horizontal()
-        graph.direction = Direction.RL
+    _draw_notes(canvas, notes, cs)
 
     return canvas
+
+
+def _mirror(
+    layout: GridLayout, routed: list[RoutedEdge], notes: list[_NoteBox], vertical: bool,
+) -> None:
+    """Turn a TB layout upside down for BT, or an LR one around for RL.
+
+    Boxes, subgraph bounds, notes and edge paths move to their mirrored
+    places, so drawing them the usual way gives the mirrored picture with
+    text, arrowheads and shapes the right way round. Grid coordinates are
+    left as they are: nothing reads them after routing.
+    """
+    boxes: list[SubgraphBounds | _NoteBox] = [*layout.subgraph_bounds, *notes]
+    placements = layout.placements.values()
+    if vertical:
+        far = max([
+            *(p.draw_y + p.draw_height for p in placements),
+            *(b.y + b.height for b in boxes),
+            *(y + 1 for re in routed for _, y in re.draw_path),
+        ])
+        for p in placements:
+            p.draw_y = far - p.draw_y - p.draw_height
+        for b in boxes:
+            b.y = far - b.y - b.height
+        for re in routed:
+            re.draw_path = [(x, far - 1 - y) for x, y in re.draw_path]
+        layout.canvas_height = far
+    else:
+        far = max([
+            *(p.draw_x + p.draw_width for p in placements),
+            *(b.x + b.width for b in boxes),
+            *(x + 1 for re in routed for x, _ in re.draw_path),
+        ])
+        for p in placements:
+            p.draw_x = far - p.draw_x - p.draw_width
+        for b in boxes:
+            b.x = far - b.x - b.width
+        for re in routed:
+            re.draw_path = [(far - 1 - x, y) for x, y in re.draw_path]
+        layout.canvas_width = far
 
 
 def _draw_subgraph_borders(canvas: Canvas, layout: GridLayout, cs: CharSet) -> None:
@@ -851,8 +878,18 @@ def _draw_edge_label(
                 return
 
 
-def _draw_notes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -> None:
-    """Draw note boxes next to their target nodes."""
+@dataclass
+class _NoteBox:
+    note: GraphNote
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+def _place_notes(graph: Graph, layout: GridLayout) -> list[_NoteBox]:
+    """Place each note box next to its target node."""
+    boxes: list[_NoteBox] = []
     for note in graph.notes:
         if note.target not in layout.placements:
             continue
@@ -869,11 +906,11 @@ def _draw_notes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -
             note_x = max(0, note_x)
 
         note_y = p.draw_y + (p.draw_height - note_height) // 2
+        boxes.append(_NoteBox(note, note_x, note_y, note_width, note_height))
+    return boxes
 
-        # Extend canvas if needed
-        needed_w = note_x + note_width + 2
-        needed_h = note_y + note_height + 2
-        if needed_w > canvas.width or needed_h > canvas.height:
-            canvas.resize(max(canvas.width, needed_w), max(canvas.height, needed_h))
 
-        draw_rectangle(canvas, note_x, note_y, note_width, note_height, note.text, cs, style="node")
+def _draw_notes(canvas: Canvas, notes: list[_NoteBox], cs: CharSet) -> None:
+    """Draw note boxes."""
+    for b in notes:
+        draw_rectangle(canvas, b.x, b.y, b.width, b.height, b.note.text, cs, style="node")
