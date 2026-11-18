@@ -8,6 +8,8 @@
 
 ### Changes
 - Claude Code plugin: the skill's description now tells Claude to write a diagram in a reply as a `mermaid` block, which the hook draws, instead of drawing boxes by hand
+- Flowchart and state diagrams: fitting to a width is much faster, and so is routing in general. A 16-node flowchart with five loop-back edges fits to 100 columns in about 0.2 seconds instead of 4, and draws unfitted in 50 ms instead of 315. A spacing or label width whose layout is already too wide is skipped without drawing it, and a path search whose target is walled in stops at once instead of walking the whole grid. The drawings are unchanged. In Claude Code such a diagram was shown as its Mermaid source once the hook's 3 second limit applied
+- `fit_to_width()` takes an optional `measure=` callable that returns a lower bound on a candidate's width without drawing it
 
 ### Fixes
 - Flowchart: a dense diagram no longer hangs. When no route was found for an edge, the fallback was a diagonal line that the router never finished walking; six nodes linked to six others (`A0 & ... & A5 --> B0 & ... & B5`) was enough (#53, thanks @developingchet)
