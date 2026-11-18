@@ -281,15 +281,27 @@ def _strip_quotes(text: str) -> str:
 
 
 def _split_on_semicolons(line: str) -> list[str]:
-    """Split a line into statements at semicolons outside quotes and node labels."""
+    """Split a line into statements at semicolons outside quotes and node labels.
+
+    The ; that ends an entity code such as #quot; or #9829; belongs to the text,
+    except in a style statement, where fill:#333; is a colour and a separator.
+    """
+    entity_ends = {
+        m.end() - 1 for m in _ENTITY_CODE.finditer(line)
+        if m.group(1).isdigit() or f"{m.group(1)};" in html.entities.html5
+    }
     parts: list[str] = []
     start = 0
     for i, ch in enumerate(_mask_labels(line)):
-        if ch == ";":
+        if ch == ";" and (i not in entity_ends or _is_style_statement(line[start:i])):
             parts.append(line[start:i])
             start = i + 1
     parts.append(line[start:])
     return parts
+
+
+def _is_style_statement(statement: str) -> bool:
+    return statement.lstrip().lower().startswith(("style ", "classdef ", "linkstyle "))
 
 
 class _FlowchartParser:
