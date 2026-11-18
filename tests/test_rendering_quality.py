@@ -293,6 +293,65 @@ class TestLabelsKeepOffOtherLines:
             assert label in out, out
 
 
+def _find_label(lines: list[str], label: str) -> tuple[int, int]:
+    """Row and column of a label drawn whole on one line."""
+    row = next((i for i, line in enumerate(lines) if label in line), None)
+    assert row is not None, f"{label!r} not drawn whole\n" + "\n".join(lines)
+    return row, lines[row].index(label)
+
+
+class TestLayoutLeavesRoomForLabels:
+    """Each label gets a spot beside its own edge, cutting no line."""
+
+    @pytest.mark.parametrize(
+        "src,chain",
+        [
+            (
+                "flowchart TD\n"
+                "  A[Start] --> P\n"
+                "  subgraph P[Pipeline]\n"
+                "    direction LR\n"
+                "    B[Build] -->|compile ok| C[Test]\n"
+                "    C -->|tests pass| D[Ship]\n"
+                "  end",
+                [("Build", "compile ok", "Test"), ("Test", "tests pass", "Ship")],
+            ),
+            (
+                "stateDiagram-v2\n"
+                "  [*] --> Draft\n"
+                "  Draft --> Review : submit\n"
+                "  Review --> Approved : approve\n"
+                "  state Approved {\n"
+                "    [*] --> Queued\n"
+                "    Queued --> Building : runner free\n"
+                "    Building --> Testing : build ok\n"
+                "    Testing --> Ready : tests pass\n"
+                "  }\n"
+                "  Approved --> Released : publish",
+                [
+                    ("Queued", "runner free", "Building"),
+                    ("Building", "build ok", "Testing"),
+                    ("Testing", "tests pass", "Ready"),
+                ],
+            ),
+        ],
+        ids=["lr-subgraph", "composite-state"],
+    )
+    def test_label_sits_on_an_arrow_across_the_flow(self, src, chain):
+        """A subgraph laid out across a top-down flow got no room between
+        its boxes, so its labels went to the empty row above them."""
+        from tests.conftest import edge_targets, find_box
+
+        out = render(src)
+        lines = out.split("\n")
+        for source, label, target in chain:
+            s_top, s_bottom, _, s_right = find_box(lines, source)
+            _, _, t_left, _ = find_box(lines, target)
+            row, col = _find_label(lines, label)
+            assert s_top < row < s_bottom and s_right < col and col + len(label) <= t_left, out
+            assert edge_targets(lines, source, [source, target]) == {target}, out
+
+
 class TestBackEdgesIntoOneNode:
     """Two back-edges spread along one border of the node they both reach."""
 
