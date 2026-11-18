@@ -26,6 +26,7 @@ import stat
 import sys
 import tempfile
 import threading
+import time
 from dataclasses import asdict, dataclass, field
 from functools import partial
 
@@ -39,6 +40,9 @@ _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
 # they are shown as written.
 _MAX_HELD_CHARS = 8_192
 _RENDER_SECONDS = 3
+# A message that is interrupted never sends its final batch, so its state
+# file stays behind; one untouched for this long belongs to no live message.
+_STALE_STATE_SECONDS = 24 * 60 * 60
 
 
 @dataclass
@@ -219,6 +223,22 @@ def _state_path(folder: str, message_id: str) -> str:
     return os.path.join(folder, safe + ".json")
 
 
+def _remove_stale_state(folder: str) -> None:
+    cutoff = time.time() - _STALE_STATE_SECONDS
+    try:
+        with os.scandir(folder) as entries:
+            for entry in entries:
+                if not entry.name.endswith((".json", ".tmp")) or not entry.is_file(follow_symlinks=False):
+                    continue
+                try:
+                    if entry.stat(follow_symlinks=False).st_mtime < cutoff:
+                        os.remove(entry.path)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
 def _write_state(path: str, data: str) -> None:
     """Write through a temp file, so a later call never reads half a file."""
     tmp = f"{path}.{os.getpid()}.tmp"
@@ -282,6 +302,8 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
                 os.remove(path)
             except OSError:
                 pass
+            if final:
+                _remove_stale_state(folder)
         else:
             try:
                 _write_state(path, renderer.to_json())
