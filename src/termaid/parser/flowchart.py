@@ -723,12 +723,11 @@ class _FlowchartParser:
     def _find_labeled_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None:
         """Find arrows with labels: -->|text| or -- text --> or == text ==>.
         Returns (start, end, style, arr_start, arr_end, label, min_length, type_start, type_end)."""
-        # Pattern: -->|text|
-        m = re.search(r'(<|[-=])([-=.]+)(>?)(\|)([^|]*)(\|)', text)
+        # Pattern: -->|text|, --> |text|, --o|text|, o--o|text|
+        m = re.search(r'(<|(?<=\s)[xo]|(?<![-=.])[-=])([-=.]+)([>xo]?)\s*(\|)([^|]*)(\|)', text)
         if m:
             label = m.group(5).strip()
-            # Parse the arrow part (everything before the first |)
-            arrow_part = text[m.start():m.start() + m.group(0).index("|")]
+            arrow_part = m.group(1) + m.group(2) + m.group(3)
             style, arr_start, arr_end, type_start, type_end = self._classify_arrow(arrow_part)
             length = _compute_arrow_length(arrow_part, style)
             return (m.start(), m.end(), style, arr_start, arr_end, label, length, type_start, type_end)
