@@ -158,6 +158,20 @@ def compute_subgraph_bounds(
         if min_x == float("inf"):
             return None
 
+        # A straight vertical edge inside the box gets its label on the
+        # left of its line, so the box holds that label as content.
+        for edge in graph.edges:
+            src = layout.placements.get(edge.source)
+            tgt = layout.placements.get(edge.target)
+            if (
+                edge.label and src and tgt
+                and edge.source in all_node_ids and edge.target in all_node_ids
+                and src.grid.col == tgt.grid.col and src.grid.row != tgt.grid.row
+            ):
+                line_x, _ = layout.grid_to_draw_center(src.grid.col, 0)
+                text_width = max(display_width(line) for line in edge.label.split("\n"))
+                min_x = min(min_x, line_x - text_width)
+
         content_width = int(max_x - min_x) + SG_BORDER_PAD * 2
         label_width = display_width(sg.label) + 4
         final_width = max(content_width, label_width)
