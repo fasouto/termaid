@@ -177,8 +177,8 @@ def parse_flowchart(text: str) -> Graph:
 
 
 def _strip_comments(line: str) -> str:
-    """Remove %% comments from a line, leaving %% inside quoted labels."""
-    idx = _mask_quotes(line).find("%%")
+    """Remove %% comments from a line, leaving %% inside labels."""
+    idx = _mask_labels(line).find("%%")
     if idx >= 0:
         return line[:idx]
     return line
@@ -247,6 +247,33 @@ def _mask_quotes(text: str) -> str:
     return "".join(result)
 
 
+_LABEL_CLOSERS = {"[": "]", "(": ")", "{": "}"}
+
+
+def _mask_labels(text: str) -> str:
+    """Like _mask_quotes, and also blank out the unquoted label of a node.
+
+    A node label is the inside of a [...], (...) or {...} that follows an id,
+    up to the bracket that closes it. A label with no closing bracket is left
+    as it is.
+    """
+    result = list(_mask_quotes(text))
+    opener = ""
+    start = depth = 0
+    for i, ch in enumerate(result):
+        if not opener:
+            if ch in _LABEL_CLOSERS and i > 0 and (result[i - 1].isalnum() or result[i - 1] == "_"):
+                opener, start, depth = ch, i, 1
+        elif ch == opener:
+            depth += 1
+        elif ch == _LABEL_CLOSERS[opener]:
+            depth -= 1
+            if depth == 0:
+                result[start + 1:i] = " " * (i - start - 1)
+                opener = ""
+    return "".join(result)
+
+
 _ENTITY_CODE = re.compile(r"#([A-Za-z0-9]+);")
 
 
@@ -286,21 +313,27 @@ def _opens_node_data(line: str) -> bool:
 
 
 def _split_on_semicolons(line: str) -> list[str]:
-    """Split a line into statements at semicolons outside double quotes."""
+    """Split a line into statements at semicolons outside quotes and node labels.
+
+    The ; that ends an entity code such as #quot; or #9829; belongs to the text,
+    except in a style statement, where fill:#333; is a colour and a separator.
+    """
+    entity_ends = {
+        m.end() - 1 for m in _ENTITY_CODE.finditer(line)
+        if m.group(1).isdigit() or f"{m.group(1)};" in html.entities.html5
+    }
     parts: list[str] = []
-    buf: list[str] = []
-    in_quote = False
-    for ch in line:
-        if ch == '"':
-            in_quote = not in_quote
-            buf.append(ch)
-        elif ch == ";" and not in_quote:
-            parts.append("".join(buf))
-            buf = []
-        else:
-            buf.append(ch)
-    parts.append("".join(buf))
+    start = 0
+    for i, ch in enumerate(_mask_labels(line)):
+        if ch == ";" and (i not in entity_ends or _is_style_statement(line[start:i])):
+            parts.append(line[start:i])
+            start = i + 1
+    parts.append(line[start:])
     return parts
+
+
+def _is_style_statement(statement: str) -> bool:
+    return statement.lstrip().lower().startswith(("style ", "classdef ", "linkstyle "))
 
 
 class _FlowchartParser:
@@ -686,8 +719,8 @@ class _FlowchartParser:
         remaining = line.strip()
 
         while remaining:
-            # Mask quoted strings so arrows inside "..." aren't matched
-            masked = _mask_quotes(remaining)
+            # Mask quoted strings and node labels so arrows inside them aren't matched
+            masked = _mask_labels(remaining)
 
             # Try to find the earliest arrow match
             best_match: tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None = None
@@ -754,30 +787,46 @@ class _FlowchartParser:
     def _find_labeled_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None:
         """Find arrows with labels: -->|text| or -- text --> or == text ==>.
         Returns (start, end, style, arr_start, arr_end, label, min_length, type_start, type_end)."""
-        # Pattern: -->|text|
-        m = re.search(r'(<|[-=])([-=.]+)(>?)(\|)([^|]*)(\|)', text)
-        if m:
+        # Pattern: -- text -->, <-- text -->, -- text ---, -- text --o,
+        # == text ==>, -. text .-> and their longer forms. As in Mermaid, the
+        # text can't hold the pair that opens its link (`--`, `==`, `-.`), so
+        # it ends where the closing part starts.
+        patterns = [
+            r'(?<!-)--(?![->xo])((?:[^-]|-(?!-))+)(-{2,}(?:[->]|[xo](?=\s|$)))',
+            r'(?<!=)==(?![=>xo])((?:[^=]|=(?!=))+)(={2,}(?:[=>]|[xo](?=\s|$)))',
+            r'(?<!-)-\.(?![-.])((?:[^.-]|-(?!\.)|\.+(?![.-]))+)(-?\.+-(?:>|[xo](?=\s|$))?)',
+        ]
+        text_link = None
+        for pat in patterns:
+            found = re.search(pat, text)
+            if found and (text_link is None or found.start() < text_link.start()):
+                text_link = found
+        text_start = 0
+        if text_link:
+            text_start = text_link.start()
+            # A `<`, or an `o` or `x` after a space, right before the opening
+            # pair is the head at the link's start: `<-- text -->`, `o-- text --o`.
+            before = text[text_start - 1:text_start]
+            if before == "<" or (before in ("o", "x") and text[text_start - 2:text_start - 1].isspace()):
+                text_start -= 1
+
+        # Pattern: -->|text|, --> |text|, --o|text|, o--o|text|
+        m = re.search(r'(<|(?<=\s)[xo]|(?<![-=.])[-=])([-=.]+)([>xo]?)\s*(\|)([^|]*)(\|)', text)
+        if m and not (text_link and text_start < m.start()):
             label = m.group(5).strip()
-            # Parse the arrow part (everything before the first |)
-            arrow_part = text[m.start():m.start() + m.group(0).index("|")]
+            arrow_part = m.group(1) + m.group(2) + m.group(3)
             style, arr_start, arr_end, type_start, type_end = self._classify_arrow(arrow_part)
             length = _compute_arrow_length(arrow_part, style)
             return (m.start(), m.end(), style, arr_start, arr_end, label, length, type_start, type_end)
 
-        # Pattern: -- text --> or == text ==> or -. text .->
-        patterns = [
-            (r'(--)(\s+.+?\s+)(-->)', EdgeStyle.SOLID, False, True),
-            (r'(==)(\s+.+?\s+)(==>)', EdgeStyle.THICK, False, True),
-            (r'(-\.)(\s+.+?\s+)(\.+->)', EdgeStyle.DOTTED, False, True),
-        ]
-        for pat, style, arr_start, arr_end in patterns:
-            m = re.search(pat, text)
-            if m:
-                label_text = m.group(2).strip()
-                # Only the trailing arrow carries the length: `-- text -->` is a
-                # normal link, `-- text --->` is one step longer.
-                length = _compute_arrow_length(m.group(3), style)
-                return (m.start(), m.end(), style, arr_start, arr_end, label_text, length, ArrowType.ARROW, ArrowType.ARROW)
+        m = text_link
+        if m:
+            label_text = m.group(1).strip()
+            style, arr_start, arr_end, type_start, type_end = self._classify_arrow(text[text_start:m.start(1)] + m.group(2))
+            # Only the trailing arrow carries the length: `-- text -->` is a
+            # normal link, `-- text --->` is one step longer.
+            length = _compute_arrow_length(m.group(2), style)
+            return (text_start, m.end(), style, arr_start, arr_end, label_text, length, type_start, type_end)
 
         return None
 
@@ -789,13 +838,13 @@ class _FlowchartParser:
             (r'<-\.+->',  EdgeStyle.DOTTED, True, True, ArrowType.ARROW, ArrowType.ARROW),
             (r'<=+=>',     EdgeStyle.THICK, True, True, ArrowType.ARROW, ArrowType.ARROW),
             (r'<-+->',     EdgeStyle.SOLID, True, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'o-+o',      EdgeStyle.SOLID, True, True, ArrowType.CIRCLE, ArrowType.CIRCLE),
-            (r'x-+x',      EdgeStyle.SOLID, True, True, ArrowType.CROSS, ArrowType.CROSS),
+            (r'o--+o',     EdgeStyle.SOLID, True, True, ArrowType.CIRCLE, ArrowType.CIRCLE),
+            (r'x--+x',     EdgeStyle.SOLID, True, True, ArrowType.CROSS, ArrowType.CROSS),
             (r'-\.+->',    EdgeStyle.DOTTED, False, True, ArrowType.ARROW, ArrowType.ARROW),
             (r'=+=>',      EdgeStyle.THICK, False, True, ArrowType.ARROW, ArrowType.ARROW),
             (r'-+->',      EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'-+o(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CIRCLE),
-            (r'-+x(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CROSS),
+            (r'--+o(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CIRCLE),
+            (r'--+x(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CROSS),
             (r'~~~',       EdgeStyle.INVISIBLE, False, False, ArrowType.ARROW, ArrowType.ARROW),
             (r'-\.+-',     EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
             (r'={3,}',     EdgeStyle.THICK, False, False, ArrowType.ARROW, ArrowType.ARROW),
@@ -848,7 +897,7 @@ class _FlowchartParser:
 
         # Handle :::className suffix
         style_class: str | None = None
-        class_idx = _mask_quotes(text).rfind(":::")
+        class_idx = _mask_labels(text).rfind(":::")
         if class_idx >= 0:
             style_class = text[class_idx + 3:].strip()
             text = text[:class_idx].strip()
