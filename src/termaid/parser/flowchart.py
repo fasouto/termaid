@@ -68,24 +68,49 @@ _SHAPE_PATTERNS: list[tuple[str, str, NodeShape]] = [
 _AT_SHAPE_MAP: dict[str, NodeShape] = {
     "rect": NodeShape.RECTANGLE,
     "rectangle": NodeShape.RECTANGLE,
+    "proc": NodeShape.RECTANGLE,
+    "process": NodeShape.RECTANGLE,
     "rounded": NodeShape.ROUNDED,
+    "event": NodeShape.ROUNDED,
     "circle": NodeShape.CIRCLE,
     "circ": NodeShape.CIRCLE,
     "diam": NodeShape.DIAMOND,
     "diamond": NodeShape.DIAMOND,
+    "decision": NodeShape.DIAMOND,
+    "question": NodeShape.DIAMOND,
     "hex": NodeShape.HEXAGON,
     "hexagon": NodeShape.HEXAGON,
+    "prepare": NodeShape.HEXAGON,
     "stadium": NodeShape.STADIUM,
     "terminal": NodeShape.STADIUM,
+    "pill": NodeShape.STADIUM,
     "cyl": NodeShape.CYLINDER,
     "cylinder": NodeShape.CYLINDER,
     "db": NodeShape.CYLINDER,
+    "database": NodeShape.CYLINDER,
     "subroutine": NodeShape.SUBROUTINE,
+    "fr-rect": NodeShape.SUBROUTINE,
+    "framed-rectangle": NodeShape.SUBROUTINE,
+    "subproc": NodeShape.SUBROUTINE,
+    "subprocess": NodeShape.SUBROUTINE,
     "lean-r": NodeShape.PARALLELOGRAM,
+    "lean-right": NodeShape.PARALLELOGRAM,
+    "in-out": NodeShape.PARALLELOGRAM,
     "lean-l": NodeShape.PARALLELOGRAM_ALT,
-    "trap-t": NodeShape.TRAPEZOID,
-    "trap-b": NodeShape.TRAPEZOID_ALT,
+    "lean-left": NodeShape.PARALLELOGRAM_ALT,
+    "out-in": NodeShape.PARALLELOGRAM_ALT,
+    # trap-b is A[/text\], wide at the bottom; trap-t is A[\text/].
+    "trap-b": NodeShape.TRAPEZOID,
+    "trapezoid": NodeShape.TRAPEZOID,
+    "trapezoid-bottom": NodeShape.TRAPEZOID,
+    "priority": NodeShape.TRAPEZOID,
+    "trap-t": NodeShape.TRAPEZOID_ALT,
+    "trapezoid-top": NodeShape.TRAPEZOID_ALT,
+    "inv-trapezoid": NodeShape.TRAPEZOID_ALT,
+    "manual": NodeShape.TRAPEZOID_ALT,
     "dbl-circ": NodeShape.DOUBLE_CIRCLE,
+    "double-circle": NodeShape.DOUBLE_CIRCLE,
+    "odd": NodeShape.ASYMMETRIC,
 }
 
 
@@ -253,6 +278,13 @@ def _strip_quotes(text: str) -> str:
     return text
 
 
+def _opens_node_data(line: str) -> bool:
+    """Whether the line ends inside an unclosed @{ ... }."""
+    masked = _mask_quotes(line)
+    at = masked.rfind("@{")
+    return at >= 0 and masked.find("}", at) < 0
+
+
 def _split_on_semicolons(line: str) -> list[str]:
     """Split a line into statements at semicolons outside double quotes."""
     parts: list[str] = []
@@ -277,6 +309,8 @@ class _FlowchartParser:
         self.graph = Graph()
         self._subgraph_stack: list[Subgraph] = []
         self._shaped_node_ids: set[str] = set()  # nodes with explicit shapes
+        self._edge_ids: set[str] = set()
+        self._in_acc_descr = False
 
     def parse(self) -> Graph:
         lines = self._preprocess(self.text)
@@ -307,10 +341,19 @@ class _FlowchartParser:
             raw_lines.extend(_split_on_semicolons(line))
 
         result: list[str] = []
+        node_data_open = False
         for line in raw_lines:
             stripped = _strip_comments(line).strip()
-            if stripped:
+            if not stripped:
+                continue
+            if node_data_open and re.match(r"[\w-]+\s*:(?!:)|\}", stripped):
+                # The @{ ... } data of a node can span lines, one key on each.
+                result[-1] += ", " + stripped
+                closed = "}" in _mask_quotes(stripped)
+            else:
                 result.append(stripped)
+                closed = True
+            node_data_open = not closed or _opens_node_data(stripped)
         return result
 
     def _parse_header(self, line: str) -> None:
@@ -332,6 +375,16 @@ class _FlowchartParser:
     def _parse_line(self, line: str) -> None:
         """Parse a single body line."""
         lower = line.lower().strip()
+
+        # Accessibility title and description, not drawn
+        if self._in_acc_descr:
+            self._in_acc_descr = "}" not in line
+            return
+        if re.match(r"acc(title|descr)\s*:", lower):
+            return
+        if re.match(r"accdescr\s*\{", lower):
+            self._in_acc_descr = "}" not in line
+            return
 
         # Subgraph start
         if lower.startswith("subgraph"):
@@ -427,23 +480,23 @@ class _FlowchartParser:
         parts = line.split(None, 2)
         if len(parts) < 3:
             return
-        name = parts[1]
         props_str = parts[2]
         props: dict[str, str] = {}
         for prop in props_str.split(","):
             if ":" in prop:
                 k, v = prop.split(":", 1)
                 props[k.strip()] = v.strip()
-        self.graph.class_defs[name] = props
+        for name in filter(None, parts[1].split(",")):
+            self.graph.class_defs[name] = dict(props)
 
     def _parse_class_assignment(self, line: str) -> None:
         """Parse 'class nodeId className'."""
         parts = line.split()
         if len(parts) >= 3:
-            node_id = parts[1]
             class_name = parts[2]
-            if node_id in self.graph.nodes:
-                self.graph.nodes[node_id].style_class = class_name
+            for node_id in parts[1].split(","):
+                if node_id in self.graph.nodes:
+                    self.graph.nodes[node_id].style_class = class_name
 
     def _parse_style(self, line: str) -> None:
         """Parse 'style nodeId prop1:val1,prop2:val2'."""
@@ -502,7 +555,10 @@ class _FlowchartParser:
                 continue
 
             # Parse node group (handles &)
-            node_group = self._split_ampersand(seg.text)
+            text = seg.text
+            if i + 1 < len(segments):
+                text = self._strip_edge_id(text)
+            node_group = self._split_ampersand(text)
             current_nodes: list[str] = []
             for node_text in node_group:
                 node = self._parse_node(node_text.strip())
@@ -531,6 +587,14 @@ class _FlowchartParser:
 
             prev_nodes = current_nodes
             i += 1
+
+    def _strip_edge_id(self, text: str) -> str:
+        """Drop the id of the edge that follows: the e1@ in 'A e1@--> B'."""
+        parts = text.rsplit(None, 1)
+        if len(parts) == 2 and len(parts[1]) > 1 and parts[1].endswith("@") and '"' not in parts[1]:
+            self._edge_ids.add(parts[1][:-1])
+            return parts[0]
+        return text
 
     def _register_in_subgraph(self, node_id: str) -> None:
         """Register a node in the current subgraph if inside one."""
@@ -733,7 +797,7 @@ class _FlowchartParser:
             (r'-+o(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CIRCLE),
             (r'-+x(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CROSS),
             (r'~~~',       EdgeStyle.INVISIBLE, False, False, ArrowType.ARROW, ArrowType.ARROW),
-            (r'-\.-',      EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
+            (r'-\.+-',     EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
             (r'={3,}',     EdgeStyle.THICK, False, False, ArrowType.ARROW, ArrowType.ARROW),
             (r'-{3,}',     EdgeStyle.SOLID, False, False, ArrowType.ARROW, ArrowType.ARROW),
         ]
@@ -790,9 +854,12 @@ class _FlowchartParser:
             text = text[:class_idx].strip()
 
         # Try @{...} syntax: ID@{ shape: diamond, label: "text" }
-        at_match = re.match(r'^([a-zA-Z_]\w*)\s*@\{(.+)\}$', text, re.DOTALL)
+        at_match = re.match(r'^([^\s@\[\](){}<>]+)\s*@\{(.+)\}$', text, re.DOTALL)
         if at_match:
             node_id = at_match.group(1)
+            if node_id in self._edge_ids:
+                # e1@{ animate: true } sets an edge's animation, which isn't drawn.
+                return None
             body = at_match.group(2)
             props = _parse_at_shape_props(body)
             shape_name = props.get("shape", "rect")
