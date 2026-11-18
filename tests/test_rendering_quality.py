@@ -351,6 +351,29 @@ class TestLayoutLeavesRoomForLabels:
             assert s_top < row < s_bottom and s_right < col and col + len(label) <= t_left, out
             assert edge_targets(lines, source, [source, target]) == {target}, out
 
+    def test_label_inside_a_subgraph_keeps_off_its_border(self):
+        """A subgraph was only as wide as its nodes, so `runner free` was
+        forced across its own line and `build ok` touched the border."""
+        from tests.conftest import edge_targets, find_box
+
+        src = (
+            "stateDiagram-v2\n"
+            "  state Approved {\n"
+            "    [*] --> Queued\n"
+            "    Queued --> Building : runner free\n"
+            "    Building --> Testing : build ok\n"
+            "  }"
+        )
+        out = render(src)
+        lines = out.split("\n")
+        _, _, left, right = find_box(lines, "Approved")
+        for label in ("runner free", "build ok"):
+            _, col = _find_label(lines, label)
+            assert left + 1 < col and col + len(label) < right, out
+        names = ["Queued", "Building", "Testing"]
+        assert edge_targets(lines, "Queued", names) == {"Building"}, out
+        assert edge_targets(lines, "Building", names) == {"Testing"}, out
+
 
 class TestBackEdgesIntoOneNode:
     """Two back-edges spread along one border of the node they both reach."""
