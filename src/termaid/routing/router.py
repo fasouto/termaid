@@ -208,14 +208,14 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
 
 
 def _keep_runs_off_titles(routed: list[RoutedEdge], layout: GridLayout) -> None:
-    """Move a horizontal run off the top border and title row of each
+    """Move a horizontal run off the borders and title row of each
     subgraph box it passes over.
 
     A layer gap is one grid row however many lines it spans, and a run is
     drawn on the row's middle line. When the gap holds a box's top border
-    and title, that middle line is the title row. The run moves to the
-    nearest other line of its grid row, so the vertical lines it joins
-    only change length.
+    and title, that middle line is the title row; below a box it can be
+    the bottom border. The run moves to the nearest other line of its
+    grid row, so the vertical lines it joins only change length.
     """
     if not layout.subgraph_bounds:
         return
@@ -236,7 +236,7 @@ def _keep_runs_off_titles(routed: list[RoutedEdge], layout: GridLayout) -> None:
                 line
                 for sb in layout.subgraph_bounds
                 if sb.x <= hi and lo <= sb.x + sb.width - 1
-                for line in (sb.y, sb.y + 1)
+                for line in (sb.y, sb.y + 1, sb.y + sb.height - 1)
             }
             span = next((s for s in spans if y in s), None)
             if y not in header or span is None:
