@@ -25,6 +25,7 @@ import shutil
 import stat
 import sys
 import tempfile
+import threading
 from dataclasses import asdict, dataclass, field
 from functools import partial
 
@@ -37,6 +38,7 @@ _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
 # and every batch saves the held lines again, so past this many characters
 # they are shown as written.
 _MAX_HELD_CHARS = 8_192
+_RENDER_SECONDS = 3
 
 
 @dataclass
@@ -131,11 +133,23 @@ class StreamRenderer:
         if width is None:
             width = max(shutil.get_terminal_size((_DEFAULT_WIDTH, 24)).columns - _MARGIN, 20)
         width = max(width - display_width(self.indent), 20)
-        try:
-            draw = partial(render, source, use_ascii=self.use_ascii)
-            text = fit_to_width(draw, draw(), width)
-        except Exception:
+        result: list[str] = []
+
+        def run() -> None:
+            try:
+                draw = partial(render, source, use_ascii=self.use_ascii)
+                result.append(fit_to_width(draw, draw(), width))
+            except Exception:
+                pass
+
+        # Claude Code kills the hook after 10 seconds, before it saves its
+        # state, so a slower render is shown as source instead.
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(_RENDER_SECONDS)
+        if not result:
             return None
+        text = result[0]
         # A drawing wider than the pane wraps into a garble; the source reads better.
         if not text.strip() or (known and max_line_width(text) > width):
             return None
