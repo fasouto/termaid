@@ -399,6 +399,39 @@ class TestLayoutLeavesRoomForLabels:
                 if top <= row <= bottom:
                     assert col - 1 != right and col + len(label) != left, out
 
+    def test_back_edge_label_between_node_columns_cuts_no_line(self):
+        """A wide composite state put both back-edge lanes between node
+        columns, nine columns apart, and `changes requested` was written
+        across the outer lane."""
+        from tests.conftest import edge_cells, edge_targets
+
+        src = (
+            "stateDiagram-v2\n"
+            "  [*] --> Draft\n"
+            "  Draft --> Review : submit\n"
+            "  Review --> Draft : changes requested\n"
+            "  Review --> Approved : approve\n"
+            "  state Approved {\n"
+            "    [*] --> Queued\n"
+            "    Queued --> Building : runner free\n"
+            "    Building --> Testing : build ok\n"
+            "    Testing --> Ready : tests pass\n"
+            "  }\n"
+            "  Approved --> Released : publish\n"
+            "  Approved --> Draft : build or tests fail"
+        )
+        out = render(src)
+        lines = out.split("\n")
+        names = ["Draft", "Review", "Approved"]
+        assert edge_targets(lines, "Review", names) == {"Draft"}, out
+        assert edge_targets(lines, "Approved", names) == {"Draft"}, out
+        for source, label in (("Review", "changes requested"), ("Approved", "build or tests fail")):
+            row, col = _find_label(lines, label)
+            beside = {(row - 1, c) for c in range(col, col + len(label))}
+            beside |= {(row + 1, c) for c in range(col, col + len(label))}
+            beside |= {(row, col - 1), (row, col + len(label))}
+            assert beside & edge_cells(lines, source, names), f"{label!r} is not beside its edge\n{out}"
+
 
 class TestBackEdgesIntoOneNode:
     """Two back-edges spread along one border of the node they both reach."""

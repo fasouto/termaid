@@ -163,6 +163,18 @@ def edge_targets(lines: list[str], label: str, labels: list[str]) -> set[str]:
     straight through ``┼`` crossings, and records the box an arrowhead points
     at. ``labels`` are the node boxes to look for, located with ``find_box``.
     """
+    return _follow_lines(lines, label, labels)[0]
+
+
+def edge_cells(lines: list[str], label: str, labels: list[str]) -> set[tuple[int, int]]:
+    """(row, col) of every cell on the lines leaving ``label``'s box, as
+    followed by ``edge_targets``."""
+    return _follow_lines(lines, label, labels)[1]
+
+
+def _follow_lines(
+    lines: list[str], label: str, labels: list[str],
+) -> tuple[set[str], set[tuple[int, int]]]:
     boxes = {name: find_box(lines, name) for name in labels}
 
     def box_at(row: int, col: int) -> str | None:
@@ -204,4 +216,8 @@ def edge_targets(lines: list[str], label: str, labels: list[str]) -> set[str]:
             dr, dc = _STEP[d]
             if box_at(row + dr, col + dc) is None:
                 todo.append((row + dr, col + dc, d))
-    return reached
+    on_line = {
+        (row, col) for row, col, _ in seen
+        if char(row, col) in _ARROWS or char(row, col) in _LINKS
+    }
+    return reached, on_line
