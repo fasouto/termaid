@@ -76,7 +76,7 @@ def test_blank_cells_carry_no_foreground_style():
 
 
 def test_class_def_nodes_keep_their_class_key():
-    doc = render_styled((FIXTURES_DIR / "flowcharts" / "showcase_class_shorthand.mmd").read_text())
+    doc = render_styled((FIXTURES_DIR / "flowcharts" / "showcase_class_shorthand.mmd").read_text(encoding="utf-8"))
     assert {"class:highlight", "class:error"} <= _styles(doc)
 
 
@@ -120,7 +120,7 @@ class TestCli:
         code, captured = self._run(tmp_path, capsys, "graph LR\n  A --> B", "-o", str(out))
         assert code == 0
         assert captured.out == ""
-        assert json.loads(out.read_text()) == render_styled("graph LR\n  A --> B")
+        assert json.loads(out.read_text(encoding="utf-8")) == render_styled("graph LR\n  A --> B")
 
     def test_theme_is_ignored(self, tmp_path: Path, capsys, monkeypatch):
         monkeypatch.delenv("NO_COLOR", raising=False)

@@ -46,22 +46,22 @@ def _launcher(root, *args, stdin="", env_extra=None):
     env.update(env_extra or {})
     return subprocess.run(
         [sys.executable, "-I", "-S", str(root / "scripts" / "termaid.py"), *args],
-        input=stdin, capture_output=True, text=True, env=env, cwd=str(root.parent),
+        input=stdin, capture_output=True, encoding="utf-8", env=env, cwd=str(root.parent),
     )
 
 
 def test_build_tree(built):
-    plugin = json.loads((built / ".claude-plugin" / "plugin.json").read_text())
+    plugin = json.loads((built / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
     assert plugin["version"] == termaid.__version__
     assert (built / "lib" / "termaid" / "__init__.py").is_file()
     assert (built / "LICENSE").is_file()
     assert (built / "skills" / "mermaid" / "SKILL.md").is_file()
     assert not [p for p in built.rglob("*") if p.name == "__pycache__" or p.suffix == ".pyc"]
 
-    readme = re.sub(r"```.*?```", "", (built / "README.md").read_text(), flags=re.S)
+    readme = re.sub(r"```.*?```", "", (built / "README.md").read_text(encoding="utf-8"), flags=re.S)
     assert len(readme.split()) >= 40
 
-    hooks = json.loads((built / "hooks" / "hooks.json").read_text())
+    hooks = json.loads((built / "hooks" / "hooks.json").read_text(encoding="utf-8"))
     command = hooks["hooks"]["MessageDisplay"][0]["hooks"][0]["command"]
     assert "scripts/termaid.py" in command
     assert (built / "scripts" / "termaid.py").is_file()
@@ -78,7 +78,7 @@ def test_build_is_idempotent_and_clears_output(built):
     after = _snapshot(built)
     assert "stray.txt" not in after
     assert str(Path("lib") / "stale.py") not in after
-    assert (built / ".git" / "HEAD").read_text() == "ref"
+    assert (built / ".git" / "HEAD").read_text(encoding="utf-8") == "ref"
     del before["stray.txt"], before[str(Path("lib") / "stale.py")]
     assert before == after
     _build(built)

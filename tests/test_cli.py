@@ -53,7 +53,7 @@ class TestCliOutput:
         out_file = tmp_path / "result.txt"
         result = main([str(mmd), "-o", str(out_file)])
         assert result == 0
-        content = out_file.read_text()
+        content = out_file.read_text(encoding="utf-8")
         assert "A" in content
         assert "B" in content
 
@@ -206,7 +206,7 @@ class TestCliPipe:
             [sys.executable, "-m", "termaid"],
             input="graph LR\n  A --> B",
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
         assert result.returncode == 0
         assert "A" in result.stdout
@@ -217,7 +217,7 @@ class TestCliPipe:
             [sys.executable, "-m", "termaid", "--ascii"],
             input="graph LR\n  A --> B",
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
         assert result.returncode == 0
         assert "+" in result.stdout  # ASCII box char
@@ -228,7 +228,7 @@ class TestCliPipe:
             [sys.executable, "-m", "termaid"],
             input="graph LR\n  A --> B --> C --> D",
             capture_output=True,
-            text=True,
+            encoding="utf-8",
         )
         assert result.returncode == 0
         assert "A" in result.stdout
@@ -286,7 +286,7 @@ class TestShowIds:
         mmd.write_text(prefix + "graph LR\n  A[Start] --> B[End]")
         out = tmp_path / "out.txt"
         assert main([str(mmd), "--show-ids", "-o", str(out)]) == 0
-        content = out.read_text()
+        content = out.read_text(encoding="utf-8")
         assert "A: Start" in content
         assert "B: End" in content
         assert "graph LR" not in content
@@ -307,7 +307,7 @@ class TestThemeOptionInteractions:
         result = main([str(mmd), "--theme", "default", "-o", str(out), *extra_args])
         assert result == 0
         assert out.exists()
-        return _strip_ansi(out.read_text())
+        return _strip_ansi(out.read_text(encoding="utf-8"))
 
     def test_theme_respects_output_file(self, tmp_path: Path, capsys):
         content = self._render_to_file(tmp_path, "graph LR\n  A --> B", [])

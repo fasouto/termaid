@@ -48,16 +48,16 @@ class TestSnapshotRendering:
         expected_path: Path,
         update_snapshots: bool,
     ):
-        source = input_path.read_text().strip()
+        source = input_path.read_text(encoding="utf-8").strip()
         output = render(source)
 
         if update_snapshots or not expected_path.exists():
-            expected_path.write_text(output + "\n")
+            expected_path.write_text(output + "\n", encoding="utf-8")
             if not update_snapshots:
                 pytest.skip(f"Generated new snapshot for {name} - needs review")
             return
 
-        expected = expected_path.read_text().rstrip("\n")
+        expected = expected_path.read_text(encoding="utf-8").rstrip("\n")
         assert output == expected, (
             f"Snapshot mismatch for {name}.\n"
             f"Run with --update-snapshots to update.\n"
@@ -74,7 +74,7 @@ class TestRenderingInvariants:
         ids=[p[0] for p in get_fixture_pairs()],
     )
     def test_all_nodes_rendered(self, name: str, input_path: Path, expected_path: Path):
-        source = input_path.read_text().strip()
+        source = input_path.read_text(encoding="utf-8").strip()
         output = render(source)
         labels = _get_node_labels(source)
         assert_all_nodes_rendered(output, labels)
@@ -85,7 +85,7 @@ class TestRenderingInvariants:
         ids=[p[0] for p in get_fixture_pairs()],
     )
     def test_valid_unicode(self, name: str, input_path: Path, expected_path: Path):
-        source = input_path.read_text().strip()
+        source = input_path.read_text(encoding="utf-8").strip()
         output = render(source)
         assert_valid_unicode(output)
 
@@ -95,7 +95,7 @@ class TestRenderingInvariants:
         ids=[p[0] for p in get_fixture_pairs()],
     )
     def test_reasonable_dimensions(self, name: str, input_path: Path, expected_path: Path):
-        source = input_path.read_text().strip()
+        source = input_path.read_text(encoding="utf-8").strip()
         output = render(source)
         assert_reasonable_dimensions(output)
 
@@ -105,7 +105,7 @@ class TestRenderingInvariants:
         ids=[p[0] for p in get_fixture_pairs()],
     )
     def test_no_edge_node_overlap(self, name: str, input_path: Path, expected_path: Path):
-        source = input_path.read_text().strip()
+        source = input_path.read_text(encoding="utf-8").strip()
         output = render(source)
         labels = _get_node_labels(source)
         assert_no_edge_node_overlap(output, labels)
@@ -120,7 +120,7 @@ class TestAsciiMode:
         ids=[p[0] for p in get_fixture_pairs()],
     )
     def test_ascii_renders(self, name: str, input_path: Path, expected_path: Path):
-        source = input_path.read_text().strip()
+        source = input_path.read_text(encoding="utf-8").strip()
         output = render(source, use_ascii=True)
         assert len(output) > 0
         # ASCII output should not contain unicode box-drawing characters

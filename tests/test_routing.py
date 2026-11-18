@@ -230,7 +230,7 @@ class TestUnrelatedEdgesStayApart:
         from termaid import render
         from tests.conftest import FLOWCHARTS_DIR, edge_targets
 
-        lines = render((FLOWCHARTS_DIR / fixture).read_text()).split("\n")
+        lines = render((FLOWCHARTS_DIR / fixture).read_text(encoding="utf-8")).split("\n")
         return {label: edge_targets(lines, label, labels) for label in labels}
 
     def test_pipeline_edges_reach_only_their_targets(self):
@@ -249,7 +249,7 @@ class TestUnrelatedEdgesStayApart:
         from termaid import render
         from tests.conftest import FLOWCHARTS_DIR
 
-        return render((FLOWCHARTS_DIR / "subgraph_pipeline.mmd").read_text()).split("\n")
+        return render((FLOWCHARTS_DIR / "subgraph_pipeline.mmd").read_text(encoding="utf-8")).split("\n")
 
     def test_edge_leaves_through_the_flow_facing_border(self):
         from tests.conftest import find_box
@@ -373,7 +373,7 @@ class TestCrossingEdgeBetweenStackedSubgraphs:
         from termaid import render
         from tests.conftest import FLOWCHARTS_DIR
 
-        return render((FLOWCHARTS_DIR / "subgraph_crossing_edge.mmd").read_text()).split("\n")
+        return render((FLOWCHARTS_DIR / "subgraph_crossing_edge.mmd").read_text(encoding="utf-8")).split("\n")
 
     def test_edge_stays_within_subgraph_columns(self):
         from tests.conftest import find_box
