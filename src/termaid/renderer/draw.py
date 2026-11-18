@@ -731,6 +731,25 @@ def _try_place_on_segment(
     return False
 
 
+def _place_past_turn(
+    canvas: Canvas, path: list[tuple[int, int]], order: list[int],
+    lines: list[str], placed_labels: list[tuple[int, int, int]],
+) -> bool:
+    """Place a label too long for any run of its edge over or under a
+    horizontal run, from the run's end on past its turn, on blank cells."""
+    width = _block_width(lines)
+    rules = _LabelRules(may_cover=set(), share_rows=True)
+    for i in order:
+        (x1, y1), (x2, y2) = path[i], path[i + 1]
+        if y1 != y2 or x1 == x2:
+            continue
+        col = x2 + 1 if x2 < x1 else x2 - width
+        for row in (y1 - len(lines), y1 + 1):
+            if _try_place_label(canvas, row, col, lines, placed_labels, rules):
+                return True
+    return False
+
+
 def _draw_edge_label(
     canvas: Canvas, re: RoutedEdge,
     placed_labels: list[tuple[int, int, int]],
@@ -782,13 +801,18 @@ def _draw_edge_label(
 
     # Try preferred segments first, then remaining. A spot that covers
     # another edge's line cuts that edge, so take one only when no clean
-    # spot exists, even on a row another label already uses.
+    # spot exists, even on a row another label already uses or over a run
+    # shorter than the label.
     own = _path_cells(path)
     for rules in (
         _LabelRules(may_cover=own),
         _LabelRules(may_cover=own, share_rows=True),
         _LabelRules(),
     ):
+        if rules.may_cover is None and _place_past_turn(
+            canvas, path, preferred + remaining, lines, placed_labels,
+        ):
+            return
         for i in preferred + remaining:
             x1, y1 = path[i]
             x2, y2 = path[i + 1]
