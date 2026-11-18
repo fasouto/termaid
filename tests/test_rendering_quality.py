@@ -189,6 +189,28 @@ class TestLabelsKeepOffOtherLines:
         inside = [line[left + 1:right] for line in lines[top + 1:bottom]]
         assert not any("data" in row for row in inside), out
 
+
+class TestBackEdgesIntoOneNode:
+    """Two back-edges spread along one border of the node they both reach."""
+
+    def test_state_back_edges_turn_cleanly_and_do_not_cross(self):
+        src = (
+            "stateDiagram-v2\n"
+            "  Draft --> Review : submit\n"
+            "  Review --> Draft : changes requested\n"
+            "  Review --> Approved : approve\n"
+            "  Approved --> Draft : build or tests fail"
+        )
+        out = render(src)
+        assert "┤" not in out, f"A back-edge turn doubles back on itself:\n{out}"
+        assert "┼" not in out, f"The back-edges cross:\n{out}"
+
+    def test_lr_back_edges_do_not_cross(self):
+        src = "flowchart LR\n  Draft --> Review\n  Review --> Draft\n  Review --> Approved\n  Approved --> Draft"
+        out = render(src)
+        assert "┼" not in out, f"The back-edges cross:\n{out}"
+
+
 class TestSubgraphBorderCrossings:
     """Subgraph borders should remain intact when edges cross them."""
 
