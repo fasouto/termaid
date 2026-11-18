@@ -723,29 +723,46 @@ class _FlowchartParser:
     def _find_labeled_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None:
         """Find arrows with labels: -->|text| or -- text --> or == text ==>.
         Returns (start, end, style, arr_start, arr_end, label, min_length, type_start, type_end)."""
+        # Pattern: -- text -->, <-- text -->, -- text ---, -- text --o,
+        # == text ==>, -. text .-> and their longer forms. As in Mermaid, the
+        # text can't hold the pair that opens its link (`--`, `==`, `-.`), so
+        # it ends where the closing part starts.
+        patterns = [
+            r'(?<!-)--(?![->xo])((?:[^-]|-(?!-))+)(-{2,}(?:[->]|[xo](?=\s|$)))',
+            r'(?<!=)==(?![=>xo])((?:[^=]|=(?!=))+)(={2,}(?:[=>]|[xo](?=\s|$)))',
+            r'(?<!-)-\.(?![-.])((?:[^.-]|-(?!\.)|\.+(?![.-]))+)(-?\.+-(?:>|[xo](?=\s|$))?)',
+        ]
+        text_link = None
+        for pat in patterns:
+            found = re.search(pat, text)
+            if found and (text_link is None or found.start() < text_link.start()):
+                text_link = found
+        text_start = 0
+        if text_link:
+            text_start = text_link.start()
+            # A `<`, or an `o` or `x` after a space, right before the opening
+            # pair is the head at the link's start: `<-- text -->`, `o-- text --o`.
+            before = text[text_start - 1:text_start]
+            if before == "<" or (before in ("o", "x") and text[text_start - 2:text_start - 1].isspace()):
+                text_start -= 1
+
         # Pattern: -->|text|, --> |text|, --o|text|, o--o|text|
         m = re.search(r'(<|(?<=\s)[xo]|(?<![-=.])[-=])([-=.]+)([>xo]?)\s*(\|)([^|]*)(\|)', text)
-        if m:
+        if m and not (text_link and text_start < m.start()):
             label = m.group(5).strip()
             arrow_part = m.group(1) + m.group(2) + m.group(3)
             style, arr_start, arr_end, type_start, type_end = self._classify_arrow(arrow_part)
             length = _compute_arrow_length(arrow_part, style)
             return (m.start(), m.end(), style, arr_start, arr_end, label, length, type_start, type_end)
 
-        # Pattern: -- text --> or == text ==> or -. text .->
-        patterns = [
-            (r'(--)(\s+.+?\s+)(-->)', EdgeStyle.SOLID, False, True),
-            (r'(==)(\s+.+?\s+)(==>)', EdgeStyle.THICK, False, True),
-            (r'(-\.)(\s+.+?\s+)(\.+->)', EdgeStyle.DOTTED, False, True),
-        ]
-        for pat, style, arr_start, arr_end in patterns:
-            m = re.search(pat, text)
-            if m:
-                label_text = m.group(2).strip()
-                # Only the trailing arrow carries the length: `-- text -->` is a
-                # normal link, `-- text --->` is one step longer.
-                length = _compute_arrow_length(m.group(3), style)
-                return (m.start(), m.end(), style, arr_start, arr_end, label_text, length, ArrowType.ARROW, ArrowType.ARROW)
+        m = text_link
+        if m:
+            label_text = m.group(1).strip()
+            style, arr_start, arr_end, type_start, type_end = self._classify_arrow(text[text_start:m.start(1)] + m.group(2))
+            # Only the trailing arrow carries the length: `-- text -->` is a
+            # normal link, `-- text --->` is one step longer.
+            length = _compute_arrow_length(m.group(2), style)
+            return (text_start, m.end(), style, arr_start, arr_end, label_text, length, type_start, type_end)
 
         return None
 
