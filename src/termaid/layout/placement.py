@@ -300,9 +300,9 @@ def _expand_gaps_for_turns(graph: Graph, layout: GridLayout) -> None:
 def _expand_gaps_for_edge_labels(graph: Graph, layout: GridLayout) -> None:
     """Expand gap cells between nodes to fit edge labels.
 
-    For horizontal flow (LR): expand gap columns so labels fit on
-    horizontal segments.  For vertical flow (TB): expand gap rows so
-    labels fit beside vertical segments.  A wrapped label counts as a
+    For an edge that runs horizontally: expand gap columns so labels fit
+    on horizontal segments.  For one that runs vertically: expand gap rows
+    so labels fit beside vertical segments.  A wrapped label counts as a
     block: its widest line and its line count.
     """
     direction = graph.direction.normalized()
@@ -319,7 +319,13 @@ def _expand_gaps_for_edge_labels(graph: Graph, layout: GridLayout) -> None:
         if not src_p or not tgt_p:
             continue
 
+        # An edge inside a subgraph laid out across the flow joins two
+        # nodes of one layer, so it runs across the flow too.
         if is_horizontal:
+            runs_horizontally = src_p.grid.col != tgt_p.grid.col
+        else:
+            runs_horizontally = src_p.grid.row == tgt_p.grid.row
+        if runs_horizontally:
             # Edges run horizontally -- label needs gap column width
             c1 = min(src_p.grid.col, tgt_p.grid.col)
             c2 = max(src_p.grid.col, tgt_p.grid.col)
