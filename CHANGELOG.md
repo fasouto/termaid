@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Behavior changes
+- Flowchart: the text of a `-- text -->` link can no longer contain the pair that opens it (`--`, `==` or `-.`), as in Mermaid. `A -- run with --force --> B` kept the whole text as its label and is now misread; write it as `A -->|run with --force| B`
+
+### Fixes
+- Flowchart: an id with a dash, such as `go-on`, is one node. The `o-o` inside it was read as a circle link between `g` and `n`. Circle and cross links need two dashes, as in Mermaid (#61, thanks @developingchet)
+- Flowchart: an arrow, `;`, `%%` or `:::` inside an unquoted node label, as in `A[Load --> Parse]`, is label text instead of breaking the statement (#61, thanks @developingchet)
+- Flowchart: an entity code in an edge label, such as `A -->|#quot;hi#quot;| B`, is no longer cut at its `;` (#61, thanks @developingchet)
+- Flowchart: a pipe label is recognised after a space (`A --> |text| B`) and on circle and cross links (`A --o|text| B`, `A o--o|text| B`) (#61, thanks @developingchet)
+- Flowchart: text is recognised on every kind of link, not only `-- text -->`: open links (`A -- yes --- B`), two-way links (`A <-- yes --> B`), circle and cross ends, and the thick and dotted forms (#61, thanks @developingchet)
+- Flowchart: `@{ shape: trap-t }` and `trap-b` were swapped. Shape names from Mermaid's table that map to shapes termaid draws now work (`decision`, `database`, `process`, `pill`, `subproc`, `in-out`, `manual`, `odd` and the long names such as `lean-right`) (#60, thanks @developingchet)
+- Flowchart: `@{ ... }` works on an id with a dash or a dot and when its keys are on separate lines. A forgotten `}` no longer swallows the rest of the diagram (#60, thanks @developingchet)
+- Flowchart: an edge id (`A e1@--> B`, `e1@{ animate: true }`) is no longer drawn as part of a node or as a node of its own (#60, thanks @developingchet)
+- Flowchart: `class A,B name` styles every node in the list and `classDef a,b ...` defines every name (#60, thanks @developingchet)
+- Flowchart: `accTitle:` and `accDescr:` lines and `accDescr { ... }` blocks are skipped instead of drawn as nodes, and an open dotted link takes any number of dots (`A -..- B`) (#60, thanks @developingchet)
+
 ## 0.13.0 (2026-11-18)
 
 ### Behavior changes
