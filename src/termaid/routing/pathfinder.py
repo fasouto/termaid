@@ -8,6 +8,7 @@ an unrelated edge's straight line: a path may only pass it perpendicularly.
 from __future__ import annotations
 
 import heapq
+from collections import deque
 from typing import Callable
 
 
@@ -99,6 +100,10 @@ def find_path(
     iterations = 0
     while open_set and iterations < max_iterations:
         iterations += 1
+        if iterations == _WALL_CHECK and _walled_in(
+            (start_col, start_row), (end_col, end_row), is_free, cross, best_g, max_iterations,
+        ):
+            return None
         current = heappop(open_set)
         cell = current.cell
         col, row = cell
@@ -165,6 +170,55 @@ def find_path(
             heappush(open_set, neighbor)
 
     return None  # No path found
+
+
+# The grid has no far edge, so a search for a walled-in end runs all of
+# max_iterations. One still going after this many steps checks for a wall.
+_WALL_CHECK = 100
+
+
+def _walled_in(
+    start: tuple[int, int],
+    end: tuple[int, int],
+    is_free: Callable[[int, int], bool],
+    cross: dict[tuple[int, int], bool],
+    reached: dict[tuple[int, ...], float],
+    limit: int,
+) -> bool:
+    """True when no path can reach *end*, so the search would fail anyway.
+
+    Walks backward from *end* over the moves the search makes, in its
+    states: a cell, or a crossing cell with the heading it was entered on.
+    False as soon as the walk meets *start* or a state the search has
+    *reached*, or when it passes *limit* states without closing.
+    """
+    if end in cross:
+        todo: list[tuple[int, ...]] = [end + d for d in DIRS]
+    else:
+        todo = [end]
+    seen = set(todo)
+    queue = deque(todo)
+    while queue:
+        state = queue.popleft()
+        cell = state[:2]
+        if cell != end and not is_free(*cell):
+            continue
+        horizontal = cross.get(cell)
+        for dc, dr in (state[2:],) if len(state) == 4 else DIRS:
+            if horizontal is not None and (dc == 0) != horizontal:
+                continue
+            prev_cell = (cell[0] - dc, cell[1] - dr)
+            if prev_cell == start:
+                return False
+            prev = prev_cell + (dc, dr) if prev_cell in cross else prev_cell
+            if prev in reached:
+                return False
+            if prev not in seen:
+                if len(seen) >= limit:
+                    return False
+                seen.add(prev)
+                queue.append(prev)
+    return True
 
 
 def _reconstruct(node: _AStarNode) -> list[tuple[int, int]]:
