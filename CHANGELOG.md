@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Behavior changes
+- A source whose first line names no diagram termaid draws is no longer drawn as a flowchart. A Mermaid type with no renderer here (`sankey-beta`, `C4Context`, `radar-beta`, `zenuml`, `requirementDiagram`) and a mistyped keyword (`grpah LR`) used to come out as boxes of raw syntax, or as a top-down flowchart; `render()` now returns an empty string for them, the command line exits 1 and says why (`termaid does not draw sankey diagrams.`, `Unknown diagram type 'grpah'. Start the diagram with its type, such as flowchart TD, sequenceDiagram or classDiagram.`), and the Claude Code hook shows the Mermaid source. `termaid.type_problem(source)` returns that message, or `None`
+- A flowchart with no `graph` or `flowchart` line, whose first line is already an edge (`A --> B`), keeps that line. It was read as the header and dropped
+
+### Changes
+- Claude Code plugin: the skill's description now tells Claude to write a diagram in a reply as a `mermaid` block, which the hook draws, instead of drawing boxes by hand
+
 ### Fixes
 - Flowchart: a dense diagram no longer hangs. When no route was found for an edge, the fallback was a diagonal line that the router never finished walking; six nodes linked to six others (`A0 & ... & A5 --> B0 & ... & B5`) was enough (#53, thanks @developingchet)
 - Flowchart: an unmatched `*` in a Markdown label, as in ``A["`2*3`"]``, no longer hangs the parser. The `*` is kept as text (#53, thanks @developingchet)
