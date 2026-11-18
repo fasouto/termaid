@@ -17,6 +17,7 @@
 - Sequence: an activation bar starts and ends with its own messages instead of one message late. A long self-message label no longer covers the next lifeline. `destroy X` ends the lifeline after the message that destroys X, and `autonumber 10 5` numbers from 10 in steps of 5 (#57, thanks @developingchet)
 - State: `state "Name" as id {` opens a composite state with that title; its states were drawn outside any frame. A `:::class` suffix on a transition is no longer drawn as part of the label or the state name (#58, thanks @developingchet)
 - Class and ER: a `%%` comment line inside a class or entity body is skipped instead of drawn as a member or attribute (#59, thanks @developingchet)
+- Flowchart and state diagrams: an edge that loops back into a node no longer lands on the row where another edge leaves that node (`├◄───┤`), which made two edges read as one line. The arriving edge takes the row beside it
 - Claude Code hook: a diagram that takes more than 3 seconds to draw is shown as its Mermaid source. Before, Claude Code stopped the hook at 10 seconds and the rest of the reply was shown inside an unclosed code block (#54, thanks @developingchet)
 
 ## 0.12.1 (2026-11-18)
