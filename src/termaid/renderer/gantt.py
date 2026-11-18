@@ -151,7 +151,10 @@ def _interval_ticks(scale: _Scale, interval: TickInterval, fmt: str) -> list[tup
     while t <= scale.end:
         if t >= scale.start and field(t) % interval.count == 0:
             ticks.append((min(scale.col(t), last_col), format_time(t, fmt)))
-        t = shift(t, 1, interval.unit)
+        try:
+            t = shift(t, 1, interval.unit)
+        except (OverflowError, ValueError):  # the next tick is past year 9999
+            break
     return ticks if len(ticks) <= scale.cells else None
 
 
@@ -206,7 +209,10 @@ def render_gantt(
 
     # A chart whose tasks all share one instant still spans a day
     if max_date <= min_date:
-        max_date = min_date + timedelta(days=1)
+        if min_date <= datetime.max - timedelta(days=1):
+            max_date = min_date + timedelta(days=1)
+        else:
+            min_date = max_date - timedelta(days=1)
 
     # Layout: labels start at column 3 and need a blank column before the axis
     margin_l = max_label_width + 4

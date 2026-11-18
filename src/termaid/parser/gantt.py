@@ -218,7 +218,10 @@ def _parse_date(text: str, date_format: str) -> datetime | None:
             value = float(text)
         except ValueError:
             return None
-        return _EPOCH + (timedelta(milliseconds=value) if fmt == "x" else timedelta(seconds=value))
+        try:
+            return _EPOCH + (timedelta(milliseconds=value) if fmt == "x" else timedelta(seconds=value))
+        except (OverflowError, ValueError):  # past year 9999, or nan
+            return None
     # Try the declared dateFormat first (Mermaid/dayjs tokens)
     if fmt:
         try:
