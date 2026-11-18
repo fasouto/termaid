@@ -202,8 +202,49 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
     # spreading the start creates jog segments at the border that produce
     # ┼ artifacts when the jog crosses the node border characters.
     _spread_shared_endpoints(routed, layout, sg_bounds)
+    _keep_runs_off_titles(routed, layout)
 
     return routed
+
+
+def _keep_runs_off_titles(routed: list[RoutedEdge], layout: GridLayout) -> None:
+    """Move a horizontal run off the top border and title row of each
+    subgraph box it passes over.
+
+    A layer gap is one grid row however many lines it spans, and a run is
+    drawn on the row's middle line. When the gap holds a box's top border
+    and title, that middle line is the title row. The run moves to the
+    nearest other line of its grid row, so the vertical lines it joins
+    only change length.
+    """
+    if not layout.subgraph_bounds:
+        return
+    spans: list[range] = []
+    top = layout.offset_y
+    for r in range(max(layout.row_heights, default=0) + 1):
+        spans.append(range(top, top + layout.row_heights.get(r, 1)))
+        top += layout.row_heights.get(r, 1)
+
+    for re in routed:
+        path = re.draw_path
+        for k in range(1, len(path) - 2):
+            (x0, y), (x1, y1) = path[k], path[k + 1]
+            if y != y1:
+                continue
+            lo, hi = min(x0, x1), max(x0, x1)
+            header = {
+                line
+                for sb in layout.subgraph_bounds
+                if sb.x <= hi and lo <= sb.x + sb.width - 1
+                for line in (sb.y, sb.y + 1)
+            }
+            span = next((s for s in spans if y in s), None)
+            if y not in header or span is None:
+                continue
+            free = [line for line in span if line not in header]
+            if free:
+                moved = min(free, key=lambda line: (abs(line - y), line < y))
+                path[k], path[k + 1] = (x0, moved), (x1, moved)
 
 
 _Places = tuple[frozenset[str], frozenset[str]]
