@@ -156,6 +156,48 @@ def test_hook_still_draws_a_wide_diagram_when_the_width_is_unknown(tmp_path, mon
     assert _widest(out) > 80
 
 
+LOOPS_BACK = """flowchart TD
+    A[Push to main] --> B[Run tests]
+    B --> C{Tests pass?}
+    C -- no --> D[Notify author]
+    D --> E[Fix and push]
+    E --> B
+    C -- yes --> F[Build image]
+    F --> G[Deploy to staging]
+    G --> H{Smoke test ok?}
+    H -- no --> I[Roll back staging]
+    I --> D
+    H -- yes --> J{Needs approval?}
+    J -- yes --> K[Wait for reviewer]
+    K --> L{Approved?}
+    L -- no --> D
+    L -- yes --> M[Deploy to production]
+    J -- no --> M
+    M --> N{Healthy after 10 min?}
+    N -- no --> O[Roll back production]
+    O --> D
+    N -- yes --> P[Done]
+"""
+
+
+def test_hook_routes_only_the_drawings_that_may_fit(tmp_path, monkeypatch):
+    from functools import partial
+
+    import termaid.routing.router as router
+    from termaid import render
+    from termaid.utils import fit_to_width
+
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    passes = []
+    route_edges = router.route_edges
+    monkeypatch.setattr(router, "route_edges", lambda *a: passes.append(a) or route_edges(*a))
+    out = _run(_fenced(LOOPS_BACK), width=100, message_id="m", index=0, final=True)
+    # Drawing every candidate the fit tries routed this diagram 26 times.
+    assert len(passes) <= 8
+    draw = partial(render, LOOPS_BACK)
+    assert out == "Before\n```\n" + fit_to_width(draw, draw(), 100) + "\n```\nAfter\n"
+
+
 def test_hook_ignores_bad_input():
     out = io.StringIO()
     assert run_claude_hook(io.StringIO("not json"), out) == 0
