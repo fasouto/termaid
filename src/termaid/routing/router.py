@@ -464,9 +464,10 @@ def _apply_spread(
     corner point to match the new x, avoiding backward horizontal jog
     segments that create stray line artifacts.
 
-    For LEFT/RIGHT attachment (vertical spread): inserts a short
-    perpendicular jog at the adjacent point's x so the last segment
-    stays horizontal and the arrow direction is correct.
+    For LEFT/RIGHT attachment (vertical spread): slides the adjacent
+    corner along its vertical run, or inserts a short perpendicular jog
+    at its x when the approach is straight, so the last segment stays
+    horizontal and the arrow direction is correct.
     """
     if is_start:
         return  # start spreading disabled; causes border artifacts
@@ -474,6 +475,19 @@ def _apply_spread(
     n = len(edges)
     px, py = point
     attach = edges[0].end_dir
+    along = 0 if attach in (AttachDir.TOP, AttachDir.BOTTOM) else 1
+
+    def lane_order(re: RoutedEdge) -> tuple[int, int]:
+        # An edge whose last lane comes from one side takes a slot on that
+        # side, and the deeper of two lanes from the same side takes the
+        # slot farther from it, so neither crosses the other's lane.
+        corner = re.draw_path[-2]
+        before = re.draw_path[-3] if len(re.draw_path) > 2 else corner
+        side = (before[along] > corner[along]) - (before[along] < corner[along])
+        depth = abs(corner[1 - along] - point[1 - along])
+        return side, -side * depth
+
+    edges = sorted(edges, key=lane_order)
 
     if attach in (AttachDir.TOP, AttachDir.BOTTOM):
         # Vertical arrival: spread horizontally along the border.
@@ -513,7 +527,10 @@ def _apply_spread(
             new_y = max(min_y, min(max_y, py + offset))
             adj_x, adj_y = re.draw_path[-2]
             re.draw_path[-1] = (px, new_y)
-            re.draw_path.insert(-1, (adj_x, new_y))
+            if len(re.draw_path) > 2 and re.draw_path[-3][0] == adj_x:
+                re.draw_path[-2] = (adj_x, new_y)
+            else:
+                re.draw_path.insert(-1, (adj_x, new_y))
 
 
 def _sg_member_placements(
