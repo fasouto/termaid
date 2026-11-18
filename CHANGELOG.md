@@ -25,6 +25,7 @@
 - State: `state "Name" as id {` opens a composite state with that title; its states were drawn outside any frame. A `:::class` suffix on a transition is no longer drawn as part of the label or the state name (#58, thanks @developingchet)
 - Class and ER: a `%%` comment line inside a class or entity body is skipped instead of drawn as a member or attribute (#59, thanks @developingchet)
 - Flowchart and state diagrams: an edge that loops back into a node no longer lands on the row where another edge leaves that node (`├◄───┤`), which made two edges read as one line. The arriving edge takes the row beside it
+- Flowchart and state diagrams: right-to-left and bottom-to-top diagrams (`graph RL`, `graph BT`, `direction RL`) no longer mirror their text. Labels came out reversed (`dlroW olleH`), multi-line labels bottom-up with letters swapped (`Vi^id`), subgraph titles on the bottom row, slanted shapes leaning the wrong way and four blank rows or columns in front. The layout is mirrored before drawing instead of flipping the finished drawing
 - Claude Code hook: a diagram that takes more than 3 seconds to draw is shown as its Mermaid source. Before, Claude Code stopped the hook at 10 seconds and the rest of the reply was shown inside an unclosed code block (#54, thanks @developingchet)
 
 ## 0.12.1 (2026-11-18)
