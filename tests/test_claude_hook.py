@@ -370,3 +370,19 @@ def test_hook_shows_an_unclosed_fence_before_the_message_ends(tmp_path, monkeypa
 def test_a_renderer_built_with_held_lines_counts_them():
     r = StreamRenderer(width=80, fence="```", held=["```mermaid", *LONG_LINES[:112]])
     assert r.feed(LONG_LINES[112] + "\n").startswith("```mermaid\n")
+
+
+def test_a_render_that_outlasts_the_limit_is_shown_as_source(monkeypatch):
+    """Claude Code kills the hook at 10 s; a slow render must not leave the fence open."""
+    import time
+
+    import termaid
+    from termaid import claude_hook
+
+    monkeypatch.setattr(claude_hook, "_RENDER_SECONDS", 0.05)
+    monkeypatch.setattr(termaid, "render", lambda *a, **k: time.sleep(1) or "late")
+    r = StreamRenderer(width=60)
+    assert r.feed("Before\n```mermaid\ngraph LR\n", final=False) == "Before\n"
+    assert r.feed("  A --> B\n```\nAfter\n", final=False) == "```mermaid\ngraph LR\n  A --> B\n```\nAfter\n"
+    assert not r.fence
+    assert r.feed("More\n", final=True) == "More\n"
