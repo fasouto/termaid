@@ -152,8 +152,8 @@ def parse_flowchart(text: str) -> Graph:
 
 
 def _strip_comments(line: str) -> str:
-    """Remove %% comments from a line, leaving %% inside quoted labels."""
-    idx = _mask_quotes(line).find("%%")
+    """Remove %% comments from a line, leaving %% inside labels."""
+    idx = _mask_labels(line).find("%%")
     if idx >= 0:
         return line[:idx]
     return line
@@ -222,6 +222,33 @@ def _mask_quotes(text: str) -> str:
     return "".join(result)
 
 
+_LABEL_CLOSERS = {"[": "]", "(": ")", "{": "}"}
+
+
+def _mask_labels(text: str) -> str:
+    """Like _mask_quotes, and also blank out the unquoted label of a node.
+
+    A node label is the inside of a [...], (...) or {...} that follows an id,
+    up to the bracket that closes it. A label with no closing bracket is left
+    as it is.
+    """
+    result = list(_mask_quotes(text))
+    opener = ""
+    start = depth = 0
+    for i, ch in enumerate(result):
+        if not opener:
+            if ch in _LABEL_CLOSERS and i > 0 and (result[i - 1].isalnum() or result[i - 1] == "_"):
+                opener, start, depth = ch, i, 1
+        elif ch == opener:
+            depth += 1
+        elif ch == _LABEL_CLOSERS[opener]:
+            depth -= 1
+            if depth == 0:
+                result[start + 1:i] = " " * (i - start - 1)
+                opener = ""
+    return "".join(result)
+
+
 _ENTITY_CODE = re.compile(r"#([A-Za-z0-9]+);")
 
 
@@ -254,20 +281,14 @@ def _strip_quotes(text: str) -> str:
 
 
 def _split_on_semicolons(line: str) -> list[str]:
-    """Split a line into statements at semicolons outside double quotes."""
+    """Split a line into statements at semicolons outside quotes and node labels."""
     parts: list[str] = []
-    buf: list[str] = []
-    in_quote = False
-    for ch in line:
-        if ch == '"':
-            in_quote = not in_quote
-            buf.append(ch)
-        elif ch == ";" and not in_quote:
-            parts.append("".join(buf))
-            buf = []
-        else:
-            buf.append(ch)
-    parts.append("".join(buf))
+    start = 0
+    for i, ch in enumerate(_mask_labels(line)):
+        if ch == ";":
+            parts.append(line[start:i])
+            start = i + 1
+    parts.append(line[start:])
     return parts
 
 
@@ -622,8 +643,8 @@ class _FlowchartParser:
         remaining = line.strip()
 
         while remaining:
-            # Mask quoted strings so arrows inside "..." aren't matched
-            masked = _mask_quotes(remaining)
+            # Mask quoted strings and node labels so arrows inside them aren't matched
+            masked = _mask_labels(remaining)
 
             # Try to find the earliest arrow match
             best_match: tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None = None
@@ -784,7 +805,7 @@ class _FlowchartParser:
 
         # Handle :::className suffix
         style_class: str | None = None
-        class_idx = _mask_quotes(text).rfind(":::")
+        class_idx = _mask_labels(text).rfind(":::")
         if class_idx >= 0:
             style_class = text[class_idx + 3:].strip()
             text = text[:class_idx].strip()
