@@ -204,7 +204,12 @@ def _compute_layout(
 
         si = _participant_index(diagram, ev.source)
         ti = _participant_index(diagram, ev.target)
-        if si < 0 or ti < 0 or si == ti:
+        if si < 0 or ti < 0:
+            continue
+        if si == ti:
+            # Keep the loop, its label and a block frame around it clear of the next lifeline
+            if si < n - 1:
+                gap_mins[si] = max(gap_mins[si], _self_loop_width(labels.events[ev_idx]) + 3)
             continue
         lo, hi = min(si, ti), max(si, ti)
         label_need = _lines_width(labels.events[ev_idx]) + 6  # padding for arrow + spacing
