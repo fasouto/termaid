@@ -134,6 +134,53 @@ def parse(source: str, *, partial: bool = False) -> Graph:
     return parse_flowchart(text)
 
 
+def _source_text(source: str, partial: bool) -> tuple[str, str | None]:
+    """The prepared source, and the text its parser reads or None for an unknown type."""
+    arriving = _keyword_arriving(source, partial)
+    if partial:
+        from .partial import complete_partial
+
+        source = complete_partial(source)
+    prepared = _prepare_source(source)
+    return prepared, _typed(_skip_directives(prepared), arriving=arriving)
+
+
+# The diagram types drawn from a Graph, through layout and edge routing.
+_GRAPH_TYPES = ("stateDiagram", "architecture")
+
+
+def _parse_graph(text: str) -> Graph:
+    if text.startswith("architecture"):
+        from .parser.architecture import parse_architecture
+        return parse_architecture(text)
+    if text.startswith("stateDiagram"):
+        return parse_state_diagram(text)
+    return parse_flowchart(text)
+
+
+def _layout_width(
+    source: str,
+    *,
+    padding_x: int = 4,
+    padding_y: int = 2,
+    gap: int = 4,
+    max_label_width: int | None = None,
+    partial: bool = False,
+    **_drawing_options,
+) -> int:
+    """Columns the drawing of *source* takes at least, without routing its edges.
+
+    This is ``fit_to_width``'s *measure*: routing is most of the cost of a
+    drawing. Diagram types not drawn through a layout give 0.
+    """
+    _, text = _source_text(source, partial)
+    if text is None or (text.startswith(_DRAWN_TYPES) and not text.startswith(_GRAPH_TYPES)):
+        return 0
+    from .renderer.draw import layout_width
+
+    return layout_width(_parse_graph(text), padding_x, padding_y, gap, max_label_width)
+
+
 class _Rendered(NamedTuple):
     canvas: Canvas | None
     # Set for graph-based diagrams, whose classDef/style/linkStyle colours
@@ -168,13 +215,7 @@ def _render_canvas(
     # Every renderer draws with this one character set.
     cs = build_charset(use_ascii, arrow_style)
 
-    arriving = _keyword_arriving(source, partial)
-    if partial:
-        from .partial import complete_partial
-
-        source = complete_partial(source)
-    prepared = _prepare_source(source)
-    text = _typed(_skip_directives(prepared), arriving=arriving)
+    prepared, text = _source_text(source, partial)
     if text is None:
         return _Rendered(None)
     if text.startswith("sequenceDiagram"):
@@ -258,14 +299,9 @@ def _render_canvas(
         return _Rendered(render_quadrant(parse_quadrant(text), use_ascii=use_ascii))
 
     from .renderer import draw
+    graph = _parse_graph(text)
     if text.startswith("architecture"):
-        from .parser.architecture import parse_architecture
-        graph = parse_architecture(text)
         inline_edge_labels = False
-    elif text.startswith("stateDiagram"):
-        graph = parse_state_diagram(text)
-    else:
-        graph = parse_flowchart(text)
     canvas = draw.render_graph_canvas(
         graph,
         cs=cs,

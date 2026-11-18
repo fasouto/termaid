@@ -82,7 +82,14 @@ def _auto_fit(
             **overrides,
         )
 
-    result = fit_to_width(render, result, target_width, gap=args.gap, padding_x=args.padding_x, plain=_plain)
+    from . import _layout_width
+
+    def measure(**overrides):
+        return _layout_width(source, padding_y=args.padding_y, **overrides)
+
+    result = fit_to_width(
+        render, result, target_width, gap=args.gap, padding_x=args.padding_x, plain=_plain, measure=measure,
+    )
 
     actual_width = max_line_width(_plain(result))
     if actual_width > target_width and not args.strict_width:

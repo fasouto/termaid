@@ -136,7 +136,7 @@ class StreamRenderer:
 
     def _draw(self, source: str) -> list[str] | None:
         """Render one diagram, or None when it cannot be drawn."""
-        from . import render
+        from . import _layout_width, render
 
         if not source.strip():
             return None
@@ -152,7 +152,8 @@ class StreamRenderer:
         def run() -> None:
             try:
                 draw = partial(render, source, use_ascii=self.use_ascii)
-                result.append(fit_to_width(draw, draw(), width))
+                measure = partial(_layout_width, source)
+                result.append(fit_to_width(draw, draw(), width, measure=measure))
             except Exception:
                 pass
 
