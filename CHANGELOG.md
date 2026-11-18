@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- Flowchart: a dense diagram no longer hangs. When no route was found for an edge, the fallback was a diagonal line that the router never finished walking; six nodes linked to six others (`A0 & ... & A5 --> B0 & ... & B5`) was enough (#53, thanks @developingchet)
+- Flowchart: an unmatched `*` in a Markdown label, as in ``A["`2*3`"]``, no longer hangs the parser. The `*` is kept as text (#53, thanks @developingchet)
+- Flowchart: a very long link (thousands of `-` or `=`) parses in milliseconds instead of taking cubic time (#53, thanks @developingchet)
+- Packet: a field far from bit 0, such as `3200000: "x"`, no longer draws hundreds of thousands of empty rows. A field that does not start where the last one ended is dropped with a warning, as Mermaid rejects it (#53, thanks @developingchet)
+- Claude Code hook: a diagram that takes more than 3 seconds to draw is shown as its Mermaid source. Before, Claude Code stopped the hook at 10 seconds and the rest of the reply was shown inside an unclosed code block (#54, thanks @developingchet)
+
 ## 0.12.1 (2026-11-18)
 
 ### Changes
