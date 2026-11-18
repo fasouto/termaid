@@ -175,6 +175,12 @@ class StreamRenderer:
 
     def load(self, data: str) -> None:
         saved = json.loads(data)
+        if not isinstance(saved, dict):
+            raise ValueError("saved state is not a JSON object")
+        held = saved.get("held", [])
+        texts = [saved.get(key, "") for key in ("fence", "indent", "carry", "other_fence")]
+        if not isinstance(held, list) or not all(isinstance(text, str) for text in texts + held):
+            raise ValueError("saved state has the wrong shape")
         self.fence = saved.get("fence", "")
         self.indent = saved.get("indent", "")
         self.held = list(saved.get("held", []))
@@ -243,11 +249,13 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     stdout = stdout or sys.stdout
     try:
         event = json.load(stdin)
-    except (ValueError, OSError):
+    except (ValueError, OSError, RecursionError):
         return 0
-    if event.get("hook_event_name") not in (None, "MessageDisplay"):
+    if not isinstance(event, dict) or event.get("hook_event_name") not in (None, "MessageDisplay"):
         return 0
     delta = event.get("delta") or ""
+    if not isinstance(delta, str):
+        return 0
     message_id = str(event.get("message_id") or "")
     # Without a message_id there is nowhere to keep held lines for the next batch.
     final = bool(event.get("final", True)) or not message_id
