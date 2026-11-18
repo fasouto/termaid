@@ -55,6 +55,35 @@ class TestPathfinder:
         assert path == [(0, 0), (1, 0)]
 
 
+    @staticmethod
+    def _ring(horizontal_top: bool) -> dict[tuple[int, int], bool]:
+        """Crossing cells around (9..11, 9..11). The sides only let a path
+        through when the top and bottom hold horizontal lines."""
+        ring = {(c, r): horizontal_top for c in range(8, 13) for r in (8, 12)}
+        ring.update({(c, r): not horizontal_top for c in (8, 12) for r in range(9, 12)})
+        return ring
+
+    @staticmethod
+    def _walled_grid(calls: list):
+        """An open grid with no far edge, and a wall at column 5 down to row 60."""
+        def is_free(c, r):
+            calls.append((c, r))
+            return c >= 0 and r >= 0 and not (c == 5 and r <= 60)
+        return is_free
+
+    def test_goal_walled_in_by_crossings_fails_without_searching_the_grid(self):
+        calls: list = []
+        path = find_path(0, 0, 10, 10, self._walled_grid(calls), crossings=self._ring(False))
+        assert path is None
+        # Searching to max_iterations checked about 6,000 cells.
+        assert len(calls) < 2000
+
+    def test_goal_behind_crossings_is_still_found_after_a_long_search(self):
+        path = find_path(0, 0, 10, 10, self._walled_grid([]), crossings=self._ring(True))
+        assert path is not None and path[-1] == (10, 10)
+        i = next(i for i, (c, r) in enumerate(path) if r in (8, 12) and 8 <= c <= 12)
+        assert path[i - 1][0] == path[i][0] == path[i + 1][0]
+
     def test_crossing_cell_is_passed_straight(self):
         line = {(c, 2): True for c in range(5)}
         path = find_path(0, 0, 4, 4, lambda c, r: True, crossings=line)
