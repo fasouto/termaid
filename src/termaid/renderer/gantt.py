@@ -33,7 +33,7 @@ _D3_ONLY = {
     "%s": lambda t: str(int((t - _EPOCH).total_seconds())),
     "%q": lambda t: str((t.month - 1) // 3 + 1),
 }
-_DIRECTIVE_RE = re.compile(r"%[-_0]?[A-Za-z%]")
+_DIRECTIVE_RE = re.compile(r"%([-_0]?)([A-Za-z%])")
 
 # Default ticks fall on whole units: days when the chart spans at least a
 # day, otherwise the largest unit that fits twice.
@@ -82,8 +82,22 @@ _MAX_TICK_CANDIDATES = 10_000
 def format_time(t: datetime, fmt: str) -> str:
     """Format ``t`` with a d3 time-format string such as ``%H:%M`` or ``%S.%L``."""
     def directive(m: re.Match[str]) -> str:
-        special = _D3_ONLY.get(m.group(0))
-        return special(t) if special else t.strftime(m.group(0))
+        pad, base = m.group(1), "%" + m.group(2)
+        special = _D3_ONLY.get(base)
+        try:
+            text = special(t) if special else t.strftime(base)
+        except ValueError:  # a directive this platform's strftime lacks
+            return m.group(0)
+        # d3's padding flags: - for none, _ for spaces, 0 for zeros. They
+        # are applied here because strftime on Windows rejects them.
+        digits = text.strip()
+        if pad and digits.isdigit():
+            unpadded = digits.lstrip("0") or "0"
+            if pad == "-":
+                text = unpadded
+            else:
+                text = unpadded.rjust(len(text), " " if pad == "_" else "0")
+        return text
     return _DIRECTIVE_RE.sub(directive, fmt)
 
 
@@ -137,7 +151,10 @@ def _interval_ticks(scale: _Scale, interval: TickInterval, fmt: str) -> list[tup
     while t <= scale.end:
         if t >= scale.start and field(t) % interval.count == 0:
             ticks.append((min(scale.col(t), last_col), format_time(t, fmt)))
-        t = shift(t, 1, interval.unit)
+        try:
+            t = shift(t, 1, interval.unit)
+        except (OverflowError, ValueError):  # the next tick is past year 9999
+            break
     return ticks if len(ticks) <= scale.cells else None
 
 
@@ -192,7 +209,10 @@ def render_gantt(
 
     # A chart whose tasks all share one instant still spans a day
     if max_date <= min_date:
-        max_date = min_date + timedelta(days=1)
+        if min_date <= datetime.max - timedelta(days=1):
+            max_date = min_date + timedelta(days=1)
+        else:
+            min_date = max_date - timedelta(days=1)
 
     # Layout: labels start at column 3 and need a blank column before the axis
     margin_l = max_label_width + 4
