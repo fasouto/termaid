@@ -1007,8 +1007,9 @@ def _route_edge(
     elif path_alt:
         path, start_dir, end_dir = path_alt, alt[0], alt[1]
     else:
-        # Fallback: direct line
-        path = [start_pref, end_pref]
+        # Fallback: one corner. A diagonal segment is never walked to its end.
+        vertical = preferred[0] in (AttachDir.TOP, AttachDir.BOTTOM)
+        path = [start_pref, (start_pref[0], end_pref[1]) if vertical else (end_pref[0], start_pref[1]), end_pref]
         start_dir, end_dir = preferred
 
     simplified = simplify_path(path)

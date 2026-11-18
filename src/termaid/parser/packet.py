@@ -67,4 +67,13 @@ def parse_packet(text: str) -> Packet:
             next_bit = start + 1
             continue
 
+    # As in Mermaid, each field must start where the last one ended
+    fields, next_bit = [], 0
+    for f in packet.fields:
+        if f.start != next_bit or f.end < f.start:
+            packet.warnings.append(f"Packet field {f.start}-{f.end} is invalid: expected it to start at bit {next_bit}")
+            continue
+        fields.append(f)
+        next_bit = f.end + 1
+    packet.fields = fields
     return packet
