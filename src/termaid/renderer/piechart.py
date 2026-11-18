@@ -5,6 +5,8 @@ percentages, and optional raw values.
 """
 from __future__ import annotations
 
+import math
+
 from ..model.piechart import PieChart
 from .canvas import Canvas
 from .charset import ASCII, UNICODE, CharSet
@@ -28,7 +30,13 @@ def render_pie_chart(
         canvas = Canvas(1, 1)
         return canvas
 
-    total = sum(s.value for s in diagram.slices)
+    # Values are summed after dividing by a power of two near the largest,
+    # so values that each fit in a float but add up past its range still
+    # give the right shares. A power of two divides exactly, so every other
+    # chart gets the same shares as dividing by the plain sum.
+    scale = math.ldexp(1.0, math.frexp(max(s.value for s in diagram.slices))[1] - 1)
+    total = sum(s.value / scale for s in diagram.slices)
+    shares = [s.value / scale / total for s in diagram.slices]
     fills = _FILL_CHARS_ASCII if use_ascii else _FILL_CHARS
 
     # Compute label column width
@@ -37,8 +45,8 @@ def render_pie_chart(
 
     # Compute suffix (percentage + optional value)
     suffixes: list[str] = []
-    for s in diagram.slices:
-        pct = s.value / total * 100
+    for s, share in zip(diagram.slices, shares):
+        pct = share * 100
         if diagram.show_data:
             suffixes.append(f" {pct:5.1f}%  [{s.value:g}]")
         else:
@@ -69,7 +77,7 @@ def render_pie_chart(
 
     # Stacked bar showing parts of a whole
     stacked_left = bar_left + 1
-    widths = [max(1, round(s.value / total * stacked_w)) for s in diagram.slices]
+    widths = [max(1, round(share * stacked_w)) for share in shares]
     rest = stacked_w - sum(widths[:-1])
     if rest > 0:
         widths[-1] = rest
@@ -83,7 +91,7 @@ def render_pie_chart(
         fill = fills[i % len(fills)]
         for c in range(seg_w):
             canvas.put(stacked_top, stacked_left + col + c, fill, merge=False, style="node")
-        pct_label = f"{s.value / total * 100:.0f}%"
+        pct_label = f"{shares[i] * 100:.0f}%"
         label_parts.append((col, seg_w, f"{s.label} {pct_label}", pct_label))
         col += seg_w
 
@@ -102,7 +110,7 @@ def render_pie_chart(
     for i, s in enumerate(diagram.slices):
         row = bars_top + i
         fill = fills[i % len(fills)]
-        bar_len = max(1, round(s.value / total * _BAR_WIDTH))
+        bar_len = max(1, round(shares[i] * _BAR_WIDTH))
 
         # Label (right-aligned)
         label_text = " " * (max_label_len - display_width(s.label)) + s.label

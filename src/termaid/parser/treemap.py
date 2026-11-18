@@ -16,6 +16,8 @@ import re
 from ..model.treemap import Treemap, TreemapNode
 
 _NODE_RE = re.compile(r'^(\s*)"([^"]+)"(?:\s*:\s*([0-9]+(?:\.[0-9]*)?))?')
+# Values past this are read as no value, so section totals stay in float range.
+_MAX_VALUE = 1e300
 
 
 def parse_treemap(text: str) -> Treemap:
@@ -41,6 +43,9 @@ def parse_treemap(text: str) -> Treemap:
         indent = len(m.group(1))
         label = m.group(2)
         value = float(m.group(3)) if m.group(3) else 0
+        if value > _MAX_VALUE:
+            treemap.warnings.append(f"Treemap value is too large: {label}")
+            value = 0
         body_lines.append((indent, label, value))
 
     if not body_lines:
