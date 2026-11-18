@@ -189,6 +189,40 @@ class TestLabelsKeepOffOtherLines:
         inside = [line[left + 1:right] for line in lines[top + 1:bottom]]
         assert not any("data" in row for row in inside), out
 
+    @pytest.mark.parametrize(
+        "src,boxes,labels",
+        [
+            ("graph TD\n  A -->|yes| B\n  A -->|no| B", ["B"], ["yes", "no"]),
+            (
+                "stateDiagram-v2\n"
+                "  [*] --> Draft\n"
+                "  Draft --> Approved : approve\n"
+                "  state Approved {\n"
+                "    [*] --> Queued\n"
+                "    Queued --> Building : runner free\n"
+                "    Building --> Testing : build ok\n"
+                "    Testing --> Ready : tests pass\n"
+                "  }\n"
+                "  Approved --> Released : publish",
+                ["Building", "Testing", "Ready"],
+                ["runner free", "build ok", "tests pass"],
+            ),
+        ],
+    )
+    def test_label_never_lands_on_the_blank_inside_of_a_box(self, src, boxes, labels):
+        """A box's blank inside read as free space, so labels with no room
+        between boxes were written into the next box."""
+        from tests.conftest import find_box
+
+        out = render(src)
+        lines = out.split("\n")
+        for name in boxes:
+            top, bottom, left, right = find_box(lines, name)
+            inside = " ".join(line[left + 1:right] for line in lines[top + 1:bottom])
+            assert inside.split() == [name], out
+        for label in labels:
+            assert label in out, out
+
 class TestSubgraphBorderCrossings:
     """Subgraph borders should remain intact when edges cross them."""
 
