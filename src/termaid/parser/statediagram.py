@@ -136,7 +136,10 @@ class _StateDiagramParser:
             return
 
         # Transition: State1 --> State2 or State1 --> State2 : label
-        trans_match = re.match(r'(.+?)\s*-->\s*(.+?)(?:\s*:\s*(.+))?$', line)
+        # A `:::class` suffix on either end is a style, not part of the id or label
+        trans_match = re.match(
+            r'(.+?)(?::::[\w-]+)?\s*-->\s*(.+?)(?::::[\w-]+)?(?:\s*:\s*(.+))?$', line,
+        )
         if trans_match:
             src_raw = trans_match.group(1).strip()
             tgt_raw = trans_match.group(2).strip()
