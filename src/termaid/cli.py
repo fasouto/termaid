@@ -129,6 +129,13 @@ def _read_source(args: argparse.Namespace) -> str | None:
         return None
 
 
+def _why_empty(source: str) -> str:
+    from . import type_problem
+
+    problem = type_problem(source)
+    return "nothing to draw" if problem is None else problem[0].lower() + problem[1:].rstrip(".")
+
+
 def _use_color(args: argparse.Namespace) -> bool:
     """Determine whether to use color output, respecting NO_COLOR."""
     if args.theme is None:
@@ -393,7 +400,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result = _render_one(source, args, render_fn, target_width=args.width)
             if not _plain(result).strip():
-                return _report(args, "render_empty", "Input produced no renderable diagram.")
+                from . import type_problem
+                return _report(args, "render_empty", type_problem(source) or "Input produced no renderable diagram.")
 
         failed = _check_output(_plain(result), args)
         if failed is not None:
@@ -496,7 +504,7 @@ def _render_markdown(text: str, args: argparse.Namespace, render_fn, use_color: 
         except Exception as e:
             failure = ("render_failed", str(e))
         else:
-            failure = None if _plain(drawn).strip() else ("render_empty", "nothing to draw")
+            failure = None if _plain(drawn).strip() else ("render_empty", _why_empty(seg.text))
         if failure is None:
             pieces.append(_indent(drawn, seg.indent))
             continue

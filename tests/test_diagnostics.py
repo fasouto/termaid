@@ -17,14 +17,19 @@ def _boom(*args, **kwargs):
     raise RuntimeError("internal failure")
 
 
-@pytest.mark.parametrize("source", ["not a diagram\n", "%% only a comment\n"])
-def test_input_that_draws_nothing_is_render_empty(tmp_path: Path, capsys, source: str):
+@pytest.mark.parametrize("source,message", [
+    ("graph LR\n", "Input produced no renderable diagram."),
+    ("%% only a comment\n", "Input produced no renderable diagram."),
+    ("not a diagram\n", "Unknown diagram type 'not'. Start the diagram with its type, "
+                        "such as flowchart TD, sequenceDiagram or classDiagram."),
+])
+def test_input_that_draws_nothing_is_render_empty(tmp_path: Path, capsys, source: str, message: str):
     path = tmp_path / "nothing.mmd"
     path.write_text(source, encoding="utf-8")
     assert main([str(path)]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == "Error: Input produced no renderable diagram.\n"
+    assert captured.err == f"Error: {message}\n"
     assert main([str(path), "--diagnostics-format", "json", "--format", "styled-json"]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -242,6 +247,6 @@ class TestTextFormatUnchanged:
 
     def test_markdown_warning(self, tmp_path: Path, capsys):
         path = tmp_path / "doc.md"
-        path.write_text(f"intro\n\n{FENCE}mermaid\nnot a diagram !!\n{FENCE}\n")
+        path.write_text(f"intro\n\n{FENCE}mermaid\ngraph LR\n{FENCE}\n")
         assert main(["--markdown", str(path)]) == 0
         assert capsys.readouterr().err == "Warning: could not render the diagram at line 3: nothing to draw\n"
