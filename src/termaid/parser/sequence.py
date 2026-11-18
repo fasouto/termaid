@@ -219,6 +219,12 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
 
             _ensure_participant(diagram, source)
             _ensure_participant(diagram, target)
+            # `destroy X` precedes the message that destroys X; the lifeline
+            # ends after that message, so the event moves behind it.
+            pending_destroy = None
+            current = event_stack[-1]
+            if current and isinstance(current[-1], DestroyEvent) and current[-1].participant in (source, target):
+                pending_destroy = current.pop()
             line_type, arrow_type = _lookup_arrow(arrow)
             event_stack[-1].append(Message(
                 source=source,
@@ -242,6 +248,8 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
                 event_stack[-1].append(ActivateEvent(
                     participant=source, active=False,
                 ))
+            if pending_destroy is not None:
+                event_stack[-1].append(pending_destroy)
             continue
 
         # Unrecognized line
