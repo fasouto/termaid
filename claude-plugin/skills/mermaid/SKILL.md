@@ -1,6 +1,6 @@
 ---
 name: mermaid
-description: Render Mermaid diagrams that already exist, such as a .mmd file or the diagrams in a Markdown document, README or PR description, in the terminal with termaid, or check that a diagram draws. Not for a diagram you write in your own reply; the termaid hook already draws those.
+description: Draw diagrams in the terminal with termaid. When you draw any diagram in a reply (flowchart, sequence, class, ER, state, gantt, git graph, mindmap and more), write it as a ```mermaid code block and stop there. The termaid hook draws the block in place, so do not draw boxes by hand and do not run termaid on it. Use this skill when asked to render Mermaid that already exists, such as a .mmd file or the diagrams in a Markdown document, README or PR description, or to check that a diagram draws.
 ---
 
 # Render Mermaid with termaid
