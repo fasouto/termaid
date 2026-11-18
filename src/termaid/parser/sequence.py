@@ -107,9 +107,14 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         if not stripped or stripped.startswith("sequenceDiagram") or stripped.startswith("%%"):
             continue
 
-        # Autonumber keyword
-        if stripped.lower() == "autonumber":
+        # Autonumber keyword, with an optional start value and increment
+        m = re.match(r"^autonumber(?:\s+(\d+)(?:\s+(\d+))?)?$", stripped, re.IGNORECASE)
+        if m:
             diagram.autonumber = True
+            if m.group(1):
+                diagram.autonumber_start = int(m.group(1))
+            if m.group(2):
+                diagram.autonumber_step = int(m.group(2))
             continue
 
         # Skip purely visual constructs

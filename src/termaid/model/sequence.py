@@ -63,4 +63,6 @@ class SequenceDiagram:
     participants: list[Participant] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
     autonumber: bool = False
+    autonumber_start: int = 1
+    autonumber_step: int = 1
     warnings: list[str] = field(default_factory=list)
