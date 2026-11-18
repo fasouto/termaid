@@ -314,6 +314,50 @@ class TestBackEdgesIntoOneNode:
         assert "┼" not in out, f"The back-edges cross:\n{out}"
 
 
+class TestEdgesKeepOffSubgraphTitles:
+    """A line may cross a subgraph's title row on its way down, but never
+    run along it: `│ Long─subgraph─title │`."""
+
+    @pytest.mark.parametrize(
+        "src,titles",
+        [
+            (
+                "flowchart TD\n  A --> B\n  A --> C\n"
+                "  subgraph Long subgraph title\n    B\n    C\n  end",
+                ["Long subgraph title"],
+            ),
+            (
+                "flowchart TD\n  A -->|ok| B\n  A -->|ok| C\n"
+                "  subgraph Services\n    B\n    C\n  end",
+                ["Services"],
+            ),
+            (
+                "flowchart BT\n  A --> B\n  A --> C\n"
+                "  subgraph Long subgraph title\n    B\n    C\n  end",
+                ["Long subgraph title"],
+            ),
+            (
+                "flowchart TD\n  A --> B\n  C --> D\n  A --> D\n"
+                "  subgraph T [A fairly long title]\n    B\n    D\n  end",
+                ["A fairly long title"],
+            ),
+            (
+                "flowchart TD\n  A --> B\n  A --> C\n  A --> D\n"
+                "  subgraph Outer\n    subgraph Inner title here\n      B\n      C\n    end\n    D\n  end",
+                ["Outer", "Inner title here"],
+            ),
+        ],
+        ids=["fan-out", "labelled-fan-out", "bottom-to-top", "crossing-edge", "nested"],
+    )
+    def test_title_row_holds_only_the_title_and_crossings(self, src, titles):
+        out = render(src)
+        for title in titles:
+            rows = [row.replace("│", " ") for row in out.splitlines()]
+            rows = [row for row in rows if f" {title} " in row]
+            assert len(rows) == 1, f"Title {title!r} is not intact:\n{out}"
+            assert rows[0].replace(title, "", 1).isspace(), f"A line runs along the {title!r} row:\n{out}"
+
+
 class TestSubgraphBorderCrossings:
     """Subgraph borders should remain intact when edges cross them."""
 
