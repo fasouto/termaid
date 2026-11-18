@@ -310,6 +310,7 @@ class _FlowchartParser:
         self._subgraph_stack: list[Subgraph] = []
         self._shaped_node_ids: set[str] = set()  # nodes with explicit shapes
         self._edge_ids: set[str] = set()
+        self._in_acc_descr = False
 
     def parse(self) -> Graph:
         lines = self._preprocess(self.text)
@@ -374,6 +375,16 @@ class _FlowchartParser:
     def _parse_line(self, line: str) -> None:
         """Parse a single body line."""
         lower = line.lower().strip()
+
+        # Accessibility title and description, not drawn
+        if self._in_acc_descr:
+            self._in_acc_descr = "}" not in line
+            return
+        if re.match(r"acc(title|descr)\s*:", lower):
+            return
+        if re.match(r"accdescr\s*\{", lower):
+            self._in_acc_descr = "}" not in line
+            return
 
         # Subgraph start
         if lower.startswith("subgraph"):
