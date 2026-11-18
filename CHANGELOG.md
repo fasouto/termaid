@@ -7,6 +7,8 @@
 - Flowchart: an unmatched `*` in a Markdown label, as in ``A["`2*3`"]``, no longer hangs the parser. The `*` is kept as text (#53, thanks @developingchet)
 - Flowchart: a very long link (thousands of `-` or `=`) parses in milliseconds instead of taking cubic time (#53, thanks @developingchet)
 - Packet: a field far from bit 0, such as `3200000: "x"`, no longer draws hundreds of thousands of empty rows. A field that does not start where the last one ended is dropped with a warning, as Mermaid rejects it (#53, thanks @developingchet)
+- Flowchart and state diagrams: an edge label is no longer written inside a node's box, over a subgraph's title or through a subgraph's border. `A -->|yes| B` with `A -->|no| B` drew `yes` inside B, and a label next to a subgraph title gave `Servicesk`. A label with no clean spot now looks a few rows up and down before it crosses an edge line
+- Flowchart and state diagrams: two edges that come back into the same side of a node no longer cross each other, and the outer one no longer turns with a stray `┤`. The edge that comes from farther away takes the outer row
 - Claude Code hook: a diagram that takes more than 3 seconds to draw is shown as its Mermaid source. Before, Claude Code stopped the hook at 10 seconds and the rest of the reply was shown inside an unclosed code block (#54, thanks @developingchet)
 
 ## 0.12.1 (2026-11-18)
