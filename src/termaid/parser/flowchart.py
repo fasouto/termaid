@@ -278,6 +278,13 @@ def _strip_quotes(text: str) -> str:
     return text
 
 
+def _opens_node_data(line: str) -> bool:
+    """Whether the line ends inside an unclosed @{ ... }."""
+    masked = _mask_quotes(line)
+    at = masked.rfind("@{")
+    return at >= 0 and masked.find("}", at) < 0
+
+
 def _split_on_semicolons(line: str) -> list[str]:
     """Split a line into statements at semicolons outside double quotes."""
     parts: list[str] = []
@@ -332,10 +339,19 @@ class _FlowchartParser:
             raw_lines.extend(_split_on_semicolons(line))
 
         result: list[str] = []
+        node_data_open = False
         for line in raw_lines:
             stripped = _strip_comments(line).strip()
-            if stripped:
+            if not stripped:
+                continue
+            if node_data_open and re.match(r"[\w-]+\s*:(?!:)|\}", stripped):
+                # The @{ ... } data of a node can span lines, one key on each.
+                result[-1] += ", " + stripped
+                closed = "}" in _mask_quotes(stripped)
+            else:
                 result.append(stripped)
+                closed = True
+            node_data_open = not closed or _opens_node_data(stripped)
         return result
 
     def _parse_header(self, line: str) -> None:
@@ -815,7 +831,7 @@ class _FlowchartParser:
             text = text[:class_idx].strip()
 
         # Try @{...} syntax: ID@{ shape: diamond, label: "text" }
-        at_match = re.match(r'^([a-zA-Z_]\w*)\s*@\{(.+)\}$', text, re.DOTALL)
+        at_match = re.match(r'^([^\s@\[\](){}<>]+)\s*@\{(.+)\}$', text, re.DOTALL)
         if at_match:
             node_id = at_match.group(1)
             body = at_match.group(2)
