@@ -530,9 +530,11 @@ def _place_label(
     strict = len(lines) > 1 and may_cover is not None
     for target_row in range(row, row + len(lines)):
         for target_col in range(col, col_end):
+            if canvas.is_protected(target_row, target_col):
+                return False
             if canvas.get(target_row, target_col) == " ":
                 continue
-            if strict or canvas.is_protected(target_row, target_col):
+            if strict:
                 return False
             if may_cover is not None and (target_col, target_row) not in may_cover:
                 return False
@@ -795,10 +797,18 @@ def _draw_edge_label(
         )
         return
 
-    # Force place at midpoint of path
-    mid_idx = len(path) // 2
-    mx, my = path[mid_idx]
-    _place_label(canvas, my - len(lines), mx + 1, lines, placed_labels)
+    # Force place by the middle of the path's middle segment: right of it,
+    # centred on it or left of it, a few rows up or down when a box or
+    # border is in the way.
+    (x1, y1), (x2, y2) = path[len(path) // 2 - 1], path[len(path) // 2]
+    mx, my = (x1 + x2) // 2, (y1 + y2) // 2
+    width = _block_width(lines)
+    top = my - len(lines)
+    rules = _LabelRules(share_rows=True)
+    for offset in (0, -1, 1, -2, 2, -3, 3):
+        for col in (mx + 1, mx - width // 2, mx - width):
+            if _try_place_label(canvas, top + offset, col, lines, placed_labels, rules):
+                return
 
 
 def _draw_notes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -> None:
