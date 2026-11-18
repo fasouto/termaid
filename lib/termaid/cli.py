@@ -82,7 +82,14 @@ def _auto_fit(
             **overrides,
         )
 
-    result = fit_to_width(render, result, target_width, gap=args.gap, padding_x=args.padding_x, plain=_plain)
+    from . import _layout_width
+
+    def measure(**overrides):
+        return _layout_width(source, padding_y=args.padding_y, **overrides)
+
+    result = fit_to_width(
+        render, result, target_width, gap=args.gap, padding_x=args.padding_x, plain=_plain, measure=measure,
+    )
 
     actual_width = max_line_width(_plain(result))
     if actual_width > target_width and not args.strict_width:
@@ -113,7 +120,11 @@ def _read_source(args: argparse.Namespace) -> str | None:
             _report(args, "input_missing", f"Error reading file: {e}", path=args.file)
             return None
     elif not sys.stdin.isatty():
-        return sys.stdin.read()
+        try:
+            return sys.stdin.read()
+        except UnicodeDecodeError as e:
+            _report(args, "input_missing", f"Error reading input: {e}")
+            return None
     else:
         _report(
             args,
@@ -123,6 +134,13 @@ def _read_source(args: argparse.Namespace) -> str | None:
             "       echo 'graph LR; A-->B' | termaid",
         )
         return None
+
+
+def _why_empty(source: str) -> str:
+    from . import type_problem
+
+    problem = type_problem(source)
+    return "nothing to draw" if problem is None else problem[0].lower() + problem[1:].rstrip(".")
 
 
 def _use_color(args: argparse.Namespace) -> bool:
@@ -136,6 +154,15 @@ def _use_color(args: argparse.Namespace) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
+    # Pipes and redirects use the locale encoding, which on Windows is a
+    # code page that cannot encode box-drawing characters.
+    # A stream that is not a text file, or was already read, keeps its own.
+    for stream in (sys.stdin, sys.stdout):
+        try:
+            stream.reconfigure(encoding="utf-8", errors=stream.errors)
+        except (AttributeError, OSError, ValueError):
+            pass
+
     # Read --diagnostics-format first, so argument errors honour it too.
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument("--diagnostics-format", default="text")
@@ -380,7 +407,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result = _render_one(source, args, render_fn, target_width=args.width)
             if not _plain(result).strip():
-                return _report(args, "render_empty", "Input produced no renderable diagram.")
+                from . import type_problem
+                return _report(args, "render_empty", type_problem(source) or "Input produced no renderable diagram.")
 
         failed = _check_output(_plain(result), args)
         if failed is not None:
@@ -483,7 +511,7 @@ def _render_markdown(text: str, args: argparse.Namespace, render_fn, use_color: 
         except Exception as e:
             failure = ("render_failed", str(e))
         else:
-            failure = None if _plain(drawn).strip() else ("render_empty", "nothing to draw")
+            failure = None if _plain(drawn).strip() else ("render_empty", _why_empty(seg.text))
         if failure is None:
             pieces.append(_indent(drawn, seg.indent))
             continue

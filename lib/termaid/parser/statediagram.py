@@ -100,15 +100,19 @@ class _StateDiagramParser:
 
         # State declaration with stereotype: state "name" as id <<stereotype>>
         # or: state "name" as id
+        # or: state "name" as id { (composite with a display name)
         # or: state id <<stereotype>>
         # or: state Parent { (composite)
         state_match = re.match(
-            r'state\s+"([^"]+)"\s+as\s+(\S+)\s*(<<\w+>>)?',
+            r'state\s+"([^"]+)"\s+as\s+([^\s{]+)\s*(<<\w+>>)?\s*(\{)?',
             line,
         )
         if state_match:
-            label = line_breaks(state_match.group(1), "\\n")  # node labels break on a backslash-n
             alias = state_match.group(2)
+            if state_match.group(4):
+                self._open_composite(alias, state_match.group(1))
+                return
+            label = line_breaks(state_match.group(1), "\\n")  # node labels break on a backslash-n
             stereotype = state_match.group(3)
             self._aliases[alias] = label
             shape = self._stereotype_to_shape(stereotype)
@@ -128,21 +132,14 @@ class _StateDiagramParser:
         composite_match = re.match(r'state\s+"?([^"{}]+)"?\s*\{', line)
         if composite_match:
             sg_label = composite_match.group(1).strip()
-            sg_id = sg_label.replace(" ", "_")
-            sg = Subgraph(
-                id=sg_id,
-                label=line_breaks(sg_label, " "),  # a title has one row
-                parent=self._subgraph_stack[-1] if self._subgraph_stack else None,
-            )
-            if self._subgraph_stack:
-                self._subgraph_stack[-1].children.append(sg)
-            else:
-                self.graph.subgraphs.append(sg)
-            self._subgraph_stack.append(sg)
+            self._open_composite(sg_label.replace(" ", "_"), sg_label)
             return
 
         # Transition: State1 --> State2 or State1 --> State2 : label
-        trans_match = re.match(r'(.+?)\s*-->\s*(.+?)(?:\s*:\s*(.+))?$', line)
+        # A `:::class` suffix on either end is a style, not part of the id or label
+        trans_match = re.match(
+            r'(.+?)(?::::[\w-]+)?\s*-->\s*(.+?)(?::::[\w-]+)?(?:\s*:\s*(.+))?$', line,
+        )
         if trans_match:
             src_raw = trans_match.group(1).strip()
             tgt_raw = trans_match.group(2).strip()
@@ -165,6 +162,18 @@ class _StateDiagramParser:
             state_id = line.strip()
             if state_id not in self.graph.nodes:
                 self._ensure_node(state_id, state_id, NodeShape.ROUNDED)
+
+    def _open_composite(self, sg_id: str, sg_label: str) -> None:
+        sg = Subgraph(
+            id=sg_id,
+            label=line_breaks(sg_label, " "),  # a title has one row
+            parent=self._subgraph_stack[-1] if self._subgraph_stack else None,
+        )
+        if self._subgraph_stack:
+            self._subgraph_stack[-1].children.append(sg)
+        else:
+            self.graph.subgraphs.append(sg)
+        self._subgraph_stack.append(sg)
 
     def _resolve_composite_edges(self) -> None:
         """Point transitions at composite states to the subgraph itself.

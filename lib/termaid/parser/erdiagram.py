@@ -211,7 +211,7 @@ def parse_er_diagram(text: str) -> ERDiagram:
                 i += 1
                 if body_line == "}" or body_line == "}\n":
                     break
-                if not body_line:
+                if not body_line or body_line.startswith("%%"):
                     continue
                 # Parse attribute
                 am = _ATTR_RE.match(body_line)

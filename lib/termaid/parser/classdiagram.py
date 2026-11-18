@@ -190,7 +190,7 @@ def parse_class_diagram(text: str) -> ClassDiagram:
                 i += 1
                 if body_line == "}" or body_line == "}\n":
                     break
-                if not body_line:
+                if not body_line or body_line.startswith("%%"):
                     continue
                 # Check for annotation inside body
                 am = _ANNOTATION_RE.match(body_line)

@@ -25,6 +25,8 @@ import shutil
 import stat
 import sys
 import tempfile
+import threading
+import time
 from dataclasses import asdict, dataclass, field
 from functools import partial
 
@@ -37,6 +39,10 @@ _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
 # and every batch saves the held lines again, so past this many characters
 # they are shown as written.
 _MAX_HELD_CHARS = 8_192
+_RENDER_SECONDS = 3
+# A message that is interrupted never sends its final batch, so its state
+# file stays behind; one untouched for this long belongs to no live message.
+_STALE_STATE_SECONDS = 24 * 60 * 60
 
 
 @dataclass
@@ -55,6 +61,7 @@ class StreamRenderer:
     indent: str = ""
     held: list[str] = field(default_factory=list)   # original lines, fence included
     carry: str = ""        # a final batch may end mid-line
+    other_fence: str = ""  # an open block of another language, passed through unsearched
     held_size: int = field(default=0, init=False, repr=False, compare=False)  # held's characters, line breaks included
 
     def __post_init__(self) -> None:
@@ -81,6 +88,7 @@ class StreamRenderer:
                 if tail and self.held and self.held[-1] == tail:
                     shown = shown.rstrip("\n")
                 self._reset()
+            self.other_fence = ""
         return shown
 
     def _line(self, line: str) -> list[str]:
@@ -101,6 +109,13 @@ class StreamRenderer:
             held, self.held = self.held, []
             self._reset()
             return drawn if drawn is not None else held
+        if self.other_fence:
+            close = re.compile(
+                r"^[ \t]*" + re.escape(self.other_fence[0]) + "{" + str(len(self.other_fence)) + r",}[ \t]*\r?$"
+            )
+            if close.match(line):
+                self.other_fence = ""
+            return [line]
         match = _OPEN.match(line)
         if match and not (match.group("fence")[0] == "`" and "`" in match.group("info")):
             words = match.group("info").split()
@@ -110,6 +125,7 @@ class StreamRenderer:
                 self.held = [line]
                 self.held_size = len(line) + 1
                 return []
+            self.other_fence = match.group("fence")
         return [line]
 
     def _reset(self) -> None:
@@ -120,7 +136,7 @@ class StreamRenderer:
 
     def _draw(self, source: str) -> list[str] | None:
         """Render one diagram, or None when it cannot be drawn."""
-        from . import render
+        from . import _layout_width, render
 
         if not source.strip():
             return None
@@ -131,11 +147,24 @@ class StreamRenderer:
         if width is None:
             width = max(shutil.get_terminal_size((_DEFAULT_WIDTH, 24)).columns - _MARGIN, 20)
         width = max(width - display_width(self.indent), 20)
-        try:
-            draw = partial(render, source, use_ascii=self.use_ascii)
-            text = fit_to_width(draw, draw(), width)
-        except Exception:
+        result: list[str] = []
+
+        def run() -> None:
+            try:
+                draw = partial(render, source, use_ascii=self.use_ascii)
+                measure = partial(_layout_width, source)
+                result.append(fit_to_width(draw, draw(), width, measure=measure))
+            except Exception:
+                pass
+
+        # Claude Code kills the hook after 10 seconds, before it saves its
+        # state, so a slower render is shown as source instead.
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        worker.join(_RENDER_SECONDS)
+        if not result:
             return None
+        text = result[0]
         # A drawing wider than the pane wraps into a garble; the source reads better.
         if not text.strip() or (known and max_line_width(text) > width):
             return None
@@ -147,15 +176,22 @@ class StreamRenderer:
         return [self.indent + fence] + [self.indent + ln for ln in text.split("\n")] + [self.indent + fence]
 
     def to_json(self) -> str:
-        return json.dumps({k: v for k, v in asdict(self).items() if k in ("fence", "indent", "held", "carry")})
+        return json.dumps({k: v for k, v in asdict(self).items() if k in ("fence", "indent", "held", "carry", "other_fence")})
 
     def load(self, data: str) -> None:
         saved = json.loads(data)
+        if not isinstance(saved, dict):
+            raise ValueError("saved state is not a JSON object")
+        held = saved.get("held", [])
+        texts = [saved.get(key, "") for key in ("fence", "indent", "carry", "other_fence")]
+        if not isinstance(held, list) or not all(isinstance(text, str) for text in texts + held):
+            raise ValueError("saved state has the wrong shape")
         self.fence = saved.get("fence", "")
         self.indent = saved.get("indent", "")
         self.held = list(saved.get("held", []))
         self.held_size = sum(len(line) + 1 for line in self.held)
         self.carry = saved.get("carry", "")
+        self.other_fence = saved.get("other_fence", "")
 
 
 def _state_dir() -> str | None:
@@ -188,6 +224,22 @@ def _state_path(folder: str, message_id: str) -> str:
     return os.path.join(folder, safe + ".json")
 
 
+def _remove_stale_state(folder: str) -> None:
+    cutoff = time.time() - _STALE_STATE_SECONDS
+    try:
+        with os.scandir(folder) as entries:
+            for entry in entries:
+                if not entry.name.endswith((".json", ".tmp")) or not entry.is_file(follow_symlinks=False):
+                    continue
+                try:
+                    if entry.stat(follow_symlinks=False).st_mtime < cutoff:
+                        os.remove(entry.path)
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
 def _write_state(path: str, data: str) -> None:
     """Write through a temp file, so a later call never reads half a file."""
     tmp = f"{path}.{os.getpid()}.tmp"
@@ -214,17 +266,22 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     folder that another user could read or write. When the state can't be
     saved, the lines held so far are shown as written.
     """
-    stdin = stdin or sys.stdin
+    # Claude Code sends UTF-8, but sys.stdin decodes with the locale
+    # encoding, so read the bytes and let json detect the encoding.
+    stdin = stdin or getattr(sys.stdin, "buffer", sys.stdin)
     stdout = stdout or sys.stdout
     try:
         event = json.load(stdin)
-    except (ValueError, OSError):
+    except (ValueError, OSError, RecursionError):
         return 0
-    if event.get("hook_event_name") not in (None, "MessageDisplay"):
+    if not isinstance(event, dict) or event.get("hook_event_name") not in (None, "MessageDisplay"):
         return 0
     delta = event.get("delta") or ""
-    final = bool(event.get("final", True))
+    if not isinstance(delta, str):
+        return 0
     message_id = str(event.get("message_id") or "")
+    # Without a message_id there is nowhere to keep held lines for the next batch.
+    final = bool(event.get("final", True)) or not message_id
 
     renderer = StreamRenderer(width=width, use_ascii=use_ascii)
     path = None
@@ -243,11 +300,13 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     shown = renderer.feed(delta, final=final)
 
     if path:
-        if final or not (renderer.fence or renderer.carry):
+        if final or not (renderer.fence or renderer.other_fence or renderer.carry):
             try:
                 os.remove(path)
             except OSError:
                 pass
+            if final:
+                _remove_stale_state(folder)
         else:
             try:
                 _write_state(path, renderer.to_json())

@@ -190,7 +190,7 @@ def _parse_markdown_label(text: str) -> tuple[str, list[LabelSegment]] | None:
                 i = end + 1
                 continue
         # Plain text: collect until next *
-        j = i
+        j = i + 1
         while j < len(md) and md[j] != "*":
             j += 1
         segments.append(LabelSegment(text=md[i:j]))
@@ -691,7 +691,7 @@ class _FlowchartParser:
         """Find arrows with labels: -->|text| or -- text --> or == text ==>.
         Returns (start, end, style, arr_start, arr_end, label, min_length, type_start, type_end)."""
         # Pattern: -->|text|
-        m = re.search(r'(<--|<-\.|-\.|-+|=+|<)([-=.]+)(>?)(\|)([^|]*)(\|)', text)
+        m = re.search(r'(<|[-=])([-=.]+)(>?)(\|)([^|]*)(\|)', text)
         if m:
             label = m.group(5).strip()
             # Parse the arrow part (everything before the first |)

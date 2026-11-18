@@ -117,11 +117,11 @@ def _collect_labels(diagram: SequenceDiagram, flat_events: list[_FlatEvent], max
         return text.split("\n") if max_label_width is None else wrap_display_text(text, max_label_width)
 
     events: list[list[str]] = []
-    msg_counter = 0
+    msg_number = diagram.autonumber_start
     for ev in flat_events:
         if isinstance(ev, Message):
-            msg_counter += 1
-            eff = _effective_label(ev, msg_counter if diagram.autonumber else None)
+            eff = _effective_label(ev, msg_number if diagram.autonumber else None)
+            msg_number += diagram.autonumber_step
             events.append(wrap(eff) if eff else [])
         elif isinstance(ev, Note):
             events.append(ev.text.split("\n") if max_label_width is None else wrap(ev.text))
@@ -204,7 +204,12 @@ def _compute_layout(
 
         si = _participant_index(diagram, ev.source)
         ti = _participant_index(diagram, ev.target)
-        if si < 0 or ti < 0 or si == ti:
+        if si < 0 or ti < 0:
+            continue
+        if si == ti:
+            # Keep the loop, its label and a block frame around it clear of the next lifeline
+            if si < n - 1:
+                gap_mins[si] = max(gap_mins[si], _self_loop_width(labels.events[ev_idx]) + 3)
             continue
         lo, hi = min(si, ti), max(si, ti)
         label_need = _lines_width(labels.events[ev_idx]) + 6  # padding for arrow + spacing
@@ -471,7 +476,9 @@ def _draw_participant_header(
         draw_rectangle(canvas, bx, y, bw, h, "\n".join(lines), cs, style="node")
 
 
-def _compute_activation_ranges(flat_events: list[_FlatEvent], row_offsets: list[int]) -> dict[str, list[tuple[int, int]]]:
+def _compute_activation_ranges(
+    flat_events: list[_FlatEvent], row_offsets: list[int], labels: _Labels,
+) -> dict[str, list[tuple[int, int]]]:
     """Compute activation ranges per participant from flattened events.
 
     Returns {participant_id: [(start_row, end_row), ...]}.
@@ -479,11 +486,19 @@ def _compute_activation_ranges(flat_events: list[_FlatEvent], row_offsets: list[
     # Track open activations per participant
     open_activations: dict[str, list[int]] = {}  # pid -> [start_rows...]
     ranges: dict[str, list[tuple[int, int]]] = {}
+    # An activation change right after a message takes effect at that
+    # message's arrowhead row, not at the row of the next event.
+    message_row: int | None = None
 
     for idx, ev in enumerate(flat_events):
-        if not isinstance(ev, ActivateEvent):
+        if isinstance(ev, Message):
+            loop_rows = 1 if ev.source == ev.target else 0
+            message_row = row_offsets[idx] + _extra_rows(labels.events[idx]) + loop_rows
             continue
-        row = row_offsets[idx]
+        if not isinstance(ev, ActivateEvent):
+            message_row = None
+            continue
+        row = row_offsets[idx] if message_row is None else message_row
         pid = ev.participant
         if ev.active:
             open_activations.setdefault(pid, []).append(row)
@@ -541,7 +556,7 @@ def render_sequence(
     canvas = Canvas(width, height)
 
     # Compute activation ranges
-    activation_ranges = _compute_activation_ranges(flat_events, row_offsets)
+    activation_ranges = _compute_activation_ranges(flat_events, row_offsets, labels)
 
     # ── 1. Draw participant headers at top ────────────────────────
     for i, p in enumerate(diagram.participants):

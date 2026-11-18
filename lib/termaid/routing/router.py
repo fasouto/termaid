@@ -202,8 +202,49 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
     # spreading the start creates jog segments at the border that produce
     # ┼ artifacts when the jog crosses the node border characters.
     _spread_shared_endpoints(routed, layout, sg_bounds)
+    _keep_runs_off_titles(routed, layout)
 
     return routed
+
+
+def _keep_runs_off_titles(routed: list[RoutedEdge], layout: GridLayout) -> None:
+    """Move a horizontal run off the borders and title row of each
+    subgraph box it passes over.
+
+    A layer gap is one grid row however many lines it spans, and a run is
+    drawn on the row's middle line. When the gap holds a box's top border
+    and title, that middle line is the title row; below a box it can be
+    the bottom border. The run moves to the nearest other line of its
+    grid row, so the vertical lines it joins only change length.
+    """
+    if not layout.subgraph_bounds:
+        return
+    spans: list[range] = []
+    top = layout.offset_y
+    for r in range(max(layout.row_heights, default=0) + 1):
+        spans.append(range(top, top + layout.row_heights.get(r, 1)))
+        top += layout.row_heights.get(r, 1)
+
+    for re in routed:
+        path = re.draw_path
+        for k in range(1, len(path) - 2):
+            (x0, y), (x1, y1) = path[k], path[k + 1]
+            if y != y1:
+                continue
+            lo, hi = min(x0, x1), max(x0, x1)
+            header = {
+                line
+                for sb in layout.subgraph_bounds
+                if sb.x <= hi and lo <= sb.x + sb.width - 1
+                for line in (sb.y, sb.y + 1, sb.y + sb.height - 1)
+            }
+            span = next((s for s in spans if y in s), None)
+            if y not in header or span is None:
+                continue
+            free = [line for line in span if line not in header]
+            if free:
+                moved = min(free, key=lambda line: (abs(line - y), line < y))
+                path[k], path[k + 1] = (x0, moved), (x1, moved)
 
 
 _Places = tuple[frozenset[str], frozenset[str]]
@@ -431,12 +472,21 @@ def _spread_shared_endpoints(
     from collections import defaultdict
 
     end_groups: dict[tuple[int, int], list[RoutedEdge]] = defaultdict(list)
+    leaving: dict[tuple[int, int], list[RoutedEdge]] = defaultdict(list)
     for re in routed:
         if len(re.draw_path) >= 2:
             end_groups[re.draw_path[-1]].append(re)
+            leaving[re.draw_path[0]].append(re)
 
     for point, edges in end_groups.items():
-        if len(edges) <= 1:
+        departures = leaving.get(point, [])
+        # The two directions of one link share a line on purpose: ◄──►.
+        two_way = any(
+            (d.edge.source, d.edge.target) == (a.edge.target, a.edge.source)
+            for d in departures for a in edges
+        )
+        departure = departures[0] if departures and not two_way else None
+        if len(edges) + (departure is not None) <= 1:
             continue
         tgt_id = edges[0].edge.target
         tgt = layout.placements.get(tgt_id)
@@ -449,42 +499,69 @@ def _spread_shared_endpoints(
             )
         if not tgt:
             continue
-        _apply_spread(edges, point, tgt, is_start=False)
+        _apply_spread(edges, point, tgt, departure)
 
 
 def _apply_spread(
     edges: list[RoutedEdge],
     point: tuple[int, int],
     placement: NodePlacement,
-    is_start: bool,
+    departure: RoutedEdge | None,
 ) -> None:
     """Offset each edge's endpoint along the node border.
+
+    An edge that leaves from the same point keeps it, since moving a start
+    leaves a jog across the border, and the arrivals take the slots beside
+    it so that no arrival reads as part of the departing line.
 
     For TOP/BOTTOM attachment (horizontal spread): shifts the adjacent
     corner point to match the new x, avoiding backward horizontal jog
     segments that create stray line artifacts.
 
-    For LEFT/RIGHT attachment (vertical spread): inserts a short
-    perpendicular jog at the adjacent point's x so the last segment
-    stays horizontal and the arrow direction is correct.
+    For LEFT/RIGHT attachment (vertical spread): slides the adjacent
+    corner along its vertical run, or inserts a short perpendicular jog
+    at its x when the approach is straight, so the last segment stays
+    horizontal and the arrow direction is correct.
     """
-    if is_start:
-        return  # start spreading disabled; causes border artifacts
-
-    n = len(edges)
     px, py = point
     attach = edges[0].end_dir
+    along = 0 if attach in (AttachDir.TOP, AttachDir.BOTTOM) else 1
+
+    def lane_order(re: RoutedEdge) -> tuple[int, int]:
+        # An edge whose last lane comes from one side takes a slot on that
+        # side, and the deeper of two lanes from the same side takes the
+        # slot farther from it, so neither crosses the other's lane. The
+        # departure's first lane counts the same way.
+        path = re.draw_path[::-1] if re is departure else re.draw_path
+        corner = path[-2]
+        before = path[-3] if len(path) > 2 else corner
+        side = (before[along] > corner[along]) - (before[along] < corner[along])
+        depth = abs(corner[1 - along] - point[1 - along])
+        return side, -side * depth
+
+    order = sorted(edges + ([departure] if departure else []), key=lane_order)
+    n = len(order)
+
+    def offsets(lo: int, hi: int, pos: int) -> list[int] | None:
+        if hi - lo < n - 1:
+            return None
+        if departure is None:
+            step = min(2, (hi - lo) // max(n - 1, 1))
+            return [int((i - (n - 1) / 2) * step) for i in range(n)]
+        k = order.index(departure)
+        for step in (2, 1):
+            if lo <= pos - k * step and pos + (n - 1 - k) * step <= hi:
+                return [(i - k) * step for i in range(n)]
+        return None
 
     if attach in (AttachDir.TOP, AttachDir.BOTTOM):
         # Vertical arrival: spread horizontally along the border.
         min_x = placement.draw_x + 1
         max_x = placement.draw_x + placement.draw_width - 2
-        spread_range = max_x - min_x
-        if spread_range < n - 1:
+        shifts = offsets(min_x, max_x, px)
+        if shifts is None:
             return
-        step = min(2, spread_range // max(n - 1, 1))
-        for i, re in enumerate(edges):
-            offset = int((i - (n - 1) / 2) * step)
+        for re, offset in zip(order, shifts):
             if offset == 0:
                 continue
             new_x = max(min_x, min(max_x, px + offset))
@@ -498,22 +575,25 @@ def _apply_spread(
         # to the endpoint).  Tight gaps produce cramped ╭► patterns.
         min_y = placement.draw_y + 1
         max_y = placement.draw_y + placement.draw_height - 2
-        spread_range = max_y - min_y
-        if spread_range < n - 1:
+        shifts = offsets(min_y, max_y, py)
+        if shifts is None:
             return
-        # Check that all edges have enough approach distance
+        # Check that all edges have enough approach distance. Beside a
+        # departure one cell less will do: unspread, the arrival reads as
+        # part of the departing line.
         min_gap = min(abs(px - re.draw_path[-2][0]) for re in edges)
-        if min_gap < 4:
+        if min_gap < (3 if departure else 4):
             return  # not enough room for clean corner + arrow
-        step = min(2, spread_range // max(n - 1, 1))
-        for i, re in enumerate(edges):
-            offset = int((i - (n - 1) / 2) * step)
+        for re, offset in zip(order, shifts):
             if offset == 0:
                 continue
             new_y = max(min_y, min(max_y, py + offset))
             adj_x, adj_y = re.draw_path[-2]
             re.draw_path[-1] = (px, new_y)
-            re.draw_path.insert(-1, (adj_x, new_y))
+            if len(re.draw_path) > 2 and re.draw_path[-3][0] == adj_x:
+                re.draw_path[-2] = (adj_x, new_y)
+            else:
+                re.draw_path.insert(-1, (adj_x, new_y))
 
 
 def _sg_member_placements(
@@ -1007,8 +1087,9 @@ def _route_edge(
     elif path_alt:
         path, start_dir, end_dir = path_alt, alt[0], alt[1]
     else:
-        # Fallback: direct line
-        path = [start_pref, end_pref]
+        # Fallback: one corner. A diagonal segment is never walked to its end.
+        vertical = preferred[0] in (AttachDir.TOP, AttachDir.BOTTOM)
+        path = [start_pref, (start_pref[0], end_pref[1]) if vertical else (end_pref[0], start_pref[1]), end_pref]
         start_dir, end_dir = preferred
 
     simplified = simplify_path(path)

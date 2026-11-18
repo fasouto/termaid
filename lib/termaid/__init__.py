@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .renderer.canvas import Canvas
 
 
-__version__ = "0.12.1"
+__version__ = "0.13.0"
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 _LEADING_DIRECTIVES_RE = re.compile(rf"(?:{DIRECTIVE}|%%[^\n]*|\s+)*")
@@ -42,6 +42,72 @@ def _skip_directives(text: str) -> str:
     return text[_LEADING_DIRECTIVES_RE.match(text).end():]
 
 
+# The keywords a diagram can start with, apart from graph and flowchart.
+_DRAWN_TYPES = (
+    "stateDiagram", "sequenceDiagram", "classDiagram", "erDiagram", "block", "gitGraph",
+    "gantt", "pie", "treemap", "mindmap", "packet", "xychart", "journey", "timeline",
+    "kanban", "quadrantChart", "architecture",
+)
+# Mermaid types termaid has no renderer for: keyword prefix, lower case, and its name.
+_NOT_DRAWN_TYPES = (
+    ("sankey", "sankey"), ("c4", "C4"), ("radar", "radar"), ("zenuml", "zenuml"),
+    ("requirement", "requirement"),
+)
+_EDGE_RE = re.compile(r"-->|---|==>|===|-\.-|--[ox]|~~~")
+_HEADERLESS = "flowchart TD\n"
+
+
+def _type_problem(text: str) -> str | None:
+    """Why the first line of *text* names no diagram termaid draws, or None.
+
+    A first line that is already an edge (``A --> B``) is a flowchart with
+    no header, which is drawn.
+    """
+    first = text.split("\n", 1)[0].strip()
+    if not first:
+        return None
+    word = first.split()[0]
+    lower = word.lower()
+    if lower.startswith(("graph", "flowchart")) or text.startswith(_DRAWN_TYPES):
+        return None
+    for prefix, name in _NOT_DRAWN_TYPES:
+        if lower.startswith(prefix):
+            return f"termaid does not draw {name} diagrams."
+    if _EDGE_RE.search(first):
+        return None
+    return (
+        f"Unknown diagram type {word!r}. Start the diagram with its type, "
+        "such as flowchart TD, sequenceDiagram or classDiagram."
+    )
+
+
+def type_problem(source: str) -> str | None:
+    """Why *source* cannot be drawn because of its first line, or None.
+
+    :func:`render` draws nothing for such a source; this says why.
+    """
+    return _type_problem(_skip_directives(_prepare_source(source)))
+
+
+def _typed(text: str, *, arriving: bool = False) -> str | None:
+    """*text* ready for its parser, or None when its type is unknown.
+
+    Drawn as a flowchart, an unknown type came out as boxes of raw syntax
+    that looked like a diagram, so it is not drawn at all. *arriving* is
+    for a first line still being streamed, whose keyword may be half there.
+    """
+    if _type_problem(text) is not None:
+        return text if arriving else None
+    first = text.split("\n", 1)[0]
+    if first.strip() and not text.startswith(_DRAWN_TYPES) and not first.split()[0].lower().startswith(("graph", "flowchart")):
+        return _HEADERLESS + text
+    return text
+
+
+def _keyword_arriving(source: str, partial: bool) -> bool:
+    return partial and "\n" not in source.strip()
+
+
 def parse(source: str, *, partial: bool = False) -> Graph:
     """Parse mermaid syntax and return a Graph model.
 
@@ -55,14 +121,64 @@ def parse(source: str, *, partial: bool = False) -> Graph:
     Returns:
         Parsed Graph model
     """
+    arriving = _keyword_arriving(source, partial)
     if partial:
         from .partial import complete_partial
 
         source = complete_partial(source)
-    text = _skip_directives(_prepare_source(source))
+    text = _typed(_skip_directives(_prepare_source(source)), arriving=arriving)
+    if text is None:
+        return Graph()
     if text.startswith("stateDiagram"):
         return parse_state_diagram(text)
     return parse_flowchart(text)
+
+
+def _source_text(source: str, partial: bool) -> tuple[str, str | None]:
+    """The prepared source, and the text its parser reads or None for an unknown type."""
+    arriving = _keyword_arriving(source, partial)
+    if partial:
+        from .partial import complete_partial
+
+        source = complete_partial(source)
+    prepared = _prepare_source(source)
+    return prepared, _typed(_skip_directives(prepared), arriving=arriving)
+
+
+# The diagram types drawn from a Graph, through layout and edge routing.
+_GRAPH_TYPES = ("stateDiagram", "architecture")
+
+
+def _parse_graph(text: str) -> Graph:
+    if text.startswith("architecture"):
+        from .parser.architecture import parse_architecture
+        return parse_architecture(text)
+    if text.startswith("stateDiagram"):
+        return parse_state_diagram(text)
+    return parse_flowchart(text)
+
+
+def _layout_width(
+    source: str,
+    *,
+    padding_x: int = 4,
+    padding_y: int = 2,
+    gap: int = 4,
+    max_label_width: int | None = None,
+    partial: bool = False,
+    **_drawing_options,
+) -> int:
+    """Columns the drawing of *source* takes at least, without routing its edges.
+
+    This is ``fit_to_width``'s *measure*: routing is most of the cost of a
+    drawing. Diagram types not drawn through a layout give 0.
+    """
+    _, text = _source_text(source, partial)
+    if text is None or (text.startswith(_DRAWN_TYPES) and not text.startswith(_GRAPH_TYPES)):
+        return 0
+    from .renderer.draw import layout_width
+
+    return layout_width(_parse_graph(text), padding_x, padding_y, gap, max_label_width)
 
 
 class _Rendered(NamedTuple):
@@ -99,12 +215,9 @@ def _render_canvas(
     # Every renderer draws with this one character set.
     cs = build_charset(use_ascii, arrow_style)
 
-    if partial:
-        from .partial import complete_partial
-
-        source = complete_partial(source)
-    prepared = _prepare_source(source)
-    text = _skip_directives(prepared)
+    prepared, text = _source_text(source, partial)
+    if text is None:
+        return _Rendered(None)
     if text.startswith("sequenceDiagram"):
         from .parser.sequence import parse_sequence_diagram
         from .renderer.sequence import render_sequence
@@ -186,12 +299,9 @@ def _render_canvas(
         return _Rendered(render_quadrant(parse_quadrant(text), use_ascii=use_ascii))
 
     from .renderer import draw
+    graph = _parse_graph(text)
     if text.startswith("architecture"):
-        from .parser.architecture import parse_architecture
-        graph = parse_architecture(text)
         inline_edge_labels = False
-    else:
-        graph = parse(text)
     canvas = draw.render_graph_canvas(
         graph,
         cs=cs,
