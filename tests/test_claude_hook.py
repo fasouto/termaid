@@ -106,8 +106,8 @@ def test_hook_keeps_fence_state_between_calls(tmp_path, monkeypatch):
     assert len(list(tmp_path.glob(f"termaid-claude-hook*/{mid}.json"))) == 1
     drawn = _run("  A --> B\n```\nok\n", message_id=mid, index=1, final=False)
     assert drawn.startswith("```\n") and drawn.endswith("ok\n")
-    assert list(tmp_path.glob(f"termaid-claude-hook*/{mid}.json")) == []
     assert _run("", message_id=mid, index=2, final=True) == ""
+    assert list(tmp_path.glob(f"termaid-claude-hook*/{mid}.json")) == []
 
 
 def test_hook_draws_a_fence_whose_batches_run_out_of_order(tmp_path, monkeypatch):
@@ -349,6 +349,8 @@ def test_a_failed_save_mid_message_shows_the_reply_as_written(tmp_path, monkeypa
         real_replace(src, dst)
 
     monkeypatch.setattr(os, "replace", fail_second_save)
+    # The batch after the failed save waits for state that never comes.
+    monkeypatch.setattr("termaid.claude_hook._WAIT_SECONDS", 0.05)
     batches = ["```mermaid\n", "graph LR\n", "  A --> B\n", "```\nok\n"]
     shown = [_run(delta, message_id="m", index=i, final=i == 3) for i, delta in enumerate(batches)]
     assert "".join(shown) == "".join(batches)
