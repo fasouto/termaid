@@ -5,6 +5,8 @@ import io
 import json
 import os
 import stat
+import threading
+import time
 
 import pytest
 
@@ -106,6 +108,26 @@ def test_hook_keeps_fence_state_between_calls(tmp_path, monkeypatch):
     assert drawn.startswith("```\n") and drawn.endswith("ok\n")
     assert list(tmp_path.glob(f"termaid-claude-hook*/{mid}.json")) == []
     assert _run("", message_id=mid, index=2, final=True) == ""
+
+
+def test_hook_draws_a_fence_whose_batches_run_out_of_order(tmp_path, monkeypatch):
+    # Claude Code can start the hook for batch 1 before the one for batch 0 saves its state.
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    mid = "out-of-order"
+    later: list[str] = []
+    second = threading.Thread(target=lambda: later.append(
+        _run("  A --> B\n```\n", message_id=mid, index=1, final=True)))
+    second.start()
+    time.sleep(0.05)
+    assert _run("```mermaid\ngraph LR\n", message_id=mid, index=0, final=False) == ""
+    second.join()
+    assert later[0].startswith("```\n") and "graph LR" not in later[0]
+
+
+def test_hook_stops_waiting_for_a_batch_that_never_comes(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr("termaid.claude_hook._WAIT_SECONDS", 0.05)
+    assert _run("tail\n", message_id="lost-batch", index=3, final=True) == "tail\n"
 
 
 def test_hook_single_call_mode_draws_whole_message(tmp_path, monkeypatch):
