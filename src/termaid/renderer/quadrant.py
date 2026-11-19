@@ -6,7 +6,7 @@ at their (x, y) positions using marker characters.
 from __future__ import annotations
 
 from ..model.quadrant import QuadrantChart
-from ..utils import display_width
+from ..utils import display_width, iter_cells
 from .canvas import Canvas
 
 
@@ -32,7 +32,7 @@ def render_quadrant(
 
     # Title
     if diagram.title:
-        pad = (_MARGIN_L + _CHART_W - len(diagram.title)) // 2
+        pad = (_MARGIN_L + _CHART_W - display_width(diagram.title)) // 2
         lines.append(" " * max(0, pad) + diagram.title)
         lines.append("")
 
@@ -76,9 +76,7 @@ def render_quadrant(
             # Doesn't fit on right, try left
             start = px - display_width(label)
         if start >= 0:
-            for i, ch in enumerate(label):
-                if 0 <= start + i < _CHART_W:
-                    grid[py][start + i] = ch
+            _write_cells(grid[py], start, label)
 
     # Build a style grid matching the char grid
     style_grid: list[list[str]] = [["default" for _ in range(_CHART_W)] for _ in range(_CHART_H)]
@@ -104,7 +102,7 @@ def render_quadrant(
     # X-axis label
     x_label_line = ""
     if diagram.x_label:
-        x_pad = _MARGIN_L + (_CHART_W - len(diagram.x_label)) // 2
+        x_pad = _MARGIN_L + (_CHART_W - display_width(diagram.x_label)) // 2
         x_label_line = " " * max(0, x_pad) + diagram.x_label
 
     # Compute canvas size
@@ -140,8 +138,16 @@ def render_quadrant(
 def _place_label(grid: list[list[str]], label: str, cx: int, cy: int) -> None:
     """Place a label centered at (cx, cy) in the grid."""
     start_x = cx - display_width(label) // 2
-    w = len(grid[0]) if grid else 0
-    for i, ch in enumerate(label):
-        x = start_x + i
-        if 0 <= x < w and 0 <= cy < len(grid):
-            grid[cy][x] = ch
+    if 0 <= cy < len(grid):
+        _write_cells(grid[cy], start_x, label)
+
+
+def _write_cells(row: list[str], start: int, text: str) -> None:
+    """Write *text* into *row* from column *start*, one cluster per cell;
+    a wide cluster leaves an empty shadow cell, as on the canvas."""
+    col = start
+    for cell, width in iter_cells(text):
+        for offset, value in enumerate((cell, "")[:width]):
+            if 0 <= col + offset < len(row):
+                row[col + offset] = value
+        col += width

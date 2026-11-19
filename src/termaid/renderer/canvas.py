@@ -7,10 +7,8 @@ and the correct junction character is derived from the combined directions.
 """
 from __future__ import annotations
 
-import unicodedata
-
 from .charset import CharSet, UNICODE
-from ..utils import display_width
+from ..utils import display_width, iter_cells
 
 
 # Direction bitfield constants
@@ -205,7 +203,8 @@ class Canvas:
     ) -> None:
         """Place a string of characters starting at (row, col).
 
-        Wide (CJK) characters advance the column by 2 and leave a
+        A combining mark shares the cell of the letter it sits on. Wide
+        (CJK) characters advance the column by 2 and leave a
         placeholder space in the next cell so subsequent characters
         don't overlap. Text past the right edge is clipped unless
         ``grow`` is set, which widens the canvas to fit it.
@@ -213,10 +212,10 @@ class Canvas:
         if grow:
             self.resize(col + display_width(text), self.height)
         offset = 0
-        for ch in text:
+        for cell, width in iter_cells(text):
             target_col = col + offset
             if (
-                ch == " "
+                cell == " "
                 and overwrite_spaces
                 and 0 <= row < self.height
                 and 0 <= target_col < self.width
@@ -225,28 +224,24 @@ class Canvas:
                 self._grid[row][target_col] = " "
                 self._directions[row][target_col] = 0
                 self._style_grid[row][target_col] = style or "default"
-            elif ch == " ":
+            elif cell == " ":
                 self._style_blank(row, target_col, style)
             else:
-                self.put(row, target_col, ch, merge=False, style=style)
-            if unicodedata.east_asian_width(ch) in ("F", "W"):
+                self.put(row, target_col, cell, merge=False, style=style)
+            if width == 2:
                 # Wide char occupies 2 columns; blank the shadow cell
                 self._blank_shadow_cell(row, target_col + 1, style)
-                offset += 2
-            else:
-                offset += 1
+            offset += width
 
     def put_styled_text(self, row: int, col: int, segments: list[tuple[str, str]]) -> None:
         """Place text with per-segment style keys. Each segment is (text, style_key)."""
         offset = 0
         for text, style in segments:
-            for ch in text:
-                self.put(row, col + offset, ch, merge=False, style=style)
-                if unicodedata.east_asian_width(ch) in ("F", "W"):
+            for cell, width in iter_cells(text):
+                self.put(row, col + offset, cell, merge=False, style=style)
+                if width == 2:
                     self._blank_shadow_cell(row, col + offset + 1, style)
-                    offset += 2
-                else:
-                    offset += 1
+                offset += width
 
     def _style_blank(self, row: int, col: int, style: str) -> None:
         """Give a blank cell inside a text run the run's style, so a label
