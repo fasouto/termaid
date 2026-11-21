@@ -45,6 +45,13 @@ class TestPacketRendering:
         assert "Checksum" in output
         assert "╭" in output  # rounded box
 
+    def test_field_wider_than_a_row_keeps_continuation_rows(self):
+        output = render('packet-beta\n    0-63: "Payload"\n')
+        assert "Payload" in output
+        assert "32" in output
+        assert "63" in output
+        assert sum(line.count("╭") for line in output.split("\n")) == 2
+
 
 class TestPacketWideChars:
     def test_cjk_label_does_not_overflow_borders(self):
