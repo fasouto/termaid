@@ -45,6 +45,7 @@ def render_packet(
 
     # Group fields into rows
     rows: list[list[tuple[int, int, str]]] = []
+    continued_rows: set[int] = set()
     for field in diagram.fields:
         bit = field.start
         remaining_label = field.label
@@ -59,11 +60,17 @@ def render_packet(
                 rows.append([])
 
             rows[row_idx].append((col_start, col_end, remaining_label))
+            if bit > field.start:
+                continued_rows.add(row_idx)
             remaining_label = ""
             bit += bits_in_this_row
 
     # Remove trailing rows that have no labels
-    while rows and all(not label for _, _, label in rows[-1]):
+    while (
+        rows
+        and len(rows) - 1 not in continued_rows
+        and all(not label for _, _, label in rows[-1])
+    ):
         rows.pop()
 
     # Each row: 1 (numbers) + 1 (top border) + padding_y (content) + 1 (bottom border)
