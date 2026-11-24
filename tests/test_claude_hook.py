@@ -518,3 +518,20 @@ def test_a_render_that_outlasts_the_limit_is_shown_as_source(monkeypatch):
     assert r.feed("  A --> B\n```\nAfter\n", final=False) == "```mermaid\ngraph LR\n  A --> B\n```\nAfter\n"
     assert not r.fence
     assert r.feed("More\n", final=True) == "More\n"
+
+
+def test_the_render_limit_covers_every_diagram_in_a_batch(tmp_path, monkeypatch):
+    """Three diagrams that each fit the limit must not add up to more than it."""
+    import termaid
+    from termaid import claude_hook
+
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    real_render = termaid.render
+    monkeypatch.setattr(termaid, "render", lambda *a, **k: time.sleep(0.2) or real_render(*a, **k))
+    monkeypatch.setattr(claude_hook, "_RENDER_SECONDS", 0.3)
+    blocks = [f"```mermaid\ngraph LR\n  A{i} --> B{i}\n```\n" for i in range(3)]
+    start = time.monotonic()
+    out = _run("".join(blocks), message_id="three", index=0, final=False)
+    assert time.monotonic() - start < 0.45
+    assert "A0" in out and "graph LR" not in out.split("A0")[0]
+    assert out.endswith(blocks[1] + blocks[2])
