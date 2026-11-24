@@ -270,7 +270,7 @@ def _read_state_after(path: str, index: int | None) -> str | None:
                 data = f.read()
         except OSError:
             data = None
-        if not index or (data is not None and _saved_index(data) == index) or time.monotonic() >= deadline:
+        if index is None or (data is not None and _saved_index(data) == index) or time.monotonic() >= deadline:
             return data
         time.sleep(0.005)
 
@@ -326,7 +326,9 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
         if folder is None:
             return 0
         path = _state_path(folder, message_id)
-    saved = _read_state_after(path, index) if path else None
+    # A first batch starts afresh: a file already there belongs to an earlier
+    # run of the same message id, after an interrupt or a resume.
+    saved = _read_state_after(path, index) if path and index != 0 else None
     if saved is not None:
         try:
             renderer.load(saved)
