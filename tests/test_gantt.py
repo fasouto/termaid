@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import pytest
+
 from termaid import render
 from termaid.parser.gantt import parse_gantt
 
@@ -289,3 +291,35 @@ class TestGanttSubSecondRendering:
         fetch_cols = {i for i, ch in enumerate(rows["fetch page"]) if ch == "█"}
         assert search_cols and fetch_cols
         assert search_cols & fetch_cols
+
+
+class TestInputsThatOnceRaised:
+    """Issue #51, M33, M36 and L6."""
+
+    def test_month_names_in_the_date_format(self):
+        out = render("gantt\n  dateFormat MMM D YYYY\n  section A\n  Design :a1, Jan 1 2024, 5d\n  Build :after a1, 10d\n")
+        assert "Design" in out and "Build" in out and "█" in out
+
+    def test_a_full_month_name(self):
+        out = render("gantt\n  dateFormat MMMM D YYYY\n  axisFormat %b\n  section A\n  Design :a1, March 1 2024, 40d\n")
+        assert "Mar" in out and "Apr" in out
+
+    def test_a_format_that_names_a_field_twice_falls_back_to_the_other_forms(self):
+        out = render("gantt\n  dateFormat MM/DD/MM/YYYY\n  section A\n  Design :a1, 2024-01-01, 5d\n")
+        assert "Design" in out and "█" in out
+
+    @pytest.mark.parametrize("fmt,expected", [("%-d", "5"), ("%d", "05"), ("%_d", " 5"), ("%0e", "05"), ("%-m/%-d", "1/5")])
+    def test_d3_padding_flags_work_on_every_platform(self, fmt, expected):
+        from datetime import datetime
+
+        from termaid.renderer.gantt import format_time
+        assert format_time(datetime(2024, 1, 5), fmt) == expected
+
+    @pytest.mark.parametrize("task", ["Far :a1, 2024-01-01, 99999y", "Far :a1, 2024-01-01, 9999999999d"])
+    def test_a_duration_that_ends_past_year_9999_does_not_raise(self, task):
+        out = render(f"gantt\n  dateFormat YYYY-MM-DD\n  section A\n  Near :n1, 2024-01-01, 5d\n  {task}\n")
+        assert "Near" in out
+
+    def test_a_timestamp_past_year_9999_does_not_raise(self):
+        out = render("gantt\n  dateFormat x\n  section A\n  Near :n1, 1700000000000, 5d\n  Far :f1, 999999999999999999, 1d\n")
+        assert "Near" in out
