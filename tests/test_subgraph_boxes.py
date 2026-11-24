@@ -40,6 +40,13 @@ def _touch(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> bool:
     return a[0] <= b[1] and b[0] <= a[1] and a[2] <= b[3] and b[2] <= a[3]
 
 
+def _node(lines: list[str], label: str) -> tuple[int, int, int, int]:
+    try:
+        return find_box(lines, label)
+    except StopIteration:
+        raise AssertionError(f"Node {label!r} is not drawn whole:\n" + "\n".join(lines)) from None
+
+
 def assert_subgraphs(out: str, members: dict[str, list[str]], outside: list[str] = ()) -> None:
     """Each title in ``members`` is drawn on its own box, holding exactly the
     nodes listed for it; the boxes are apart, and ``outside`` nodes are clear
@@ -53,13 +60,13 @@ def assert_subgraphs(out: str, members: dict[str, list[str]], outside: list[str]
     for title, labels in members.items():
         for other, box in boxes.items():
             for label in labels:
-                node = find_box(lines, label)
+                node = _node(lines, label)
                 if other == title:
                     assert _inside(node, box), f"{label!r} is not inside {title!r}:\n{out}"
                 else:
                     assert not _touch(node, box), f"{label!r} is drawn on {other!r}:\n{out}"
     for label in outside:
-        node = find_box(lines, label)
+        node = _node(lines, label)
         for title, box in boxes.items():
             assert not _touch(node, box), f"{label!r} is drawn on {title!r}:\n{out}"
 
@@ -93,4 +100,44 @@ class TestSubgraphsLinkedBothWays:
         assert_subgraphs(
             render(src),
             {"Browser": ["Click buy", "Show receipt"], "Server": ["POST order", "Save order"]},
+        )
+
+
+class TestTitleWiderThanContents:
+    """A title wider than the nodes in its subgraph stretches the box, and the
+    gap beside it has to grow with it, or the box covers its neighbours."""
+
+    @pytest.mark.parametrize("d", ["LR", "RL"])
+    def test_next_node_stays_outside(self, d):
+        src = (
+            f"flowchart {d}\n"
+            "  subgraph A [Payment processing service]\n    pay\n  end\n"
+            "  pay --> db[(Ledger)]\n"
+        )
+        out = render(src)
+        assert_subgraphs(out, {"Payment processing service": ["pay"]}, outside=["Ledger"])
+        lines = out.split("\n")
+        box, ledger = subgraph_box(lines, "Payment processing service"), find_box(lines, "Ledger")
+        gap = ledger[2] - box[3] if d == "LR" else box[2] - ledger[3]
+        assert gap <= 4, f"The gap grew by more than the title needs:\n{out}"
+
+    @pytest.mark.parametrize("d", ["TD", "BT"])
+    def test_node_beside_stays_outside(self, d):
+        src = (
+            f"flowchart {d}\n  start --> pay & audit\n"
+            "  subgraph A [Payment processing service]\n    pay\n  end\n"
+        )
+        assert_subgraphs(
+            render(src), {"Payment processing service": ["pay"]}, outside=["start", "audit"],
+        )
+
+    def test_next_subgraph_stays_apart(self):
+        src = (
+            "flowchart LR\n"
+            "  subgraph A [Authentication and session service]\n    login\n  end\n"
+            "  subgraph B [Billing]\n    pay\n  end\n"
+            "  login --> pay\n"
+        )
+        assert_subgraphs(
+            render(src), {"Authentication and session service": ["login"], "Billing": ["pay"]},
         )
