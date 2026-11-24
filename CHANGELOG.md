@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 (2026-11-25)
 
 ### Behavior changes
 - Flowchart: the text of a `-- text -->` link can no longer contain the pair that opens it (`--`, `==` or `-.`), as in Mermaid. `A -- run with --force --> B` kept the whole text as its label and is now misread; write it as `A -->|run with --force| B`
@@ -8,6 +8,9 @@
 - Flowchart: a cylinder's label no longer shares a row with the lid's rim. With `padding_y=0`, and with `padding_y=1` for a label of two or more lines, the label was written over the rim (`│╰─Store─╯│`). The rim now always has its own row, so the most compact cylinder is four rows tall instead of three, and a label is centred in the body below the rim (#47)
 
 ### Fixes
+- Claude Code hook: the text after a diagram that takes more than a second to draw is no longer lost or left inside an unclosed code block. The hook saves what the next batch needs before it draws, not after, and a batch that runs late no longer undoes the batches after it
+- Claude Code hook: the 3 second drawing limit covers every diagram in a batch together, so a batch with several slow diagrams is no longer stopped by Claude Code's own 10 second limit; the diagrams left over are shown as source
+- Claude Code hook: the first batch of a message starts from nothing, even when a state file is left from an earlier run of the same message
 - `render_rich()` and `--theme` no longer fail with `'NoneType' object has no attribute 'to_styled_pairs'` on a source whose type termaid does not draw. Like `render()`, they give an empty drawing, and the command line says why. It broke in 0.13.0
 - A flowchart with no header whose first id starts like a diagram keyword (`graphql --> api`, `pieces --> board`, `timelineStart --> done`) is drawn again; `blocker --> fix` was drawn as a block diagram. The keyword has to be the whole first word. It broke in 0.13.0
 - Claude Code hook: a diagram is drawn even when Claude Code starts the hook for a batch before the hook for the batch before it has saved its state. The hook now waits for that batch, by its `index`, for up to 1 second. Before, the diagram was sometimes shown as Mermaid source
