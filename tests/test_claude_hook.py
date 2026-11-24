@@ -130,6 +130,14 @@ def test_hook_stops_waiting_for_a_batch_that_never_comes(tmp_path, monkeypatch):
     assert _run("tail\n", message_id="lost-batch", index=3, final=True) == "tail\n"
 
 
+def test_a_replayed_message_starts_from_its_first_batch(tmp_path, monkeypatch):
+    # Claude Code can send a message id again after an interrupt or a resume.
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    assert _run("```mermaid\ngraph LR\n", message_id="again", index=0, final=False) == ""
+    assert _run("Hello\n", message_id="again", index=0, final=False) == "Hello\n"
+    assert _run("Bye\n", message_id="again", index=1, final=True) == "Bye\n"
+
+
 def test_hook_single_call_mode_draws_whole_message(tmp_path, monkeypatch):
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
     out = _run("a\n" + FLOW + "b", message_id="m", index=0, final=True)
