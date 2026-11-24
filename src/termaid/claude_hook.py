@@ -40,6 +40,10 @@ _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
 # they are shown as written.
 _MAX_HELD_CHARS = 8_192
 _RENDER_SECONDS = 3
+# Claude Code can start the hook for a batch before the one for the batch
+# before it has saved its state. Wait this long for that state, then go on
+# without it, well inside the 10 seconds Claude Code gives the hook.
+_WAIT_SECONDS = 5
 # A message that is interrupted never sends its final batch, so its state
 # file stays behind; one untouched for this long belongs to no live message.
 _STALE_STATE_SECONDS = 24 * 60 * 60
@@ -240,6 +244,35 @@ def _remove_stale_state(folder: str) -> None:
         pass
 
 
+def _batch_index(event: dict) -> int | None:
+    index = event.get("index")
+    if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+        return None
+    return index
+
+
+def _saved_index(data: str) -> int | None:
+    try:
+        saved = json.loads(data)
+    except ValueError:
+        return None
+    return saved.get("next_index") if isinstance(saved, dict) else None
+
+
+def _read_state_after(path: str, index: int | None) -> str | None:
+    """Return the saved state once the batch before ``index`` has written it."""
+    deadline = time.monotonic() + _WAIT_SECONDS
+    while True:
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = f.read()
+        except OSError:
+            data = None
+        if not index or (data is not None and _saved_index(data) == index) or time.monotonic() >= deadline:
+            return data
+        time.sleep(0.005)
+
+
 def _write_state(path: str, data: str) -> None:
     """Write through a temp file, so a later call never reads half a file."""
     tmp = f"{path}.{os.getpid()}.tmp"
@@ -280,6 +313,7 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
     if not isinstance(delta, str):
         return 0
     message_id = str(event.get("message_id") or "")
+    index = _batch_index(event)
     # Without a message_id there is nowhere to keep held lines for the next batch.
     final = bool(event.get("final", True)) or not message_id
 
@@ -290,17 +324,19 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
         if folder is None:
             return 0
         path = _state_path(folder, message_id)
-    if path and os.path.exists(path):
+    saved = _read_state_after(path, index) if path else None
+    if saved is not None:
         try:
-            with open(path, encoding="utf-8") as f:
-                renderer.load(f.read())
-        except (OSError, ValueError):
+            renderer.load(saved)
+        except ValueError:
             pass
 
     shown = renderer.feed(delta, final=final)
 
     if path:
-        if final or not (renderer.fence or renderer.other_fence or renderer.carry):
+        holding = renderer.fence or renderer.other_fence or renderer.carry
+        # The next batch waits for this one's state, so it is saved even when nothing is held.
+        if final or (index is None and not holding):
             try:
                 os.remove(path)
             except OSError:
@@ -309,7 +345,10 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
                 _remove_stale_state(folder)
         else:
             try:
-                _write_state(path, renderer.to_json())
+                state = json.loads(renderer.to_json())
+                if index is not None:
+                    state["next_index"] = index + 1
+                _write_state(path, json.dumps(state))
             except OSError:
                 # The next batch would resume from an older saved state, so
                 # show what is held as written and drop that state.
