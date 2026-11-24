@@ -277,18 +277,23 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
     if not has_overlap:
         return layers
 
-    # Build subgraph DAG from cross-boundary edges
+    # Build subgraph DAG from cross-boundary edges. Edges both ways between
+    # subgraphs make a cycle; dropping its back edges still stacks them,
+    # where giving up would leave their boxes on top of each other.
     # Lists, not sets: the topological order below must not depend on hash
     # order or sibling subgraphs would swap places between runs.
     sg_succs: dict[str, list[str]] = {sid: [] for sid in sg_ids}
     sg_in_deg: dict[str, int] = {sid: 0 for sid in sg_ids}
-    for e in graph.edges:
-        s_sg = node_sg.get(e.source)
-        t_sg = node_sg.get(e.target)
-        if s_sg and t_sg and s_sg != t_sg and s_sg in sg_succs:
-            if t_sg not in sg_succs[s_sg]:
-                sg_succs[s_sg].append(t_sg)
-                sg_in_deg[t_sg] += 1
+    sg_edges = [
+        Edge(source=node_sg[e.source], target=node_sg[e.target])
+        for e in graph.edges
+        if node_sg.get(e.source) and node_sg.get(e.target)
+        and node_sg[e.source] != node_sg[e.target]
+    ]
+    for e in _without_back_edges(sg_ids, sg_edges):
+        if e.target not in sg_succs[e.source]:
+            sg_succs[e.source].append(e.target)
+            sg_in_deg[e.target] += 1
 
     # Topological sort (Kahn's)
     queue_list = [sid for sid in sg_ids if sg_in_deg[sid] == 0]
@@ -300,9 +305,6 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
             sg_in_deg[succ] -= 1
             if sg_in_deg[succ] == 0:
                 queue_list.append(succ)
-
-    if len(topo) != len(sg_ids):
-        return layers  # cycle in subgraph DAG, fall back
 
     # Compute internal layers per subgraph using only internal edges
     sg_internal: dict[str, dict[str, int]] = {}
