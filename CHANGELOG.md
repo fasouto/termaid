@@ -5,6 +5,7 @@
 ### Behavior changes
 - Flowchart: the text of a `-- text -->` link can no longer contain the pair that opens it (`--`, `==` or `-.`), as in Mermaid. `A -- run with --force --> B` kept the whole text as its label and is now misread; write it as `A -->|run with --force| B`
 - A symbol that is not wide in Unicode's East Asian Width table, such as `♥`, `❤`, `☁` or a bare `🖥`, now counts as 1 column instead of 2, which is how terminals draw it. Boxes around such labels come out one column narrower, including the icons of architecture diagrams
+- Flowchart: a cylinder's label no longer shares a row with the lid's rim. With `padding_y=0`, and with `padding_y=1` for a label of two or more lines, the label was written over the rim (`│╰─Store─╯│`). The rim now always has its own row, so the most compact cylinder is four rows tall instead of three, and a label is centred in the body below the rim (#47)
 
 ### Fixes
 - Claude Code hook: a diagram is drawn even when Claude Code starts the hook for a batch before the hook for the batch before it has saved its state. The hook now waits for that batch, by its `index`, for up to 1 second. Before, the diagram was sometimes shown as Mermaid source
