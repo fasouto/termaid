@@ -1087,10 +1087,18 @@ def _route_edge(
     elif path_alt:
         path, start_dir, end_dir = path_alt, alt[0], alt[1]
     else:
-        # Fallback: one corner. A diagonal segment is never walked to its end.
-        vertical = preferred[0] in (AttachDir.TOP, AttachDir.BOTTOM)
-        path = [start_pref, (start_pref[0], end_pref[1]) if vertical else (end_pref[0], start_pref[1]), end_pref]
+        # Crowding costs can spend the step limit before either relaxed
+        # search gets around the lines. A route that only keeps off boxes,
+        # with steps enough to cover the grid, rarely fails.
         start_dir, end_dir = preferred
+        path = find_path(
+            *start_pref, *end_pref, layout.is_free,
+            max_iterations=len(layout.col_widths) * len(layout.row_heights),
+        )
+        if path is None:
+            # One corner. A diagonal segment is never walked to its end.
+            vertical = preferred[0] in (AttachDir.TOP, AttachDir.BOTTOM)
+            path = [start_pref, (start_pref[0], end_pref[1]) if vertical else (end_pref[0], start_pref[1]), end_pref]
 
     simplified = simplify_path(path)
 

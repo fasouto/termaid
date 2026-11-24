@@ -326,6 +326,47 @@ class TestUnrelatedEdgesStayApart:
         }
 
 
+class TestLongSearches:
+    # A search that runs out of steps used to fall back to one corner
+    # straight through other boxes, here ch -> Read0.
+    CROWDED_STATES = """stateDiagram-v2
+  [*] --> Read0
+  state Comp99 {
+    ConfigX1 --> RefreshX2
+    state NestedComp99 {
+      deep1 --> deep2
+    }
+    RefreshX2 --> NestedComp99
+    RefreshX2 --> [*]
+  }
+  Write4 --> Parse6 : write build test timeout refresh
+  Read0 --> Ship1
+  Ship1 --> Import2
+  Ship1 --> Sync3 : next
+  Parse6 --> Write7
+  Parse6 --> Comp99
+  Read0 --> fk
+  fk --> Pa
+  Pb --> jn
+  jn --> Sync3
+  Write7 --> ch
+  ch --> Read0 : a
+  ch --> Parse6 : b
+"""
+
+    def test_no_edge_runs_through_a_box(self):
+        from termaid import _parse_graph, _source_text
+        from termaid.routing.router import _path_axes, layout_and_route
+
+        layout, routed = layout_and_route(_parse_graph(_source_text(self.CROWDED_STATES, False)[1]), 4, 2, 4, None)
+        through = set()
+        for re in routed:
+            ends = {re.grid_path[0], re.grid_path[-1]}
+            if any(not layout.is_free(*cell) for cell in _path_axes(re.grid_path).keys() - ends):
+                through.add(f"{re.edge.source}->{re.edge.target}")
+        assert through == set()
+
+
 class TestSubgraphEdgeRouting:
     """Edges to/from subgraph IDs attach to the subgraph border (issue #6)."""
 
