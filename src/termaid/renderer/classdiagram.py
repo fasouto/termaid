@@ -655,7 +655,7 @@ def _compute_exit_offsets(
         # Spread offsets symmetrically around center
         n = len(indices)
         # Leave room for a cardinality beside each line
-        widest = max(len((diagram.relationships[idx].source_card if end == "source" else diagram.relationships[idx].target_card) or "") for idx in indices)
+        widest = max(display_width((diagram.relationships[idx].source_card if end == "source" else diagram.relationships[idx].target_card) or "") for idx in indices)
         spacing = max(4, widest + 2)
         for j, idx in enumerate(indices):
             offsets[idx] = (j - (n - 1) / 2) * spacing
