@@ -78,6 +78,19 @@ class TestPathfinder:
         # Searching to max_iterations checked about 6,000 cells.
         assert len(calls) < 2000
 
+    def test_open_goal_far_away_is_not_checked_for_a_wall_across_the_grid(self):
+        calls: list = []
+
+        def is_free(c, r):
+            calls.append((c, r))
+            return True
+
+        path = find_path(0, 0, 150, 0, is_free)
+        assert path is not None and path[-1] == (150, 0)
+        # Walking back from the goal until it meets the search checked
+        # about 5,000 cells; the search itself checks about 250.
+        assert len(calls) < 1500
+
     def test_goal_behind_crossings_is_still_found_after_a_long_search(self):
         path = find_path(0, 0, 10, 10, self._walled_grid([]), crossings=self._ring(True))
         assert path is not None and path[-1] == (10, 10)
