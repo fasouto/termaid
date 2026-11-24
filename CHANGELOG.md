@@ -8,6 +8,8 @@
 - Flowchart: a cylinder's label no longer shares a row with the lid's rim. With `padding_y=0`, and with `padding_y=1` for a label of two or more lines, the label was written over the rim (`│╰─Store─╯│`). The rim now always has its own row, so the most compact cylinder is four rows tall instead of three, and a label is centred in the body below the rim (#47)
 
 ### Fixes
+- `render_rich()` and `--theme` no longer fail with `'NoneType' object has no attribute 'to_styled_pairs'` on a source whose type termaid does not draw. Like `render()`, they give an empty drawing, and the command line says why. It broke in 0.13.0
+- A flowchart with no header whose first id starts like a diagram keyword (`graphql --> api`, `pieces --> board`, `timelineStart --> done`) is drawn again; `blocker --> fix` was drawn as a block diagram. The keyword has to be the whole first word. It broke in 0.13.0
 - Claude Code hook: a diagram is drawn even when Claude Code starts the hook for a batch before the hook for the batch before it has saved its state. The hook now waits for that batch, by its `index`, for up to 1 second. Before, the diagram was sometimes shown as Mermaid source
 - Labels with combining marks (Thai, Khmer, Hebrew with niqqud, Arabic with harakat, decomposed Vietnamese) no longer push box borders out of line, in every diagram type. A mark is drawn in the cell of the letter it sits on and counts as zero columns. `❤️` with its emoji selector counts as 2 columns instead of 4, and colours in `render_rich` no longer drift after a CJK label (#42, #43, thanks @nontravis)
 - Packet: a field wider than one row, such as `0-63: "Payload"`, keeps its continuation rows. Only the first 32 bits were drawn (#66, #67, thanks @anubhavlal07)
