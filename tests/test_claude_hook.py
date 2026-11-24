@@ -175,7 +175,7 @@ def test_a_slow_drawing_does_not_hold_up_the_batches_after_it(tmp_path, monkeypa
         shown[i] = _run(batches[i], message_id="slow", index=i, final=i == len(batches) - 1)
 
     threads = [threading.Thread(target=run, args=(i,)) for i in range(len(batches))]
-    # Each batch starts just before the one ahead of it, as Claude Code can start them.
+    # Batches 1, 0, 3, 2, ... start in that order, a little apart, as Claude Code can start them.
     for i in range(0, len(threads), 2):
         for thread in reversed(threads[i:i + 2]):
             thread.start()
