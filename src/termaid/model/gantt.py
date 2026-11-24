@@ -45,8 +45,12 @@ class Duration:
     amount: float
     unit: str
 
-    def end_from(self, start: datetime) -> datetime:
-        return shift(start, self.amount, self.unit)
+    def end_from(self, start: datetime) -> datetime | None:
+        """The end ``start`` plus this duration, or None past year 9999."""
+        try:
+            return shift(start, self.amount, self.unit)
+        except (OverflowError, ValueError):
+            return None
 
 
 @dataclass(frozen=True)
