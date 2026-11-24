@@ -423,6 +423,23 @@ def test_a_failed_save_mid_message_shows_the_reply_as_written(tmp_path, monkeypa
     assert list(tmp_path.glob("termaid-claude-hook*/*")) == []
 
 
+def test_a_save_retries_while_another_batch_has_the_file_open(tmp_path, monkeypatch):
+    # Windows refuses to replace a file that a waiting batch has open for reading.
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    real_replace = os.replace
+    refusals = []
+
+    def busy_once(src, dst):
+        if not refusals:
+            refusals.append(dst)
+            raise PermissionError(13, "The process cannot access the file")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", busy_once)
+    assert json.loads(_open_fence())["hookSpecificOutput"]["displayContent"] == ""
+    assert refusals and len(list(tmp_path.glob("termaid-claude-hook*/m1.json"))) == 1
+
+
 def test_no_usable_temp_folder_shows_the_reply_as_written(monkeypatch):
     def no_temp_folder():
         raise FileNotFoundError("No usable temporary directory")
