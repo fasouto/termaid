@@ -138,6 +138,64 @@ def test_a_replayed_message_starts_from_its_first_batch(tmp_path, monkeypatch):
     assert _run("Bye\n", message_id="again", index=1, final=True) == "Bye\n"
 
 
+SPLIT_MESSAGES = [
+    "Intro\n```mermaid\ngraph LR\n  A --> B\n```\nAfter.\n",
+    "1. step\n\n   ```mermaid\n   graph TD\n     X --> Y\n   ```\nend",
+    "```mermaid\ngraph LR\n  A --> B\n```\n```mermaid\ngraph LR\n  C --> D\n```\nok\n",
+    "```python\n```mermaid\n```\n~~~mermaid\ngraph LR\n  E --> F\n~~~\n",
+    "Open\n```mermaid\ngraph LR\n  A --> B\n",
+]
+
+
+@pytest.mark.parametrize("message", SPLIT_MESSAGES)
+def test_a_message_split_anywhere_shows_as_if_it_came_whole(tmp_path, monkeypatch, message):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    whole = _run(message, message_id="whole", index=0, final=True)
+    for cut in range(len(message) + 1):
+        mid = f"cut-{cut}"
+        shown = _run(message[:cut], message_id=mid, index=0, final=False)
+        shown += _run(message[cut:], message_id=mid, index=1, final=True)
+        assert shown == whole, f"split at {cut}"
+
+
+@pytest.mark.parametrize("message", SPLIT_MESSAGES[:3])
+def test_a_slow_drawing_does_not_hold_up_the_batches_after_it(tmp_path, monkeypatch, message):
+    import termaid
+    from termaid import claude_hook
+
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    whole = _run(message, message_id="whole", index=0, final=True)
+    real_render = termaid.render
+    monkeypatch.setattr(termaid, "render", lambda *a, **k: time.sleep(0.3) or real_render(*a, **k))
+    monkeypatch.setattr(claude_hook, "_WAIT_SECONDS", 0.15)
+    batches = message.splitlines(keepends=True) + [""]
+    shown: list[str] = [""] * len(batches)
+
+    def run(i: int) -> None:
+        shown[i] = _run(batches[i], message_id="slow", index=i, final=i == len(batches) - 1)
+
+    threads = [threading.Thread(target=run, args=(i,)) for i in range(len(batches))]
+    # Each batch starts just before the one ahead of it, as Claude Code can start them.
+    for i in range(0, len(threads), 2):
+        for thread in reversed(threads[i:i + 2]):
+            thread.start()
+            time.sleep(0.01)
+    for thread in threads:
+        thread.join()
+    assert "".join(shown) == whole
+
+
+def test_a_batch_that_runs_late_does_not_undo_the_batches_after_it(tmp_path, monkeypatch):
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    monkeypatch.setattr("termaid.claude_hook._WAIT_SECONDS", 0.05)
+    shown = [_run("Intro\n", message_id="late", index=0, final=False)]
+    # Batch 2 gives up waiting for batch 1, which only starts afterwards.
+    shown.append(_run("B\n", message_id="late", index=2, final=False))
+    shown.insert(1, _run("```mermaid\n", message_id="late", index=1, final=False))
+    shown.append(_run("end\n", message_id="late", index=3, final=True))
+    assert "".join(shown) == "Intro\n```mermaid\nB\nend\n"
+
+
 def test_hook_single_call_mode_draws_whole_message(tmp_path, monkeypatch):
     monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
     out = _run("a\n" + FLOW + "b", message_id="m", index=0, final=True)
