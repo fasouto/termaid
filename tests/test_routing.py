@@ -367,6 +367,35 @@ class TestLongSearches:
         assert through == set()
 
 
+class TestCrowdedGapPasses:
+    """A crowded gap is grown and the graph routed again, but only while a
+    routing pass is cheap."""
+
+    @staticmethod
+    def _passes(source: str, monkeypatch) -> int:
+        import termaid.routing.router as router
+        from termaid import render
+
+        passes = []
+        route = router.route_edges
+        monkeypatch.setattr(router, "route_edges", lambda *a, **k: passes.append(1) or route(*a, **k))
+        render(source)
+        return len(passes)
+
+    def test_small_graph_is_routed_again_with_a_wider_gap(self, monkeypatch):
+        from tests.conftest import FLOWCHARTS_DIR
+
+        source = (FLOWCHARTS_DIR / "unrelated_edges_gap.mmd").read_text(encoding="utf-8")
+        assert self._passes(source, monkeypatch) == 2
+
+    def test_large_graph_is_routed_once(self, monkeypatch):
+        from tests.conftest import FLOWCHARTS_DIR
+
+        source = (FLOWCHARTS_DIR / "unrelated_edges_gap.mmd").read_text(encoding="utf-8")
+        source += "".join(f"    X{i} --> Y{i}\n" for i in range(20))
+        assert self._passes(source, monkeypatch) == 1
+
+
 class TestSubgraphEdgeRouting:
     """Edges to/from subgraph IDs attach to the subgraph border (issue #6)."""
 

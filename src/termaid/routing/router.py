@@ -45,6 +45,10 @@ class RoutedEdge:
 
 
 _MAX_GAP_ROUNDS = 3
+# Above this many edges a routing pass takes a noticeable share of a
+# second and another pass rarely clears a crowded route, so crowded gaps
+# are left as they are.
+_MAX_GAP_EDGES = 24
 _CROWDING_COST = 10.0
 _OFF_BUS_COST = 0.5
 
@@ -64,13 +68,15 @@ def layout_and_route(
 ) -> tuple[GridLayout, list[RoutedEdge]]:
     """Lay out the graph and route its edges.
 
-    A layer gap holding a crowded cell gets one more grid cell, as long as
-    that leaves fewer crowded routes.
+    In a graph of up to ``_MAX_GAP_EDGES`` edges, a layer gap holding a
+    crowded cell gets one more grid cell, as long as that leaves fewer
+    crowded routes.
     """
     extra: dict[int, int] = {}
     layout = compute_layout(graph, padding_x, padding_y, gap, max_label_width)
-    routed = route_edges(graph, layout)
-    for _ in range(_MAX_GAP_ROUNDS):
+    grow_gaps = len(graph.edges) <= _MAX_GAP_EDGES
+    routed = route_edges(graph, layout, grow_gaps)
+    for _ in range(_MAX_GAP_ROUNDS if grow_gaps else 0):
         crowded = _crowded_gaps(routed, layout, graph.direction.normalized())
         if not crowded:
             break
@@ -99,8 +105,9 @@ def _crowded_gaps(
     return gaps
 
 
-def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
-    """Route all edges in the graph."""
+def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> list[RoutedEdge]:
+    """Route all edges in the graph, finding where each is crowded only
+    when *find_crowded*."""
     direction = graph.direction.normalized()
     routed: list[RoutedEdge] = []
     vertical = direction.is_vertical
@@ -172,7 +179,7 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
         bus = bus_cells.setdefault(edge.source, _BusCells()) if i in on_bus else _BusCells()
         re = _route_edge(
             edge, src, tgt, layout, direction, (shared - bus.branches) | forbidden,
-            _prefer_cells(bus.preferred, penalty), crossings, blocked,
+            _prefer_cells(bus.preferred, penalty), crossings, blocked, find_crowded,
         )
         re.index = i
         routed.append(re)
@@ -1020,6 +1027,7 @@ def _route_edge(
     penalty: Callable[[int, int], float] | None,
     crossings: dict[tuple[int, int], bool],
     blocked: set[tuple[int, int]],
+    find_crowded: bool,
 ) -> RoutedEdge:
     """Route a single edge between two nodes.
 
@@ -1059,7 +1067,7 @@ def _route_edge(
 
     # The preferred route as it would be if other lines were only soft
     # obstacles. Where it shares one, the gap there has no room to spare.
-    ideal = find_path(
+    ideal = find_crowded and find_path(
         *start_pref, *end_pref, layout.is_free,
         soft_obstacles | blocked | crossings.keys(), penalty=penalty,
     )
