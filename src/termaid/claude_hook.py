@@ -39,16 +39,27 @@ _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
 # and every batch saves the held lines again, so past this many characters
 # they are shown as written.
 _MAX_HELD_CHARS = 8_192
+# Claude Code kills the hook after 10 seconds, so all the diagrams of one
+# batch share this limit, and those it does not reach are shown as source.
 _RENDER_SECONDS = 3
 # Claude Code can start the hook for a batch before the one for the batch
 # before it has saved its state. Wait this long for that state, then go on
-# without it. Recorded waits were under 0.1 seconds; the limit stays short
-# because the text of the batch is held back for all of it, and it adds to
-# the render limit inside the 10 seconds Claude Code gives the hook.
+# without it. Recorded waits were under 0.1 seconds, as a batch saves before
+# it draws; the limit stays short because the text of the batch is held back
+# for all of it.
 _WAIT_SECONDS = 1
 # A message that is interrupted never sends its final batch, so its state
 # file stays behind; one untouched for this long belongs to no live message.
 _STALE_STATE_SECONDS = 24 * 60 * 60
+
+
+@dataclass
+class Diagram:
+    """A closed Mermaid block that :meth:`StreamRenderer.draw` will draw."""
+
+    held: list[str]  # the block as written, shown when it cannot be drawn
+    indent: str
+    end: str = "\n"  # "" when the reply ends on the closing fence's line
 
 
 @dataclass
@@ -58,6 +69,8 @@ class StreamRenderer:
     Feed it text with :meth:`feed` and print what comes back. Lines inside
     a Mermaid fence are held until the fence closes, so a call may return
     less text than it was given, and a later call returns the drawing.
+    :meth:`feed` is :meth:`scan` followed by :meth:`draw`; call them apart
+    to save the state between them, before the slow part.
     """
 
     width: int | None = None
@@ -74,30 +87,44 @@ class StreamRenderer:
         self.held_size = sum(len(line) + 1 for line in self.held)
 
     def feed(self, text: str, final: bool = False) -> str:
-        out: list[str] = []
+        return self.draw(self.scan(text, final))
+
+    def scan(self, text: str, final: bool = False) -> list[str | Diagram]:
+        """Take in *text* and return what to show, with its diagrams not yet drawn.
+
+        The state this leaves does not depend on the drawings.
+        """
+        parts: list[str | Diagram] = []
         text = self.carry + text
         self.carry = ""
         lines = text.split("\n")
         tail = lines.pop()  # "" when the text ended on a newline
-        if tail and not final:
+        if tail and final:
+            lines.append(tail)
+        elif tail:
             self.carry = tail
-            tail = ""
         for line in lines:
-            out.extend(self._line(line))
-        shown = "".join(line + "\n" for line in out)
+            parts.extend(self._line(line))
         if final:
-            if tail:
-                shown += "".join(line + "\n" for line in self._line(tail)).rstrip("\n")
             if self.fence:
                 # Message ended inside a fence: show it as Claude wrote it
-                shown += "".join(line + "\n" for line in self.held)
-                if tail and self.held and self.held[-1] == tail:
-                    shown = shown.rstrip("\n")
+                parts.extend(line + "\n" for line in self.held)
                 self._reset()
             self.other_fence = ""
-        return shown
+            if tail:
+                last = parts[-1]
+                if isinstance(last, Diagram):
+                    last.end = ""
+                else:
+                    parts[-1] = last[:-1]
+        return parts
 
-    def _line(self, line: str) -> list[str]:
+    def draw(self, parts: list[str | Diagram]) -> str:
+        """Join what :meth:`scan` returned, drawing its diagrams."""
+        deadline = time.monotonic() + _RENDER_SECONDS
+        return "".join(part if isinstance(part, str) else self._show(part, deadline) for part in parts)
+
+    def _line(self, line: str) -> list[str | Diagram]:
         if self.fence:
             self.held.append(line)
             self.held_size += len(line) + 1
@@ -108,20 +135,18 @@ class StreamRenderer:
                 if self.held_size > _MAX_HELD_CHARS:
                     held = self.held
                     self._reset()
-                    return held
+                    return [held_line + "\n" for held_line in held]
                 return []
-            body = [_dedent(raw, len(self.indent)).rstrip("\r") for raw in self.held[1:-1]]
-            drawn = self._draw("\n".join(body))
-            held, self.held = self.held, []
+            diagram = Diagram(self.held, self.indent)
             self._reset()
-            return drawn if drawn is not None else held
+            return [diagram]
         if self.other_fence:
             close = re.compile(
                 r"^[ \t]*" + re.escape(self.other_fence[0]) + "{" + str(len(self.other_fence)) + r",}[ \t]*\r?$"
             )
             if close.match(line):
                 self.other_fence = ""
-            return [line]
+            return [line + "\n"]
         match = _OPEN.match(line)
         if match and not (match.group("fence")[0] == "`" and "`" in match.group("info")):
             words = match.group("info").split()
@@ -132,7 +157,7 @@ class StreamRenderer:
                 self.held_size = len(line) + 1
                 return []
             self.other_fence = match.group("fence")
-        return [line]
+        return [line + "\n"]
 
     def _reset(self) -> None:
         self.fence = ""
@@ -140,11 +165,17 @@ class StreamRenderer:
         self.held = []
         self.held_size = 0
 
-    def _draw(self, source: str) -> list[str] | None:
-        """Render one diagram, or None when it cannot be drawn."""
+    def _show(self, diagram: Diagram, deadline: float) -> str:
+        lines = self._draw(diagram, deadline) or diagram.held
+        return "\n".join(lines) + diagram.end
+
+    def _draw(self, diagram: Diagram, deadline: float) -> list[str] | None:
+        """Render one diagram before ``deadline``, or None when it cannot be drawn."""
         from . import _layout_width, render
 
-        if not source.strip():
+        indent = diagram.indent
+        source = "\n".join(_dedent(raw, len(indent)).rstrip("\r") for raw in diagram.held[1:-1])
+        if not source.strip() or time.monotonic() >= deadline:
             return None
         width = self.width
         # Claude Code sets COLUMNS to the pane width; older versions did not.
@@ -152,7 +183,7 @@ class StreamRenderer:
         known = width is not None or (columns.isdigit() and int(columns) > 0)
         if width is None:
             width = max(shutil.get_terminal_size((_DEFAULT_WIDTH, 24)).columns - _MARGIN, 20)
-        width = max(width - display_width(self.indent), 20)
+        width = max(width - display_width(indent), 20)
         result: list[str] = []
 
         def run() -> None:
@@ -163,11 +194,9 @@ class StreamRenderer:
             except Exception:
                 pass
 
-        # Claude Code kills the hook after 10 seconds, before it saves its
-        # state, so a slower render is shown as source instead.
         worker = threading.Thread(target=run, daemon=True)
         worker.start()
-        worker.join(_RENDER_SECONDS)
+        worker.join(deadline - time.monotonic())
         if not result:
             return None
         text = result[0]
@@ -179,7 +208,7 @@ class StreamRenderer:
         fence = "```"
         while fence in text:
             fence += "`"
-        return [self.indent + fence] + [self.indent + ln for ln in text.split("\n")] + [self.indent + fence]
+        return [indent + fence] + [indent + ln for ln in text.split("\n")] + [indent + fence]
 
     def to_json(self) -> str:
         return json.dumps({k: v for k, v in asdict(self).items() if k in ("fence", "indent", "held", "carry", "other_fence")})
@@ -258,11 +287,16 @@ def _saved_index(data: str) -> int | None:
         saved = json.loads(data)
     except ValueError:
         return None
-    return saved.get("next_index") if isinstance(saved, dict) else None
+    index = saved.get("next_index") if isinstance(saved, dict) else None
+    return index if isinstance(index, int) and not isinstance(index, bool) else None
 
 
 def _read_state_after(path: str, index: int | None) -> str | None:
-    """Return the saved state once the batch before ``index`` has written it."""
+    """Return the saved state once the batch before ``index`` has written it.
+
+    After the wait, return whatever is saved. Stop waiting early when a
+    later batch has saved, since the state this batch needed is gone.
+    """
     deadline = time.monotonic() + _WAIT_SECONDS
     while True:
         try:
@@ -270,7 +304,8 @@ def _read_state_after(path: str, index: int | None) -> str | None:
                 data = f.read()
         except OSError:
             data = None
-        if not index or (data is not None and _saved_index(data) == index) or time.monotonic() >= deadline:
+        saved_index = _saved_index(data) if data is not None else None
+        if index is None or (saved_index is not None and saved_index >= index) or time.monotonic() >= deadline:
             return data
         time.sleep(0.005)
 
@@ -281,6 +316,14 @@ def _write_state(path: str, data: str) -> None:
     try:
         with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
             f.write(data)
+        # Windows will not replace a file that a waiting batch has open for
+        # a moment to read it.
+        for _ in range(9):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                time.sleep(0.005)
         os.replace(tmp, path)
     except OSError:
         try:
@@ -326,14 +369,20 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
         if folder is None:
             return 0
         path = _state_path(folder, message_id)
-    saved = _read_state_after(path, index) if path else None
-    if saved is not None:
+    # A first batch starts afresh: a file already there belongs to an earlier
+    # run of the same message id, after an interrupt or a resume.
+    saved = _read_state_after(path, index) if path and index != 0 else None
+    # A later batch stopped waiting for this one and saved its own state.
+    overtaken = saved is not None and index is not None and (_saved_index(saved) or 0) > index
+    if saved is not None and not overtaken:
         try:
             renderer.load(saved)
         except ValueError:
             pass
 
-    shown = renderer.feed(delta, final=final)
+    # The state is saved before any diagram is drawn, so the next batch
+    # never waits for a drawing.
+    parts = renderer.scan(delta, final=final)
 
     if path:
         holding = renderer.fence or renderer.other_fence or renderer.carry
@@ -345,6 +394,9 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
                 pass
             if final:
                 _remove_stale_state(folder)
+        elif overtaken:
+            # No batch will resume from this one, so show what it holds as written.
+            parts += renderer.scan("", final=True)
         else:
             try:
                 state = json.loads(renderer.to_json())
@@ -354,12 +406,13 @@ def run_claude_hook(stdin=None, stdout=None, *, width: int | None = None, use_as
             except OSError:
                 # The next batch would resume from an older saved state, so
                 # show what is held as written and drop that state.
-                shown += renderer.feed("", final=True)
+                parts += renderer.scan("", final=True)
                 try:
                     os.remove(path)
                 except OSError:
                     pass
 
+    shown = renderer.draw(parts)
     json.dump({"hookSpecificOutput": {"hookEventName": "MessageDisplay", "displayContent": shown}}, stdout)
     stdout.write("\n")
     return 0
