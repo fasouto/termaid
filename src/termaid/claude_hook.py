@@ -39,12 +39,14 @@ _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
 # and every batch saves the held lines again, so past this many characters
 # they are shown as written.
 _MAX_HELD_CHARS = 8_192
+# Claude Code kills the hook after 10 seconds, so all the diagrams of one
+# batch share this limit, and those it does not reach are shown as source.
 _RENDER_SECONDS = 3
 # Claude Code can start the hook for a batch before the one for the batch
 # before it has saved its state. Wait this long for that state, then go on
-# without it. Recorded waits were under 0.1 seconds; the limit stays short
-# because the text of the batch is held back for all of it, and it adds to
-# the render limit inside the 10 seconds Claude Code gives the hook.
+# without it. Recorded waits were under 0.1 seconds, as a batch saves before
+# it draws; the limit stays short because the text of the batch is held back
+# for all of it.
 _WAIT_SECONDS = 1
 # A message that is interrupted never sends its final batch, so its state
 # file stays behind; one untouched for this long belongs to no live message.
@@ -119,7 +121,8 @@ class StreamRenderer:
 
     def draw(self, parts: list[str | Diagram]) -> str:
         """Join what :meth:`scan` returned, drawing its diagrams."""
-        return "".join(part if isinstance(part, str) else self._show(part) for part in parts)
+        deadline = time.monotonic() + _RENDER_SECONDS
+        return "".join(part if isinstance(part, str) else self._show(part, deadline) for part in parts)
 
     def _line(self, line: str) -> list[str | Diagram]:
         if self.fence:
@@ -162,17 +165,17 @@ class StreamRenderer:
         self.held = []
         self.held_size = 0
 
-    def _show(self, diagram: Diagram) -> str:
-        lines = self._draw(diagram) or diagram.held
+    def _show(self, diagram: Diagram, deadline: float) -> str:
+        lines = self._draw(diagram, deadline) or diagram.held
         return "\n".join(lines) + diagram.end
 
-    def _draw(self, diagram: Diagram) -> list[str] | None:
-        """Render one diagram, or None when it cannot be drawn."""
+    def _draw(self, diagram: Diagram, deadline: float) -> list[str] | None:
+        """Render one diagram before ``deadline``, or None when it cannot be drawn."""
         from . import _layout_width, render
 
         indent = diagram.indent
         source = "\n".join(_dedent(raw, len(indent)).rstrip("\r") for raw in diagram.held[1:-1])
-        if not source.strip():
+        if not source.strip() or time.monotonic() >= deadline:
             return None
         width = self.width
         # Claude Code sets COLUMNS to the pane width; older versions did not.
@@ -191,11 +194,9 @@ class StreamRenderer:
             except Exception:
                 pass
 
-        # Claude Code kills the hook after 10 seconds, before it saves its
-        # state, so a slower render is shown as source instead.
         worker = threading.Thread(target=run, daemon=True)
         worker.start()
-        worker.join(_RENDER_SECONDS)
+        worker.join(deadline - time.monotonic())
         if not result:
             return None
         text = result[0]
