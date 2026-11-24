@@ -128,3 +128,30 @@ class TestShapeRendering:
         )
         for label in ["Rect", "Round", "Diamond", "Stadium", "Sub", "Circle"]:
             assert label in output
+
+
+class TestCylinderLabelKeepsOffTheLid:
+    """The lid's rim has a row of its own at every padding (issue #47)."""
+
+    @pytest.mark.parametrize("padding_y", [0, 1, 2, 3])
+    @pytest.mark.parametrize("label,lines", [("Store", ["Store"]), ("one<br/>two", ["one", "two"])])
+    def test_no_label_text_on_the_rim_row(self, padding_y, label, lines):
+        out = render(f'flowchart LR\n  A[("{label}")]', padding_y=padding_y).split("\n")
+        rim = next(i for i, row in enumerate(out) if "╰" in row and "╯" in row and "│" in row)
+        assert rim == 1
+        assert set(out[rim].strip()) <= set("│╰─╯"), out
+        below = [row.strip("│ ") for row in out[rim + 1:]]
+        assert [row for row in below if row and not set(row) <= set("╰─╯")] == lines
+
+    def test_the_most_compact_cylinder_is_four_rows(self):
+        out = render('flowchart LR\n  A[("Store")]', padding_y=0).split("\n")
+        assert [row for row in out if row.strip()] == [
+            "╭─────────╮",
+            "│╰───────╯│",
+            "│  Store  │",
+            "╰─────────╯",
+        ]
+
+    def test_the_default_cylinder_is_unchanged(self):
+        out = render('flowchart LR\n  A[("Store")]').split("\n")
+        assert out[2].strip("│ ") == "Store" and len([row for row in out if row.strip()]) == 5
