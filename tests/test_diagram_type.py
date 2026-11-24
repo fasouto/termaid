@@ -70,3 +70,38 @@ def test_a_keyword_that_is_still_arriving_is_given_to_the_flowchart_parser_as_be
 def test_the_hook_shows_an_unknown_diagram_as_its_source():
     block = "```mermaid\nsankey-beta\nA,B,10\n```\n"
     assert StreamRenderer(width=80).feed(block, final=True) == block
+
+
+@pytest.mark.parametrize("source", [
+    "graphql --> api", "pieces --> board", "timelineStart --> done", "kanbanCol --> next",
+    "mindmapping --> notes", "blocker --> fix", "packets --> wire", "flowcharts --> docs",
+])
+def test_a_headerless_flowchart_whose_first_id_starts_with_a_keyword(source):
+    first, second = source.split(" --> ")
+    assert type_problem(source) is None
+    assert set(parse(source).nodes) == {first, second}
+    out = render(source)
+    assert f" {first} " in out and f" {second} " in out and "▼" in out
+
+
+@pytest.mark.parametrize("header", [
+    "stateDiagram-v2", "xychart-beta", "block-beta", "packet-beta", "architecture-beta", "flowchart-elk TD",
+    "gitGraph", "gitGraph:", "gitGraph LR:", "pie title Pets", "pie showData", "sequenceDiagram", "quadrantChart",
+])
+def test_a_keyword_with_a_suffix_is_still_its_type(header):
+    assert type_problem(header + "\n") is None
+
+
+def test_render_rich_draws_nothing_for_a_type_it_cannot_draw():
+    pytest.importorskip("rich")
+    from termaid import render_rich
+    for source in ("sankey-beta\nA,B,10", "grpah LR\n  A --> B"):
+        assert render_rich(source).plain == ""
+
+
+def test_the_command_line_says_why_with_a_theme_too(tmp_path, capsys):
+    pytest.importorskip("rich")
+    path = tmp_path / "s.mmd"
+    path.write_text("sankey-beta\nA,B,10\n", encoding="utf-8")
+    assert main([str(path), "--theme", "neon"]) == 1
+    assert capsys.readouterr().err == "Error: termaid does not draw sankey diagrams.\n"
