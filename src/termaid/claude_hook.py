@@ -316,6 +316,14 @@ def _write_state(path: str, data: str) -> None:
     try:
         with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
             f.write(data)
+        # Windows will not replace a file that a waiting batch has open for
+        # a moment to read it.
+        for _ in range(9):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                time.sleep(0.005)
         os.replace(tmp, path)
     except OSError:
         try:
