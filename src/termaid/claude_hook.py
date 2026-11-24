@@ -42,8 +42,10 @@ _MAX_HELD_CHARS = 8_192
 _RENDER_SECONDS = 3
 # Claude Code can start the hook for a batch before the one for the batch
 # before it has saved its state. Wait this long for that state, then go on
-# without it, well inside the 10 seconds Claude Code gives the hook.
-_WAIT_SECONDS = 5
+# without it. Recorded waits were under 0.1 seconds; the limit stays short
+# because the text of the batch is held back for all of it, and it adds to
+# the render limit inside the 10 seconds Claude Code gives the hook.
+_WAIT_SECONDS = 1
 # A message that is interrupted never sends its final batch, so its state
 # file stays behind; one untouched for this long belongs to no live message.
 _STALE_STATE_SECONDS = 24 * 60 * 60
