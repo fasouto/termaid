@@ -4,9 +4,13 @@
 
 ### Behavior changes
 - Flowchart: the text of a `-- text -->` link can no longer contain the pair that opens it (`--`, `==` or `-.`), as in Mermaid. `A -- run with --force --> B` kept the whole text as its label and is now misread; write it as `A -->|run with --force| B`
+- A symbol that is not wide in Unicode's East Asian Width table, such as `♥`, `❤`, `☁` or a bare `🖥`, now counts as 1 column instead of 2, which is how terminals draw it. Boxes around such labels come out one column narrower, including the icons of architecture diagrams
 
 ### Fixes
-- Claude Code hook: a diagram is drawn even when Claude Code starts the hook for a batch before the hook for the batch before it has saved its state. The hook now waits for that batch, by its `index`, for up to 5 seconds. Before, the diagram was sometimes shown as Mermaid source
+- Claude Code hook: a diagram is drawn even when Claude Code starts the hook for a batch before the hook for the batch before it has saved its state. The hook now waits for that batch, by its `index`, for up to 1 second. Before, the diagram was sometimes shown as Mermaid source
+- Labels with combining marks (Thai, Khmer, Hebrew with niqqud, Arabic with harakat, decomposed Vietnamese) no longer push box borders out of line, in every diagram type. A mark is drawn in the cell of the letter it sits on and counts as zero columns. `❤️` with its emoji selector counts as 2 columns instead of 4, and colours in `render_rich` no longer drift after a CJK label (#42, #43, thanks @nontravis)
+- Packet: a field wider than one row, such as `0-63: "Payload"`, keeps its continuation rows. Only the first 32 bits were drawn (#66, #67, thanks @anubhavlal07)
+- Gantt: `dateFormat` with month names (`MMM D YYYY`, `MMMM D YYYY`) no longer fails; `axisFormat` padding flags such as `%-d` work on Windows; a duration or date that runs past year 9999 no longer raises (#63, thanks @developingchet)
 - Flowchart: an id with a dash, such as `go-on`, is one node. The `o-o` inside it was read as a circle link between `g` and `n`. Circle and cross links need two dashes, as in Mermaid (#61, thanks @developingchet)
 - Flowchart: an arrow, `;`, `%%` or `:::` inside an unquoted node label, as in `A[Load --> Parse]`, is label text instead of breaking the statement (#61, thanks @developingchet)
 - Flowchart: an entity code in an edge label, such as `A -->|#quot;hi#quot;| B`, is no longer cut at its `;` (#61, thanks @developingchet)
