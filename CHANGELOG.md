@@ -12,6 +12,12 @@
 - Fitting a diagram to a width picks the label width from the layout's measure and draws once or twice, not five or six times. Fitting a 67-line flowchart to 200 columns went from 5.8 s to 0.3 s
 - Flowchart: two subgraphs with links in both directions are drawn as two boxes. They were merged into one box and one title was lost
 - Flowchart: a subgraph box stretched by a long title no longer covers the node or subgraph next to it
+- `--theme` output sent to a pipe or a file is no longer wrapped at 80 columns, which broke every wider drawing
+- Class, ER, journey and kanban diagrams keep one column of padding inside their boxes. At `padding_x=0`, which fitting to a width tries last, text was written over the box borders or cut short. Three fitted drawings come out 2 to 9 columns wider and correct
+- Negative `--padding-x`, `--padding-y` and `--gap` are rejected by the CLI, and `render()` treats them as 0. A negative gap could raise `IndexError`
+- `termaid file.mmd | head -1` exits quietly, without a broken pipe error
+- Textual widget and `--tui`: square brackets in a label, such as `[/]` or `[red]`, are shown as written. Textual read them as markup and dropped them
+- `--demo` applies the drawing flags (`--ascii`, `--width`, `--gap`, the padding flags, `--sharp-edges`, `--arrow-style`)
 - Flowchart: a quoted or Markdown label written over several source lines draws on those lines, and bold and italic in Markdown labels reach the styled output
 
 ## 0.14.0 (2026-11-25)
