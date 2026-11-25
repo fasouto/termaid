@@ -319,6 +319,9 @@ def _render_canvas(
     graph = _parse_graph(text)
     if text.startswith("architecture"):
         inline_edge_labels = False
+        if use_ascii:
+            from .parser.architecture import drop_icons
+            drop_icons(graph)
     canvas = draw.render_graph_canvas(
         graph,
         cs=cs,

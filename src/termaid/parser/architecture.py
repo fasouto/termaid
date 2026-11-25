@@ -299,7 +299,11 @@ def _apply_direction_and_positions(
     graph: Graph,
     positions: dict[str, tuple[int, int]],
 ) -> None:
-    """Set graph direction and grid_positions for the layout engine."""
+    """Set graph direction and grid_positions for the layout engine.
+
+    Each edge is turned to run along the direction, so ``db:L -- R:server``
+    is drawn like ``server:R -- L:db`` and not routed as a back edge.
+    """
     if not positions:
         return
 
@@ -313,3 +317,21 @@ def _apply_direction_and_positions(
         graph.direction = Direction.TB
 
     graph.grid_positions = positions
+
+    def key(nid: str) -> tuple[int, int]:
+        c, r = positions[nid]
+        return (c, r) if graph.direction == Direction.LR else (r, c)
+
+    for e in graph.edges:
+        if e.source in positions and e.target in positions and key(e.source) > key(e.target):
+            e.source, e.target = e.target, e.source
+            e.has_arrow_start, e.has_arrow_end = e.has_arrow_end, e.has_arrow_start
+
+
+def drop_icons(graph: Graph) -> None:
+    """Take the emoji icons off service labels, for ASCII output."""
+    for node in graph.nodes.values():
+        for prefix in _ICON_PREFIX.values():
+            if node.label.startswith(prefix):
+                node.label = node.label[len(prefix):]
+                break
