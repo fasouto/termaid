@@ -98,12 +98,18 @@ def _render_vertical(
 
     cat_width = max(display_width(c) for c in categories) if categories else 2
     col_width = max(_BAR_WIDTH, cat_width + 1)
+    gap = _BAR_GAP
+    # A numeric axis can skip tick labels; named categories are cut short instead.
+    skip_labels = bool(diagram.x_range and not diagram.x_categories)
     if max_width is not None:
         room = max_width - _MARGIN_L - 3
-        col_width = max(1, min(col_width, (room + _BAR_GAP) // n_points - _BAR_GAP))
-        categories = [truncate_to_width(c, col_width + _BAR_GAP - 1) for c in categories]
+        if (room + gap) // n_points - gap < 1:
+            gap = 1
+        col_width = max(1, min(col_width, (room + gap) // n_points - gap))
+        if not skip_labels:
+            categories = [truncate_to_width(c, col_width + gap - 1) for c in categories]
 
-    chart_w = n_points * (col_width + _BAR_GAP) - _BAR_GAP
+    chart_w = n_points * (col_width + gap) - gap
     total_w = _MARGIN_L + 1 + chart_w + 2
 
     title_lines = _header_rows(diagram.title, diagram.y_label)
@@ -145,7 +151,7 @@ def _render_vertical(
         for i, val in enumerate(values):
             if i >= n_points:
                 break
-            col_x = _MARGIN_L + 1 + i * (col_width + _BAR_GAP)
+            col_x = _MARGIN_L + 1 + i * (col_width + gap)
             bar_h = int((val - min_val) / val_range * _CHART_H)
 
             if ds.chart_type == "bar":
@@ -171,15 +177,19 @@ def _render_vertical(
                     prev_val = values[i - 1]
                     prev_h = int((prev_val - min_val) / val_range * _CHART_H)
                     prev_row = row_offset + _CHART_H - 1 - max(0, prev_h - 1)
-                    prev_x = _MARGIN_L + 1 + (i - 1) * (col_width + _BAR_GAP) + col_width // 2
+                    prev_x = _MARGIN_L + 1 + (i - 1) * (col_width + gap) + col_width // 2
                     _draw_line_v(canvas, prev_x, prev_row, mid_x, row, use_ascii, rounded)
 
     # X-axis ticks and labels
+    label_end = 0
     for i, cat in enumerate(categories):
-        col_x = _MARGIN_L + 1 + i * (col_width + _BAR_GAP) + col_width // 2
+        col_x = _MARGIN_L + 1 + i * (col_width + gap) + col_width // 2
         canvas.put(axis_row, col_x, tick, merge=False, style="edge")
-        label_x = col_x - display_width(cat) // 2
-        canvas.put_text(axis_row + 1, max(0, label_x), cat, style="edge_label")
+        label_x = max(0, col_x - display_width(cat) // 2)
+        if skip_labels and label_x <= label_end and i:
+            continue
+        canvas.put_text(axis_row + 1, label_x, cat, style="edge_label")
+        label_end = label_x + display_width(cat)
 
     if diagram.x_label:
         lx = _MARGIN_L + 1 + (chart_w - display_width(diagram.x_label)) // 2
