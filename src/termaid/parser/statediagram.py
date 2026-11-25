@@ -65,14 +65,18 @@ class _StateDiagramParser:
     def _parse_line(self, line: str) -> None:
         lower = line.strip().lower()
 
-        # direction override
+        # direction override: inside `{ }` it is the composite's own direction
         if lower.startswith("direction "):
             parts = line.split()
             if len(parts) >= 2:
                 try:
-                    self.graph.direction = Direction(parts[1].upper())
+                    direction = Direction(parts[1].upper())
                 except ValueError:
-                    pass
+                    return
+                if self._subgraph_stack:
+                    self._subgraph_stack[-1].direction = direction
+                else:
+                    self.graph.direction = direction
             return
 
         # End of composite state
