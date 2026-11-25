@@ -388,3 +388,58 @@ def test_ascii_start_and_end_states_use_ascii_marks():
     output = render("stateDiagram-v2\n    [*] --> A\n    A --> [*]", use_ascii=True)
     assert "A" in output
     assert output.isascii()
+
+
+def _assert_notes_clear_of_states(source: str, states: list[str], notes: list[str]) -> str:
+    output = render(source)
+    for name in states:
+        assert f"│  {name}  │" in output, f"{name} is covered:\n{output}"
+    for text in notes:
+        assert f"│ {text} │" in output, f"{text!r} is covered:\n{output}"
+    return output
+
+
+class TestNotes:
+    def test_right_note_keeps_off_the_next_state(self):
+        _assert_notes_clear_of_states(
+            "stateDiagram-v2\n  Alpha --> Beta\n  Alpha --> Gamma\n  note right of Beta : needs review",
+            ["Alpha", "Beta", "Gamma"], ["needs review"],
+        )
+
+    def test_left_note_at_the_left_edge_keeps_off_its_state(self):
+        _assert_notes_clear_of_states(
+            "stateDiagram-v2\n  Alpha --> Beta\n  note left of Beta : retry",
+            ["Alpha", "Beta"], ["retry"],
+        )
+
+    def test_right_note_in_lr_keeps_off_the_following_states(self):
+        output = _assert_notes_clear_of_states(
+            "stateDiagram-v2\n  direction LR\n  Alpha --> Beta\n  Beta --> Gamma\n"
+            "  note right of Alpha : a long right note text\n  note left of Gamma : left",
+            ["Alpha", "Beta", "Gamma"], ["a long right note text", "left"],
+        )
+        assert output.count("►") == 2
+
+    def test_notes_keep_their_side(self):
+        for direction in ("LR", "RL", "TB", "BT"):
+            output = render(
+                f"stateDiagram-v2\n  direction {direction}\n  Alpha --> Beta\n"
+                "  note right of Alpha : east\n  note left of Alpha : west"
+            )
+            row = next(line for line in output.splitlines() if "Alpha" in line)
+            assert "west" in output and "east" in output
+            west_row = next(line for line in output.splitlines() if "west" in line)
+            east_row = next(line for line in output.splitlines() if "east" in line)
+            assert west_row.index("west") < row.index("Alpha") < east_row.index("east"), output
+
+    def test_multi_line_note_is_a_note(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "    Idle --> Running\n"
+            "    note right of Running\n"
+            "        Retrying\n"
+            "        twice\n"
+            "    end note"
+        )
+        assert set(g.nodes) == {"Idle", "Running"}
+        assert [(n.position, n.target, n.text) for n in g.notes] == [("rightof", "Running", "Retrying\ntwice")]
