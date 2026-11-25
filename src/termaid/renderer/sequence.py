@@ -501,14 +501,14 @@ def _draw_entity(canvas: Canvas, cx: int, y: int, lines: list[str], cs: CharSet,
     _put_centered_lines(canvas, y + 4, cx, lines)
 
 
-def _draw_collections(canvas: Canvas, cx: int, y: int, width: int, h: int, lines: list[str], cs: CharSet, use_ascii: bool) -> None:
+def _draw_collections(canvas: Canvas, cx: int, y: int, width: int, h: int, lines: list[str], cs: CharSet) -> None:
     """Draw a collections symbol: two overlapping rectangles."""
     style = "node"
     bx = cx - width // 2
 
     # Back rectangle (offset +1 right, 0 up) — just top and right edges visible
     # Top edge of back rectangle
-    for c in range(bx + 2, bx + width + 1):
+    for c in range(bx + 2, bx + width):
         canvas.put(y, c, cs.horizontal, style=style)
     canvas.put(y, bx + 1, cs.top_left, style=style)
     canvas.put(y, bx + width, cs.top_right, style=style)
@@ -522,17 +522,14 @@ def _draw_collections(canvas: Canvas, cx: int, y: int, width: int, h: int, lines
     # Top-right corner of front connects to back rect's right edge
     canvas.put(y + 1, bx + width - 1, cs.top_right, style=style)
 
-    # Bottom of back rect merges with top-right of front
-    canvas.put(y + 2, bx + width, cs.bottom_right, style=style)
-
     # Side borders of front
     for r in range(y + 2, y + h - 1):
         canvas.put(r, bx, cs.vertical, style=style)
         canvas.put(r, bx + width - 1, cs.vertical, style=style)
 
-    # Bottom border of back rect stub
-    canvas.put(y + 2, bx + width - 1, cs.tee_left if not use_ascii else cs.vertical, style=style)
-    canvas.put(y + 2, bx + width, cs.bottom_right, style=style)
+    # The back rect's bottom edge meets the front's right side
+    canvas.put(y + 2, bx + width - 1, cs.tee_right, merge=False, style=style)
+    canvas.put(y + 2, bx + width, cs.bottom_right, merge=False, style=style)
 
     # Bottom border of front
     canvas.put(y + h - 1, bx, cs.bottom_left, style=style)
@@ -565,7 +562,7 @@ def _draw_participant_header(
     elif kind == "entity":
         _draw_entity(canvas, cx, y, lines, cs, use_ascii)
     elif kind == "collections":
-        _draw_collections(canvas, cx, y, bw, h, lines, cs, use_ascii)
+        _draw_collections(canvas, cx, y, bw, h, lines, cs)
     else:
         bx = cx - bw // 2
         draw_rectangle(canvas, bx, y, bw, h, "\n".join(lines), cs, style="node")
