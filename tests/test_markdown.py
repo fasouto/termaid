@@ -168,3 +168,33 @@ class TestCliMarkdown:
     def test_conflicting_flags(self, tmp_path: Path, flag: list[str], capsys):
         assert self._run(tmp_path, "x", *flag) == 1
         assert "--markdown" in capsys.readouterr().err
+
+
+QUOTED = "Intro\n> A quote:\n>\n> ```mermaid\n> graph LR\n>   Q --> R\n> ```\n\nAfter\n"
+
+
+def test_a_diagram_in_a_blockquote_is_found():
+    diagrams = [s for s in split_markdown(QUOTED) if s.is_mermaid]
+    assert len(diagrams) == 1
+    assert diagrams[0].text == "graph LR\n  Q --> R"
+    assert diagrams[0].indent == "> "
+
+
+def test_a_diagram_in_a_blockquote_is_drawn_inside_the_quote(tmp_path, capsys):
+    doc = tmp_path / "q.md"
+    doc.write_text(QUOTED)
+    assert main([str(doc), "--markdown"]) == 0
+    out = capsys.readouterr().out
+    assert "```mermaid" not in out
+    drawn = [line for line in out.splitlines() if "─" in line or "│" in line]
+    assert drawn and all(line.startswith("> ") for line in drawn)
+
+
+def test_a_quote_that_ends_before_its_fence_closes_stays_text():
+    doc = "> ```mermaid\n> graph LR\nA --> B\n```\n"
+    assert not any(s.is_mermaid for s in split_markdown(doc))
+
+
+def test_another_fence_in_a_blockquote_hides_its_contents():
+    doc = "> ```text\n> ```mermaid\n> graph LR\n> ```\n"
+    assert not any(s.is_mermaid for s in split_markdown(doc))
