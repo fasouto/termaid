@@ -218,7 +218,7 @@ def fit_titles(graph: Graph, layout: GridLayout) -> None:
             members: set[str] = set()
             _gather_all_nodes(sb.subgraph, members)
             content_side = sb.x + sb.content_width - 1
-            reach = sb.x + sb.width + _TITLE_CLEARANCE
+            reach = sb.x + sb.width + 1  # a neighbour may sit one cell off the side
             lefts = [
                 p.draw_x for nid, p in layout.placements.items()
                 if nid not in members

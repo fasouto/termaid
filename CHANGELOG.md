@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Behavior changes
+- Flowchart: the extra passes that add space between crowded layers now run only on graphs of up to 24 edges. Larger flowcharts draw several times faster and can come out a little narrower or shorter, with a few more lines sharing a gap
+- Flowchart: a subgraph title wider than its nodes is clipped with `…` where the whole title would push the box onto the node or subgraph beside it. With nothing beside it the box still grows to show the whole title
+
+### Fixes
+- Flowchart: large diagrams draw faster. An 80-node flowchart went from 1.3 s to about 0.25 s
+- Flowchart: an edge whose path search ran out of steps is no longer drawn straight through other boxes. One more plain search finds a path around them
+- Fitting a diagram to a width picks the label width from the layout's measure and draws once or twice, not five or six times. Fitting a 67-line flowchart to 200 columns went from 5.8 s to 0.3 s
+- Flowchart: two subgraphs with links in both directions are drawn as two boxes. They were merged into one box and one title was lost
+- Flowchart: a subgraph box stretched by a long title no longer covers the node or subgraph next to it
+- Flowchart: a quoted or Markdown label written over several source lines draws on those lines, and bold and italic in Markdown labels reach the styled output
+
 ## 0.14.0 (2026-11-25)
 
 ### Behavior changes
