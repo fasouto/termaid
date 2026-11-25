@@ -6,7 +6,7 @@ each column, using box-drawing characters for borders.
 from __future__ import annotations
 
 from ..model.kanban import Kanban
-from ..utils import display_width, truncate_to_width
+from ..utils import display_width, truncate_to_width, wrap_display_text
 from .canvas import Canvas
 from .charset import CharSet, default_charset
 
@@ -23,6 +23,11 @@ _PRIORITY_BORDER = {
 }
 
 
+def _title_lines(card, width: int | None) -> list[str]:
+    """A card's title, wrapped to *width* columns when it is given."""
+    return [card.title] if width is None else wrap_display_text(card.title, max(width, 1)) or [""]
+
+
 def _footer(card) -> str:
     """The ticket and assignee line under a card's title, "" when it has neither."""
     return " ".join(part for part in (card.ticket, card.assigned) if part)
@@ -35,8 +40,9 @@ def render_kanban(
     cs: CharSet | None = None,
     padding_x: int = _CARD_PAD,
     gap: int = _COL_GAP,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render a Kanban model to a Canvas."""
+    """Render a Kanban model to a Canvas, wrapping card titles wider than *max_label_width*."""
     cs = cs or default_charset(use_ascii)
 
     if not diagram.columns:
@@ -51,7 +57,7 @@ def render_kanban(
     col_widths: list[int] = []
     for col in diagram.columns:
         title_w = display_width(col.title)
-        card_w = max((max(display_width(card.title), display_width(_footer(card)))
+        card_w = max((max(*map(display_width, _title_lines(card, max_label_width)), display_width(_footer(card)))
                       for card in col.cards), default=0)
         need = max(title_w + 4, card_w + 2 + 2 * _COL_PAD)
         col_widths.append(max(need + (padding_x - _CARD_PAD) * 2, 10))
@@ -61,7 +67,8 @@ def render_kanban(
     for col in diagram.columns:
         h = 3  # top border + title + separator
         for ci, card in enumerate(col.cards):
-            h += 3 + bool(_footer(card))  # card: top + content (+ footer) + bottom
+            # card: top + title rows (+ footer) + bottom
+            h += 2 + len(_title_lines(card, max_label_width)) + bool(_footer(card))
             if ci < len(col.cards) - 1:
                 h += _CARD_GAP
         h += 1  # bottom border
@@ -77,7 +84,7 @@ def render_kanban(
     for ci, col in enumerate(diagram.columns):
         w = col_widths[ci]
         section_style = f"section:{ci}"
-        _draw_column(canvas, cs, col, x, 0, w, total_height, use_ascii, section_style)
+        _draw_column(canvas, cs, col, x, 0, w, total_height, use_ascii, section_style, max_label_width)
         x += w + gap
 
     return canvas
@@ -88,6 +95,7 @@ def _draw_column(
     col, x: int, y: int, w: int, h: int,
     use_ascii: bool,
     section_style: str = "subgraph",
+    max_label_width: int | None = None,
 ) -> None:
     """Draw a single kanban column with its cards."""
     tl = "+" if use_ascii else "╭"
@@ -133,7 +141,8 @@ def _draw_column(
         cx = x + _COL_PAD
 
         footer = _footer(card)
-        rows = 2 if footer else 1
+        title_lines = _title_lines(card, max_label_width)
+        rows = len(title_lines) + bool(footer)
         # Mermaid marks a card's priority on its left border.
         left = _PRIORITY_BORDER.get(card.priority.lower(), ("|", card_vt))[0 if use_ascii else 1]
 
@@ -146,12 +155,13 @@ def _draw_column(
                 canvas._style_grid[r][c] = card_style
         canvas.put_text(card_y + 1 + rows, cx, card_bl + card_hz * (cw - 2) + card_br, style=card_style)
 
-        canvas.put_text(card_y + 1, cx + 1, truncate_to_width(card.title, cw - 2), style=card_style)
+        for i, line in enumerate(title_lines):
+            canvas.put_text(card_y + 1 + i, cx + 1, truncate_to_width(line, cw - 2), style=card_style)
         if footer:
             # Ticket on the left, assignee on the right, as Mermaid places them.
             gap = cw - 2 - display_width(footer)
             if card.assigned and gap > 0:
                 footer = card.ticket + " " * (gap + bool(card.ticket)) + card.assigned
-            canvas.put_text(card_y + 2, cx + 1, truncate_to_width(footer, cw - 2), style=card_style)
+            canvas.put_text(card_y + rows, cx + 1, truncate_to_width(footer, cw - 2), style=card_style)
 
         card_y += 2 + rows + _CARD_GAP

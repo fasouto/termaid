@@ -441,6 +441,7 @@ class TestChartsHonourWidth:
         ("pie/piechart_10.mmd", 50),
         ("xychart/showcase_horizontal_bars.mmd", 45),
         ("xychart/showcase_simple_bar_chart.mmd", 60),
+        ("kanban/mermaid_docs_board.mmd", 160),
     ])
     def test_fits_the_width(self, tmp_path: Path, fixture: str, width: int):
         from termaid.utils import max_line_width

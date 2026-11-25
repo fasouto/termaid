@@ -321,7 +321,9 @@ def _render_canvas(
     if text.startswith("kanban"):
         from .parser.kanban import parse_kanban
         from .renderer.kanban import render_kanban
-        return _Rendered(render_kanban(parse_kanban(text), use_ascii=use_ascii, cs=cs, **extra))
+        return _Rendered(render_kanban(
+            parse_kanban(text), use_ascii=use_ascii, cs=cs, max_label_width=max_label_width, **extra,
+        ))
 
     if text.startswith("quadrantChart"):
         from .parser.quadrant import parse_quadrant
