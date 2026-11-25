@@ -55,6 +55,12 @@ class DestroyEvent:
 
 
 @dataclass
+class CreateEvent:
+    """``create participant X``: X's header is drawn here instead of at the top."""
+    participant: str
+
+
+@dataclass
 class AutonumberEvent:
     """``autonumber [start [step]]`` or ``autonumber off``: numbering from here on."""
     visible: bool
@@ -70,7 +76,7 @@ class ParticipantBox:
 
 
 # Union type for all event types
-Event = Union[Message, Note, ActivateEvent, Block, DestroyEvent, AutonumberEvent]
+Event = Union[Message, Note, ActivateEvent, Block, DestroyEvent, CreateEvent, AutonumberEvent]
 
 
 @dataclass

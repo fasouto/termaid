@@ -10,6 +10,7 @@ from ..model.sequence import (
     AutonumberEvent,
     Block,
     BlockSection,
+    CreateEvent,
     DestroyEvent,
     Message,
     Note,
@@ -41,7 +42,7 @@ _MESSAGE_RE = re.compile(
 
 # Combined regex for all participant types (with optional "create" prefix)
 _PARTICIPANT_KIND_RE = re.compile(
-    r"^\s*(?:create\s+)?(participant|actor|database|queue|boundary|control|entity|collections)"
+    r"^\s*(create\s+)?(participant|actor|database|queue|boundary|control|entity|collections)"
     r"\s+(\S+)(?:\s+as\s+(.+?))?\s*$", re.IGNORECASE)
 
 # Note regex: Note right of A: text, Note left of A: text, Note over A: text, Note over A,B: text
@@ -235,7 +236,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         # Participant kind declarations (participant, actor, database, etc.)
         m = _PARTICIPANT_KIND_RE.match(stripped)
         if m:
-            kind, pid, label = m.group(1).lower(), m.group(2), m.group(3)
+            created, kind, pid, label = m.group(1), m.group(2).lower(), m.group(3), m.group(4)
             label = _label_text(label) if label else pid
             found = False
             for p in diagram.participants:
@@ -246,6 +247,8 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
                     break
             if not found:
                 diagram.participants.append(Participant(id=pid, label=label, kind=kind))
+                if created:
+                    event_stack[-1].append(CreateEvent(participant=pid))
             if open_box is not None:
                 open_box.participants.append(pid)
             continue

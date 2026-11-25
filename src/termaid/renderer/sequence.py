@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from typing import Union
 
 from ..model.sequence import (
-    ActivateEvent, AutonumberEvent, Block, BlockSection, DestroyEvent, Event, Message, Note, ParticipantBox,
+    ActivateEvent, AutonumberEvent, Block, BlockSection, CreateEvent, DestroyEvent, Event, Message, Note, ParticipantBox,
     SequenceDiagram,
 )
 from .canvas import Canvas
@@ -280,6 +280,10 @@ def _compute_layout(
             continue
         if isinstance(ev, DestroyEvent):
             cumulative += _EVENT_ROW_H
+        elif isinstance(ev, CreateEvent):
+            # The header, then a row for the label of the message that creates it
+            pi = _participant_index(diagram, ev.participant)
+            cumulative += _participant_height(diagram.participants[pi], labels.participants[pi]) + 1
         elif isinstance(ev, Note):
             cumulative += len(lines) + 2 + 1  # border top + content lines + border bottom + gap
         elif isinstance(ev, _BlockStart):
@@ -541,13 +545,12 @@ def _draw_collections(canvas: Canvas, cx: int, y: int, width: int, h: int, lines
 
 
 def _draw_participant_header(
-    canvas: Canvas, cx: int, bw: int, header_height: int,
+    canvas: Canvas, cx: int, bw: int, y: int,
     participant, lines: list[str], cs: CharSet, use_ascii: bool,
 ) -> None:
-    """Dispatch to the correct participant drawing function, bottom-aligned on the header."""
+    """Dispatch to the correct participant drawing function, its top on row ``y``."""
     kind = participant.kind
     h = _participant_height(participant, lines)
-    y = _TOP_MARGIN + (header_height - h)
 
     if kind == "actor":
         _draw_actor(canvas, cx, y, lines, use_ascii)
@@ -652,11 +655,15 @@ def render_sequence(
     for frame in box_frames:
         _draw_box_frame(canvas, frame, cs)
 
-    # ── 1. Draw participant headers at top ────────────────────────
+    # ── 1. Draw participant headers, bottom-aligned at the top or where they are created ──
+    lifeline_start = _TOP_MARGIN + header_height
+    lifeline_starts: list[int] = []
+    created = {ev.participant: row_offsets[idx] for idx, ev in enumerate(flat_events) if isinstance(ev, CreateEvent)}
     for i, p in enumerate(diagram.participants):
-        cx = col_centers[i]
-        bw = box_widths[i]
-        _draw_participant_header(canvas, cx, bw, header_height, p, labels.participants[i], cs, use_ascii)
+        h = _participant_height(p, labels.participants[i])
+        y = created.get(p.id, lifeline_start - h)
+        _draw_participant_header(canvas, col_centers[i], box_widths[i], y, p, labels.participants[i], cs, use_ascii)
+        lifeline_starts.append(y + h)
 
     # ── Compute destroyed participants and their destruction rows ──
     destroyed: dict[str, int] = {}  # participant -> row where destroyed
@@ -665,14 +672,13 @@ def render_sequence(
             destroyed[ev.participant] = row_offsets[idx]
 
     # ── 2. Draw lifelines ─────────────────────────────────────────
-    lifeline_start = _TOP_MARGIN + header_height
     lifeline_end = height - _BOTTOM_MARGIN - 1
     lifeline_char = ":" if use_ascii else "┆"
     active_char = "[" if use_ascii else "║"
     for i, p in enumerate(diagram.participants):
         cx = col_centers[i]
         end_row = destroyed.get(p.id, lifeline_end + 1)
-        for r in range(lifeline_start, min(end_row, lifeline_end + 1)):
+        for r in range(lifeline_starts[i], min(end_row, lifeline_end + 1)):
             if _is_activated(activation_ranges, p.id, r):
                 canvas.put(r, cx, active_char, merge=False, style="edge")
             else:
@@ -833,7 +839,7 @@ def _compute_block_bounds(
             note_bounds = _note_bounds(event, labels.events[event_index], col_centers, diagram)
             if note_bounds is not None:
                 content_stack[-1].append(note_bounds)
-        elif isinstance(event, (ActivateEvent, DestroyEvent)):
+        elif isinstance(event, (ActivateEvent, CreateEvent, DestroyEvent)):
             participant_index = _participant_index(diagram, event.participant)
             if participant_index >= 0:
                 participant_column = col_centers[participant_index]
