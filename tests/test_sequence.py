@@ -767,13 +767,12 @@ class TestNotesBesideTheFirstParticipant:
             "sequenceDiagram\n  Alice->>Bob: Hi\n  Note left of Alice: Alice waits for a reply"
         )
         row = _note_row(output, "Alice waits for a reply")
-        assert row.rstrip().endswith("│")
-        assert len(row.rstrip()) - 1 < _lifeline_column(output, "Alice")
+        assert row.index("│", row.index("reply")) < _lifeline_column(output, "Alice")
 
     def test_wide_note_over_stays_centred_on_its_lifeline(self):
         output = render(
             "sequenceDiagram\n  Alice->>Bob: Hi\n  Note over Alice: Alice waits for a reply here"
         )
         row = _note_row(output, "Alice waits for a reply here")
-        left, right = row.index("│"), len(row.rstrip()) - 1
+        left, right = row.index("│"), row.index("│", row.index("here"))
         assert abs((left + right) // 2 - _lifeline_column(output, "Alice")) <= 1

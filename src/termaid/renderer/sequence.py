@@ -230,6 +230,7 @@ def _compute_layout(
 
     # Account for self-messages and notes extending beyond participant headers.
     max_right = col_centers[-1] + box_widths[-1] // 2 + 2
+    min_left = 0
     for event_index, event in enumerate(flat_events):
         if isinstance(event, Message) and event.source == event.target:
             source_index = _participant_index(diagram, event.source)
@@ -239,18 +240,16 @@ def _compute_layout(
         elif isinstance(event, Note):
             note_bounds = _note_bounds(event, labels.events[event_index], col_centers, diagram)
             if note_bounds is not None:
-                note_left, note_right = note_bounds
-                # Notes outside a scope retain the drawing path's edge clamping.
-                note_width = note_right - note_left + 1
-                max_right = max(max_right, max(0, note_left) + note_width + 1)
+                min_left = min(min_left, note_bounds[0])
+                max_right = max(max_right, note_bounds[1] + 2)
 
     # Measure scopes from their contents, then reserve enough space on both sides.
     # Moving lifelines together preserves message geometry and keeps outer frames
-    # outside their children even when the first participant is near column zero.
+    # and notes clear of the left edge even when the first participant is near column zero.
     raw_block_bounds = _compute_block_bounds(
         diagram, flat_events, col_centers, labels, wrap_scope_labels=max_label_width is not None,
     )
-    left_shift = max(0, -min((left for left, _ in raw_block_bounds.values()), default=0))
+    left_shift = -min([min_left, *(left for left, _ in raw_block_bounds.values())])
     shifted_centers = [center + left_shift for center in col_centers]
     block_bounds = {
         block_id: (left + left_shift, right + left_shift)
@@ -889,6 +888,10 @@ def _note_bounds(
                 return None
             center = col_centers[pi]
         note_x = center - note_width // 2
+        if len(note.participants) == 1 and note_x < 0:
+            # Slide a note off the left edge only while it stays clear of the next lifeline.
+            next_center = col_centers[pi + 1] if pi + 1 < len(col_centers) else note_width + 1
+            note_x = max(note_x, min(0, next_center - 1 - note_width))
     else:
         return None
 
@@ -911,9 +914,8 @@ def _draw_note(
     note_bounds = _note_bounds(note, lines, col_centers, diagram)
     if note_bounds is None:
         return
-    raw_left, raw_right = note_bounds
-    note_x = max(0, raw_left)
-    note_width = raw_right - raw_left + 1
+    note_x, note_right = note_bounds
+    note_width = note_right - note_x + 1
 
     # Clear the interior so lifeline chars don't bleed through
     for r in range(row, row + note_height):
