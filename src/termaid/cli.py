@@ -341,6 +341,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.arrow_styles:
         return _list_arrow_styles()
 
+    for flag, value in (("--padding-x", args.padding_x), ("--padding-y", args.padding_y), ("--gap", args.gap)):
+        if value < 0:
+            return _report(args, "invalid_arguments", f"{flag} must not be negative.", exit_code=2)
+
     if args.demo is not None:
         return _run_demo(args)
 

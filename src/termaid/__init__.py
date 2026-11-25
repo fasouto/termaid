@@ -213,6 +213,7 @@ def _render_canvas(
     partial: bool = False,
 ) -> _Rendered:
     """Parse source, pick the renderer for its diagram type, and draw it."""
+    padding_x, padding_y, gap = max(padding_x, 0), max(padding_y, 0), max(gap, 0)
     # Pass padding_x and gap only when they differ from the flowchart
     # defaults, so each renderer keeps its own defaults otherwise.
     extra: dict[str, int] = {}
