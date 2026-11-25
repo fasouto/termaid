@@ -322,7 +322,7 @@ def test_text_without_a_diagram_loads_none_of_the_drawing_code(tmp_path):
     )
     assert json.loads(done.stdout)["hookSpecificOutput"]["displayContent"] == "Plain text.\n"
     heavy = ("termaid.graph", "termaid.parser", "termaid.renderer", "termaid.layout",
-             "termaid.routing", "termaid.output", "rich", "importlib.metadata")
+             "termaid.routing", "termaid.output", "rich", "importlib.metadata", "dataclasses")
     assert [name for name in done.stderr.split() if name.startswith(heavy)] == []
 
 
