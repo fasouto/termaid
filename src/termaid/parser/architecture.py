@@ -173,75 +173,58 @@ def _eliminate_junctions(
     junction_ids: set[str],
     edge_hints: list[tuple[str, str, str, str]],
 ) -> None:
-    """Remove junction nodes and connect their neighbors directly.
+    """Remove junction nodes and connect the services around them directly.
 
-    Resolves junction chains first (junction -> junction), then for each
-    junction, pairs neighbors on opposite sides (L-R or T-B).
+    Junctions linked to each other act as one. Services on opposite sides
+    are joined first, so a straight run stays straight, then every service
+    left over is joined to the first one, so no branch is lost. Each new
+    edge keeps the arrowheads its two halves had at the services.
     """
     _OPPOSITES = {"L": "R", "R": "L", "T": "B", "B": "T"}
 
-    # Build neighbor map for each junction from edge hints.
-    junc_neighbors: dict[str, list[tuple[str, str]]] = {jid: [] for jid in junction_ids}
+    # Junctions linked to each other share one cluster.
+    cluster = {jid: jid for jid in junction_ids}
+
+    def root(jid: str) -> str:
+        while cluster[jid] != jid:
+            jid = cluster[jid]
+        return jid
+
+    arrows = {(e.source, e.target): (e.has_arrow_start, e.has_arrow_end) for e in graph.edges}
+    for src, _, tgt, _ in edge_hints:
+        if src in junction_ids and tgt in junction_ids:
+            cluster[root(src)] = root(tgt)
+
+    # Per cluster: (service, side of the junction it meets, arrowhead at the service).
+    ends: dict[str, list[tuple[str, str, bool]]] = {}
     for src, src_dir, tgt, tgt_dir in edge_hints:
-        if src in junction_ids:
-            junc_neighbors[src].append((tgt, src_dir))
-        if tgt in junction_ids:
-            junc_neighbors[tgt].append((src, tgt_dir))
+        start, end = arrows.get((src, tgt), (False, False))
+        if src in junction_ids and tgt not in junction_ids:
+            ends.setdefault(root(src), []).append((tgt, src_dir, end))
+        elif tgt in junction_ids and src not in junction_ids:
+            ends.setdefault(root(tgt), []).append((src, tgt_dir, start))
 
-    # Resolve junction-to-junction links: trace through junction chains
-    # to find the real (non-junction) endpoint and its effective side.
-    def _resolve(nid: str, side: str, visited: set[str]) -> list[tuple[str, str]]:
-        """Follow junction chains, returning (real_node, side) pairs."""
-        if nid not in junction_ids:
-            return [(nid, side)]
-        if nid in visited:
-            return []
-        visited.add(nid)
-        # This junction's exit side is opposite of the entry side
-        exit_side = _OPPOSITES.get(side, side)
-        results: list[tuple[str, str]] = []
-        for neighbor, neighbor_side in junc_neighbors[nid]:
-            if neighbor_side == exit_side:
-                results.extend(_resolve(neighbor, _OPPOSITES.get(neighbor_side, neighbor_side), visited))
-        # Also collect non-exit-side real neighbors for star connections
-        if not results:
-            for neighbor, neighbor_side in junc_neighbors[nid]:
-                if neighbor not in junction_ids and neighbor not in visited:
-                    results.append((neighbor, neighbor_side))
-        return results
+    new_edges: dict[frozenset[str], Edge] = {}
 
-    # For each junction, pair its resolved real neighbors on opposite sides
-    all_new_edges: set[tuple[str, str]] = set()
+    def join(a: tuple[str, str, bool], b: tuple[str, str, bool]) -> None:
+        key = frozenset((a[0], b[0]))
+        if len(key) == 2 and key not in new_edges:
+            new_edges[key] = Edge(source=a[0], target=b[0], has_arrow_start=a[2], has_arrow_end=b[2])
 
-    for jid in junction_ids:
-        # Collect real neighbors with their side on this junction
-        real_neighbors: list[tuple[str, str]] = []
-        for neighbor, side in junc_neighbors[jid]:
-            resolved = _resolve(neighbor, _OPPOSITES.get(side, side), {jid})
-            for rn, _ in resolved:
-                real_neighbors.append((rn, side))
+    for members in ends.values():
+        unpaired = list(members)
+        for a in members:
+            b = next((b for b in unpaired if b is not a and b[1] == _OPPOSITES[a[1]]), None)
+            if a in unpaired and b is not None:
+                join(a, b)
+                unpaired.remove(a)
+                unpaired.remove(b)
+        for b in unpaired:
+            join(members[0], b)
 
-        # Pair on opposite sides
-        paired: set[int] = set()
-        for i, (n1, d1) in enumerate(real_neighbors):
-            if i in paired:
-                continue
-            opp = _OPPOSITES.get(d1)
-            for j, (n2, d2) in enumerate(real_neighbors):
-                if j != i and j not in paired and d2 == opp:
-                    edge_key = (min(n1, n2), max(n1, n2))
-                    all_new_edges.add(edge_key)
-                    paired.add(i)
-                    paired.add(j)
-                    break
-
-    # Remove all edges involving junctions
     graph.edges = [e for e in graph.edges
                    if e.source not in junction_ids and e.target not in junction_ids]
-
-    # Add new direct edges
-    for src, tgt in all_new_edges:
-        graph.add_edge(Edge(source=src, target=tgt))
+    graph.edges.extend(new_edges.values())
 
     # Remove junction nodes
     for jid in junction_ids:
