@@ -361,3 +361,29 @@ class TestImplicitStart:
             "    Done :milestone, m, 2024-01-10, 0d\n"
         )
         assert s["Wait"] == (datetime(2024, 1, 3), datetime(2024, 1, 10))
+
+
+class TestExcludes:
+    """Excluded days stretch a task's duration, as Mermaid's checkTaskDates does."""
+
+    def test_weekends_push_later_tasks_back(self):
+        s = _schedule("  excludes weekends\n  section S\n    A :a, 2024-01-05, 3d\n    B :after a, 1d\n")
+        assert s["A"] == (datetime(2024, 1, 5), datetime(2024, 1, 10))
+        assert s["B"] == (datetime(2024, 1, 10), datetime(2024, 1, 11))
+
+    def test_a_listed_date_and_a_day_name(self):
+        s = _schedule("  excludes 2024-01-08, tuesday\n  section S\n    A :a, 2024-01-05, 3d\n")
+        assert s["A"][1] == datetime(2024, 1, 10)
+
+    def test_weekend_friday_makes_friday_and_saturday_the_weekend(self):
+        s = _schedule("  excludes weekends\n  weekend friday\n  section S\n    A :a, 2024-01-04, 2d\n")
+        assert s["A"][1] == datetime(2024, 1, 8)
+
+    def test_a_written_end_date_is_kept(self):
+        s = _schedule("  excludes weekends\n  section S\n    A :a, 2024-01-05, 2024-01-08\n")
+        assert s["A"][1] == datetime(2024, 1, 8)
+
+    def test_every_day_excluded_does_not_hang(self):
+        days = "monday tuesday wednesday thursday friday saturday sunday"
+        s = _schedule(f"  excludes {days}\n  section S\n    A :a, 2024-01-05, 3d\n")
+        assert s["A"][0] == datetime(2024, 1, 5)
