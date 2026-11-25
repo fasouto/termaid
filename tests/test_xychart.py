@@ -102,3 +102,34 @@ class TestMalformedXYChartInput:
     def test_invalid_bare_range_does_not_crash(self):
         chart = parse_xychart("xychart-beta\n    y-axis 0.1.2 --> 10")
         assert chart.y_range is None
+
+
+class TestXYChartAxisForms:
+    def test_unquoted_title_keeps_its_categories(self):
+        chart = parse_xychart("xychart-beta\n    x-axis Quarter [Q1, Q2, Q3]\n    bar [10, 20, 15]\n")
+        assert chart.x_label == "Quarter"
+        assert chart.x_categories == ["Q1", "Q2", "Q3"]
+
+    def test_quoted_categories_keep_their_commas(self):
+        chart = parse_xychart('xychart-beta\n    x-axis ["Jan 1, 2024", "Feb 1, 2024"]\n    bar [10, 20]\n')
+        assert chart.x_categories == ["Jan 1, 2024", "Feb 1, 2024"]
+
+    def test_unquoted_title_with_a_range(self):
+        chart = parse_xychart("xychart-beta\n    y-axis Revenue 0 --> 50\n    bar [10]\n")
+        assert (chart.y_label, chart.y_range) == ("Revenue", (0.0, 50.0))
+
+
+class TestXYChartOutOfRangeValues:
+    def test_a_value_far_past_the_axis_draws_at_once(self):
+        """Issue #66: a bar far above its axis range never finished drawing."""
+        import time
+
+        start = time.monotonic()
+        for header in ("xychart-beta", "xychart-beta horizontal"):
+            out = render(f"{header}\n  y-axis 0 --> 1\n  bar [1000000000000, -5]\n  line [3, 0.5]\n")
+            assert "█" in out
+        assert time.monotonic() - start < 1
+
+    def test_values_that_are_not_finite_do_not_raise(self):
+        for value in ("inf", "nan", "1e308", "-1e308"):
+            render(f"xychart-beta\n  bar [1, {value}]\n  line [1, {value}]\n")
