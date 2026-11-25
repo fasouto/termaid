@@ -29,7 +29,7 @@ import threading
 import time
 from functools import partial
 
-from .utils import OPEN_FENCE, dedent_line, display_width, fit_to_width, max_line_width
+from .utils import OPEN_FENCE, closes_fence, display_width, fit_to_width, max_line_width, unfence
 
 _DEFAULT_WIDTH = 80
 _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
@@ -137,15 +137,19 @@ class StreamRenderer:
 
     def _line(self, line: str) -> list[str | Diagram]:
         if self.fence:
+            inner = unfence(line, self.indent)
+            if inner is None:
+                # The blockquote holding the fence ended first: it was never a diagram.
+                held = self.held
+                self._reset()
+                return [held_line + "\n" for held_line in held] + self._line(line)
             self.held.append(line)
             self.held_size += len(line) + 1
-            close = re.compile(
-                r"^[ \t]*" + re.escape(self.fence[0]) + "{" + str(len(self.fence)) + r",}[ \t]*\r?$"
-            )
-            if not close.match(line):
+            if not closes_fence(inner, self.fence):
                 if self.held_size > _MAX_HELD_CHARS:
                     # The rest of the block passes through as written, up to its own closing fence.
-                    held, self.other_fence, self.released = self.held, self.fence, True
+                    held, self.released = self.held, True
+                    self.other_fence = ">" * self.indent.count(">") + self.fence
                     self._reset()
                     return [held_line + "\n" for held_line in held]
                 return []
@@ -156,13 +160,13 @@ class StreamRenderer:
         if match and match.group("fence")[0] == "`" and "`" in match.group("info"):
             match = None
         if self.other_fence and not (self.released and match and _is_mermaid(match)):
-            close = re.compile(
-                r"^[ \t]*" + re.escape(self.other_fence[0]) + "{" + str(len(self.other_fence)) + r",}[ \t]*\r?$"
-            )
-            if close.match(line):
-                self.other_fence = ""
-                self.released = False
-            return [line + "\n"]
+            # other_fence is the fence after one > per blockquote level around it.
+            inner = unfence(line, ">" * self.other_fence.count(">"))
+            if inner is not None:
+                if closes_fence(inner, self.other_fence.lstrip(">")):
+                    self.other_fence = ""
+                    self.released = False
+                return [line + "\n"]
         self.other_fence = ""
         self.released = False
         if match:
@@ -172,7 +176,7 @@ class StreamRenderer:
                 self.held = [line]
                 self.held_size = len(line) + 1
                 return []
-            self.other_fence = match.group("fence")
+            self.other_fence = ">" * match.group("indent").count(">") + match.group("fence")
         return [line + "\n"]
 
     def _reset(self) -> None:
@@ -190,7 +194,7 @@ class StreamRenderer:
         from . import _layout_width, render
 
         indent = diagram.indent
-        source = "\n".join(dedent_line(raw, len(indent)).rstrip("\r") for raw in diagram.held[1:-1])
+        source = "\n".join(unfence(raw, indent).rstrip("\r") for raw in diagram.held[1:-1])
         if not source.strip() or time.monotonic() >= deadline:
             return None
         width = self.width
