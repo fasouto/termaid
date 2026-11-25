@@ -41,6 +41,43 @@ class TestLayerAssignment:
         assert pa.grid.row < pb.grid.row < pc.grid.row
 
 
+class TestLongestPath:
+    """A node reached by a short and a long path sits below the long one,
+    as in Mermaid, so every edge that closes no cycle points down."""
+
+    @staticmethod
+    def _boxes(src: str, *labels: str) -> list[tuple[int, int, int, int]]:
+        from termaid import render
+        from tests.conftest import find_box
+
+        lines = render(src).split("\n")
+        return [find_box(lines, label) for label in labels]
+
+    def test_a_shortcut_does_not_lift_its_target(self):
+        save, done = self._boxes(
+            "flowchart TD\n  Start --> Validate\n  Validate --> Process --> Save --> Done\n"
+            "  Validate -->|invalid| Done",
+            "Save", "Done",
+        )
+        assert done[0] > save[1]
+
+    def test_a_chain_in_a_subgraph_with_an_edge_into_it_runs_down(self):
+        a, b, c = self._boxes("flowchart TD\n  x --> S\n  subgraph S\n    a --> b --> c\n  end", "a", "b", "c")
+        assert a[1] < b[0] and b[1] < c[0]
+
+    def test_a_node_after_a_subgraph_sits_below_it(self):
+        b, y = self._boxes("flowchart TD\n  subgraph S\n    a --> b\n  end\n  S --> y", "b", "y")
+        assert y[0] > b[1]
+
+    def test_edges_fanning_out_of_a_subgraph_turn_above_their_arrowheads(self):
+        from termaid import render
+        from tests.conftest import find_box
+
+        lines = render("flowchart TD\n  subgraph P\n    a --> b\n  end\n  P --> C\n  P --> E").split("\n")
+        top = find_box(lines, "C")[0]
+        assert set(lines[top - 1].strip()) == {"▼", " "}, "\n".join(lines)
+
+
 class TestGridPlacement:
     def test_no_overlap(self):
         """No two nodes should overlap on the grid."""
