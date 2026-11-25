@@ -323,3 +323,41 @@ class TestInputsThatOnceRaised:
     def test_a_timestamp_past_year_9999_does_not_raise(self):
         out = render("gantt\n  dateFormat x\n  section A\n  Near :n1, 1700000000000, 5d\n  Far :f1, 999999999999999999, 1d\n")
         assert "Near" in out
+
+
+def _schedule(source: str) -> dict[str, tuple[datetime | None, datetime | None]]:
+    d = parse_gantt("gantt\n  dateFormat YYYY-MM-DD\n" + source)
+    return {t.title: (t.start, t.end) for s in d.sections for t in s.tasks}
+
+
+class TestImplicitStart:
+    """A task with no start begins when the task written before it ends, as in Mermaid."""
+
+    def test_a_task_after_an_after_task_and_across_sections(self):
+        s = _schedule(
+            "  section Build\n"
+            "    Design :des, 2024-01-01, 5d\n"
+            "    Implement :impl, after des, 5d\n"
+            "    Review :3d\n"
+            "  section Ship\n"
+            "    Release :2d\n"
+        )
+        assert s["Review"] == (datetime(2024, 1, 11), datetime(2024, 1, 14))
+        assert s["Release"] == (datetime(2024, 1, 14), datetime(2024, 1, 16))
+
+    def test_every_task_gets_a_bar(self):
+        out = render(
+            "gantt\n  dateFormat YYYY-MM-DD\n  section Build\n    Design :des, 2024-01-01, 5d\n"
+            "    Implement :impl, after des, 5d\n    Review :3d\n  section Ship\n    Release :2d\n"
+        )
+        rows = {line.split("│")[0].strip(): line for line in out.splitlines() if "│" in line}
+        assert "█" in rows["Review"] and "█" in rows["Release"]
+
+    def test_until_ends_at_the_start_of_a_later_task(self):
+        s = _schedule(
+            "  section S\n"
+            "    A :a, 2024-01-01, 2d\n"
+            "    Wait :until m\n"
+            "    Done :milestone, m, 2024-01-10, 0d\n"
+        )
+        assert s["Wait"] == (datetime(2024, 1, 3), datetime(2024, 1, 10))
