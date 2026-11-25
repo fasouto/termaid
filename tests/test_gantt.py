@@ -363,6 +363,33 @@ class TestImplicitStart:
         assert s["Wait"] == (datetime(2024, 1, 3), datetime(2024, 1, 10))
 
 
+class TestFitsTheWidth:
+    SOURCE = (
+        "gantt\n  dateFormat YYYY-MM-DD\n  section Build\n    Design the whole system :des, 2024-01-01, 5d\n"
+        "    Implement :impl, after des, 5d\n"
+    )
+
+    @pytest.mark.parametrize("width", [40, 50, 60, 70])
+    def test_the_cli_fits_the_requested_width(self, width, tmp_path, capsys):
+        from termaid.cli import main
+        from termaid.utils import max_line_width
+
+        mmd = tmp_path / "g.mmd"
+        mmd.write_text(self.SOURCE)
+        main([str(mmd), "--width", str(width)])
+        out = capsys.readouterr().out
+        assert "█" in out
+        assert max_line_width(out) <= width
+
+    def test_short_names_are_kept_whole_when_they_fit(self, tmp_path, capsys):
+        from termaid.cli import main
+
+        mmd = tmp_path / "g.mmd"
+        mmd.write_text(self.SOURCE)
+        main([str(mmd), "--width", "50"])
+        assert "Implement" in capsys.readouterr().out
+
+
 class TestExcludes:
     """Excluded days stretch a task's duration, as Mermaid's checkTaskDates does."""
 
