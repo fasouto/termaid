@@ -4,12 +4,12 @@
    Interviews  │░░░░░░░░░░░░░
    Synthesis   │             ░░░░░░░
  Build         │
-   Backend     │             ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
-   Frontend    │                    ███████████████████████████
-   Integration │                                               ██████████
-   QA          │
+   Backend     │             ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+   Frontend    │                    ██████████████████████████
+   Integration │                                              ██████████
+   QA          │                                                        ███████
  Launch        │
-   Code freeze │                                                         ◆
-   Rollout     │                                                         ██████
+   Code freeze │                                                        ◆
+   Rollout     │                                                        █████
                └┬─────────┬─────────┬──────────┬─────────┬─────────┬──────────┬
-             Mar 01    Mar 08    Mar 16     Mar 24    Mar 31    Apr 08     Apr 16
+             Mar 01    Mar 08    Mar 16     Mar 24    Apr 01    Apr 09     Apr 17

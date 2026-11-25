@@ -60,7 +60,7 @@ def parse_gantt(text: str) -> Gantt:
         return gantt
 
     current_section: GanttSection | None = None
-    tasks_by_id: dict[str, GanttTask] = {}
+    tasks: list[GanttTask] = []
 
     for line in lines[1:]:  # skip "gantt" header
         comment_idx = line.find("%%")
@@ -119,33 +119,45 @@ def parse_gantt(text: str) -> Gantt:
                     current_section = GanttSection(title="")
                     gantt.sections.append(current_section)
 
-                # Auto-chain: if no start and no after, start after the previous task
-                if task.start is None and not task.after and current_section.tasks:
-                    prev = current_section.tasks[-1]
-                    if prev.end:
-                        task.start_at(prev.end)
-
                 current_section.tasks.append(task)
-                if task.id:
-                    tasks_by_id[task.id] = task
+                tasks.append(task)
 
-    # Resolve "after" dependencies (multiple passes for chains)
-    for _ in range(len(tasks_by_id) + 1):
+    _schedule(tasks)
+    return gantt
+
+
+def _schedule(tasks: list[GanttTask]) -> None:
+    """Give each task its start and end, the way Mermaid's compileTasks does.
+
+    A task with neither a start date nor ``after`` starts when the task
+    written before it ends, in whatever section. ``after`` and ``until`` may
+    name tasks written later, so passes repeat until nothing changes.
+    """
+    by_id = {task.id: task for task in tasks}
+
+    def known(ids: str) -> list[GanttTask]:
+        return [by_id[i] for i in ids.split() if i in by_id]
+
+    for _ in range(len(tasks) + 1):
         changed = False
-        for section in gantt.sections:
-            for task in section.tasks:
-                if not task.after or task.start is not None:
-                    continue
-                # Multiple IDs: "after task1 task2" - start at the latest end
-                deps = [tasks_by_id.get(aid) for aid in task.after.split()]
-                ends = [dep.end for dep in deps if dep is not None and dep.end is not None]
-                if len(ends) == len(deps):
-                    task.start_at(max(ends))
+        for i, task in enumerate(tasks):
+            if task.start is None:
+                deps = known(task.after) if task.after else tasks[i - 1:i]
+                ends = [dep.end for dep in deps]
+                if ends and None not in ends:
+                    task.start = max(ends)
                     changed = True
+            if task.start is not None and task.end is None:
+                if task.until:
+                    starts = [dep.start for dep in known(task.until)]
+                    if starts and None not in starts:
+                        task.end = min(starts)
+                        changed = True
+                elif task.duration is not None:
+                    task.end = task.duration.end_from(task.start)
+                    changed = task.end is not None or changed
         if not changed:
             break
-
-    return gantt
 
 
 def _parse_task(line: str, date_format: str) -> GanttTask | None:
@@ -182,6 +194,9 @@ def _parse_task(line: str, date_format: str) -> GanttTask | None:
             # Support multiple: "after task1 task2" - store all IDs
             task.after = part[6:].strip()
             continue
+        if part.lower().startswith("until "):
+            task.until = part[6:].strip()
+            continue
 
         d = _parse_date(part, date_format)
         if d:
@@ -194,8 +209,6 @@ def _parse_task(line: str, date_format: str) -> GanttTask | None:
         dur = _parse_duration(part)
         if dur is not None:
             task.duration = dur
-            if task.start:
-                task.end = dur.end_from(task.start)
             continue
 
         # Must be an ID
