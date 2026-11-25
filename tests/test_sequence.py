@@ -816,3 +816,31 @@ class TestAutonumberToggles:
         output = render("sequenceDiagram\n  A->>B: zero\n  autonumber\n  A->>B: one\n  B->>A: two")
         assert "zero" in output and "1: zero" not in output
         assert "2: one" in output and "3: two" in output
+
+
+class TestParticipantBoxes:
+    SOURCE = "sequenceDiagram\n  box Frontend\n  participant UI\n  end\n  participant API\n  UI->>API: GET /me"
+
+    def test_box_frames_its_participants_under_its_title(self):
+        lines = render(self.SOURCE).splitlines()
+        title_row = next(i for i, line in enumerate(lines) if "Frontend" in line)
+        title = lines[title_row]
+        left, right = title.index("┌"), title.index("┐")
+        ui_row = next(line for line in lines if "UI" in line)
+        assert left < ui_row.index("UI") < right < ui_row.index("API")
+        bottom = max(i for i, line in enumerate(lines) if len(line) > left and line[left] == "└")
+        assert lines[bottom][right] == "┘"
+        assert all(line[left] == "│" for line in lines[title_row + 1:bottom])
+
+    def test_box_is_parsed_without_warnings(self):
+        d = parse_sequence_diagram(self.SOURCE)
+        assert d.warnings == []
+        assert [m.source for m in d.events] == ["UI"]
+
+    def test_a_leading_colour_is_not_part_of_the_title(self):
+        output = render("sequenceDiagram\n  box rgb(33,66,99) Team\n  participant A\n  end\n  box Aqua\n  participant B\n  end\n  A->>B: hi")
+        assert "Team" in output
+        assert "rgb" not in output and "Aqua" not in output
+
+    def test_a_title_that_is_not_a_colour_is_kept_whole(self):
+        assert "Another Group" in render("sequenceDiagram\n  box Another Group\n  participant A\n  end")
