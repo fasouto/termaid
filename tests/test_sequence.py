@@ -871,3 +871,20 @@ def test_collections_draws_a_rectangle_stacked_behind_another():
     assert header[0].index("┌") == front_left + 1
     assert header[1].rstrip().endswith("┐│")
     assert header[2][front_left:].split()[-1].endswith("├┘")
+
+
+class TestSequenceTitle:
+    def test_title_statement_is_drawn_above_the_diagram(self):
+        lines = render("sequenceDiagram\n  title Checkout flow\n  A->>B: hi").splitlines()
+        assert lines[0].strip() == "Checkout flow"
+        assert "A" in lines[3]
+
+    def test_title_sits_above_a_box(self):
+        lines = render("sequenceDiagram\n  title: Checkout\n  box Shop\n  participant A\n  end\n  A->>B: hi").splitlines()
+        assert lines[0].strip() == "Checkout"
+        assert "Shop" in lines[2]
+
+    def test_accessibility_lines_are_not_drawn_or_warned_about(self):
+        source = "sequenceDiagram\n  accTitle: Login\n  accDescr: How a user logs in\n  A->>B: hi"
+        assert parse_sequence_diagram(source).warnings == []
+        assert "Login" not in render(source)
