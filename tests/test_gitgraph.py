@@ -540,3 +540,8 @@ class TestBranchJunctions:
         assert main[develop.index("o", len("  develop"))] == "+"
         assert develop.rstrip().endswith("+")
 
+
+@pytest.mark.parametrize("direction", ["TB", "BT"])
+def test_vertical_commit_labels_are_not_crossed_by_the_branch_line(direction):
+    output = render(f"gitGraph {direction}:\n  commit id: \"initial commit\"\n  commit id: \"fix parser bug\"")
+    assert "initial commit" in output and "fix parser bug" in output
