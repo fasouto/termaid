@@ -1,6 +1,8 @@
 """Tests for treemap diagram parsing and rendering."""
 from __future__ import annotations
 
+import re
+
 from termaid import render
 from termaid.parser.treemap import parse_treemap
 
@@ -267,3 +269,24 @@ class TestTreemapLeafLabels:
         )
         assert "│Auth│" in output
         assert "…" not in output
+
+
+class TestTreemapValues:
+    """A value is shown whole, in a short form, or not at all; never cut."""
+
+    SOURCE = 'treemap-beta\n"Disk"\n    "node_modules": 1500000\n    "a": 120000\n    "src": 4200\n'
+
+    def _numbers(self, output: str) -> set[str]:
+        return set(re.findall(r"[\d.,]+[A-Za-z+]*\d*", output))
+
+    def test_numbers_are_whole_or_short(self):
+        allowed = {"1,500,000", "1.5M", "120,000", "120k", "4,200", "4.2k"}
+        numbers = self._numbers(render(self.SOURCE))
+        assert numbers <= allowed, numbers - allowed
+        assert "1,500,000" in numbers
+
+    def test_a_short_form_when_the_whole_number_does_not_fit(self):
+        output = render('treemap-beta\n"Big": 1500000\n"Other": 90000000\n')
+        assert self._numbers(output) == {"90,000,000"}
+        output = render('treemap-beta\n"Bigger": 1500000\n"Other": 90000000\n')
+        assert self._numbers(output) == {"90,000,000", "1.5M"}
