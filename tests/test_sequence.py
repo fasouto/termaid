@@ -844,3 +844,21 @@ class TestParticipantBoxes:
 
     def test_a_title_that_is_not_a_colour_is_kept_whole(self):
         assert "Another Group" in render("sequenceDiagram\n  box Another Group\n  participant A\n  end")
+
+
+class TestCreatedParticipants:
+    SOURCE = "sequenceDiagram\n  Alice->>Bob: Hi\n  create participant Carl\n  Bob->>Carl: Hi Carl\n  Carl-->>Bob: hello"
+
+    def test_created_participant_appears_where_it_is_created(self):
+        lines = render(self.SOURCE).splitlines()
+        carl = next(i for i, line in enumerate(lines) if "Carl" in line and "Hi Carl" not in line)
+        first_message = next(i for i, line in enumerate(lines) if "►" in line)
+        assert "Alice" not in lines[carl]
+        assert carl > first_message
+        creating = next(i for i, line in enumerate(lines) if "Hi Carl" in line)
+        assert creating > carl
+        column = lines[carl].index("Carl") + 2
+        assert all(len(line) <= column or line[column] == " " for line in lines[:carl - 1])
+
+    def test_create_is_parsed_without_warnings(self):
+        assert parse_sequence_diagram(self.SOURCE).warnings == []
