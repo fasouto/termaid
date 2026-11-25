@@ -166,6 +166,10 @@ class Canvas:
             # Empty cell: just place
             self._grid[row][col] = ch
             self._directions[row][col] = new_dirs
+        elif existing == ch and not self._protected[row][col]:
+            # Lines that share a run, such as a fan-in trunk, keep their
+            # own dotted, thick or rounded character.
+            pass
         elif merge and existing_dirs and new_dirs:
             # Both cells carry directional info: merge via OR
             combined = existing_dirs | new_dirs

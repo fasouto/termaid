@@ -258,6 +258,69 @@ class TestEdgeRouting:
         assert edge_targets(out.split("\n"), "A", ["A", "B", "C", "D"]) == {"B", "C", "D"}
 
 
+def _fan_in(direction: str, n: int, extra: str = "") -> str:
+    from termaid import render
+
+    return render(f"graph {direction}\n" + "".join(f"  S{i} --> T\n" for i in range(n)) + extra)
+
+
+def _arrows(out: str) -> list[tuple[int, int]]:
+    return [(r, c) for r, line in enumerate(out.split("\n")) for c, ch in enumerate(line) if ch in "▼▲►◄"]
+
+
+class TestFanIn:
+    """Unlabelled edges into one node from nodes with no other outgoing
+    edge merge into one trunk with one arrowhead, as a fan-out branches off
+    one bus."""
+
+    def test_fan_in_is_as_tall_as_a_single_edge(self):
+        from termaid import render
+
+        single = render("graph TD\n  A --> T")
+        assert len(_fan_in("TD", 30).splitlines()) == len(single.splitlines())
+
+    @pytest.mark.parametrize("direction", ["LR", "RL"])
+    def test_wide_fan_in_is_as_wide_as_a_small_one(self, direction):
+        width = lambda out: max(map(len, out.splitlines()))  # noqa: E731
+        assert width(_fan_in(direction, 8)) == width(_fan_in(direction, 2))
+
+    @pytest.mark.parametrize("direction", ["TD", "BT", "LR", "RL"])
+    @pytest.mark.parametrize("n", [3, 6])
+    def test_every_source_reaches_the_one_arrowhead_with_no_crossing(self, direction, n):
+        from tests.conftest import edge_targets
+
+        out = _fan_in(direction, n)
+        names = [f"S{i}" for i in range(n)] + ["T"]
+        assert len(_arrows(out)) == 1
+        assert "┼" not in out
+        for i in range(n):
+            assert edge_targets(out.split("\n"), f"S{i}", names) == {"T"}
+
+    def test_dotted_and_solid_edges_keep_separate_trunks(self):
+        from termaid import render
+
+        out = render("graph TD\n  A --> T\n  B --> T\n  C -.-> T\n  D -.-> T")
+        assert len(_arrows(out)) == 2
+
+    @pytest.mark.parametrize("arrow, solid", [("==>", "─│"), ("-.->", "─│━┃")])
+    def test_a_styled_trunk_keeps_its_style(self, arrow, solid):
+        from termaid import render
+
+        lines = render("graph TD\n" + "".join(f"  S{i} {arrow} T\n" for i in range(5))).split("\n")
+        target_top = next(r for r in range(5, len(lines)) if "┌" in lines[r])
+        assert not any(ch in solid for row in lines[5:target_top] for ch in row)
+
+    def test_a_labelled_edge_keeps_its_lane_and_label(self):
+        from tests.conftest import edge_targets
+
+        out = _fan_in("TD", 3, "  L -->|yes| T\n")
+        assert "yes" in out
+        assert len(_arrows(out)) == 2
+        names = ["S0", "S1", "S2", "L", "T"]
+        for source in ("S0", "S1", "S2", "L"):
+            assert edge_targets(out.split("\n"), source, names) == {"T"}
+
+
 class TestUnrelatedEdgesStayApart:
     """Edges with no common endpoint may cross but never share a run or a T
     junction, so each line leads only to its own targets."""
@@ -307,7 +370,7 @@ class TestUnrelatedEdgesStayApart:
         lines = self._pipeline_lines()
         top, bottom, left, right = find_box(lines, "Delivery")
         side_crossings = sum(lines[r][c] == "┼" for r in range(top, bottom + 1) for c in (left, right))
-        assert (lines[top].count("┼"), side_crossings) == (3, 0)
+        assert (lines[top].count("┼"), side_crossings) == (2, 0)
 
     def test_edges_without_subgraphs_reach_only_their_targets(self):
         reached = self._targets("unrelated_edges.mmd", ["A", "B", "C", "D", "E"])
