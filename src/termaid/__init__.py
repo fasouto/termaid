@@ -29,6 +29,13 @@ def _strip_frontmatter(text: str) -> str:
     return _FRONTMATTER_RE.sub("", text)
 
 
+def _frontmatter_title(source: str) -> str:
+    """The ``title:`` of the source's YAML frontmatter, or ""."""
+    match = _FRONTMATTER_RE.match(_CARRIAGE_RETURN_RE.sub("\n", source.lstrip("﻿")).strip())
+    title = re.search(r"^title:[ \t]*(.*?)[ \t]*$", match.group(0), re.MULTILINE) if match else None
+    return _CONTROL_CHARS_RE.sub("", title.group(1).strip("\"'")) if title else ""
+
+
 def _prepare_source(source: str) -> str:
     """Normalize line endings, drop control characters, a byte order mark and frontmatter."""
     text = _CONTROL_CHARS_RE.sub("", _CARRIAGE_RETURN_RE.sub("\n", source.lstrip("\ufeff")))
@@ -286,7 +293,9 @@ def _render_canvas(
         from .parser.packet import parse_packet
         from .renderer.packet import render_packet
         packet_extra = {"padding_y": padding_y} if padding_y != 2 else {}
-        return _Rendered(render_packet(parse_packet(text), use_ascii=use_ascii, rounded=rounded_edges, **packet_extra))
+        packet = parse_packet(text)
+        packet.title = packet.title or _frontmatter_title(source)
+        return _Rendered(render_packet(packet, use_ascii=use_ascii, rounded=rounded_edges, **packet_extra))
 
     if text.startswith("xychart"):
         from .parser.xychart import parse_xychart
