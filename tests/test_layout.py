@@ -69,6 +69,21 @@ class TestLongestPath:
         b, y = self._boxes("flowchart TD\n  subgraph S\n    a --> b\n  end\n  S --> y", "b", "y")
         assert y[0] > b[1]
 
+    def test_a_dense_graph_keeps_shortest_path_layers(self):
+        """Longest paths through a dense graph stretch most edges across
+        several layers, each needing a lane, so the drawing grew tall and
+        slow; such a graph keeps breadth-first layers."""
+        import random
+
+        rnd = random.Random(2)
+        edges = []
+        for _ in range(60):
+            a, b = sorted((rnd.randrange(40), rnd.randrange(40)))
+            if a != b:
+                edges.append(f"  N{a} --> N{b}\n")
+        layout = compute_layout(parse_flowchart("graph TD\n" + "".join(edges)))
+        assert len(layout.layer_coords) == 3
+
     def test_edges_fanning_out_of_a_subgraph_turn_above_their_arrowheads(self):
         from termaid import render
         from tests.conftest import find_box
