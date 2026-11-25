@@ -323,6 +323,7 @@ class TestLayoutLeavesRoomForLabels:
                 "  Draft --> Review : submit\n"
                 "  Review --> Approved : approve\n"
                 "  state Approved {\n"
+                "    direction LR\n"
                 "    [*] --> Queued\n"
                 "    Queued --> Building : runner free\n"
                 "    Building --> Testing : build ok\n"
@@ -630,11 +631,13 @@ class TestGapParameter:
 class TestEdgesKeepOffSubgraphBottomBorders:
     def test_a_line_crosses_a_bottom_border_but_does_not_run_along_it(self):
         src = (FIXTURES_DIR / "flowcharts" / "subgraph_link_mixed.mmd").read_text(encoding="utf-8")
+        from tests.test_subgraph_boxes import subgraph_box
+
         out = render(src)
-        borders = [re.search(r"└\S*", line).group() for line in out.split("\n")
-                   if line.lstrip().startswith("└")]
-        assert len(borders) == 2, out
-        for border in borders:
+        lines = out.split("\n")
+        for title in ("A", "B"):
+            _, bottom, left, right = subgraph_box(lines, title)
+            border = lines[bottom][left:right + 1]
             assert border.endswith("┘") and set(border) <= set("└─┘┼┬"), out
 
 

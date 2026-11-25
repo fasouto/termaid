@@ -874,18 +874,22 @@ def _clip_endpoint_to_box(
     if len(new) >= 4:
         (cx, cy), (nx, ny), (mx, my) = new[0], new[1], new[2]
         px, py = new[3]
+        # The jog stops two cells short of the far end, which keeps a line
+        # cell and an arrowhead there too.
         if cx == nx and ny == my and abs(cy - ny) < 3:
             # Perpendicular jog before a vertical approach
             sign = 1 if cy > ny else -1
             new_y = cy - 3 * sign
-            if (sign > 0 and py < new_y) or (sign < 0 and py > new_y):
+            new_y = max(new_y, py + 2) if sign > 0 else min(new_y, py - 2)
+            if abs(new_y - cy) > abs(ny - cy):
                 new[1] = (nx, new_y)
                 new[2] = (mx, new_y)
         elif cy == ny and nx == mx and abs(cx - nx) < 3:
             # Perpendicular jog before a horizontal approach
             sign = 1 if cx > nx else -1
             new_x = cx - 3 * sign
-            if (sign > 0 and px < new_x) or (sign < 0 and px > new_x):
+            new_x = max(new_x, px + 2) if sign > 0 else min(new_x, px - 2)
+            if abs(new_x - cx) > abs(nx - cx):
                 new[1] = (new_x, ny)
                 new[2] = (new_x, my)
 

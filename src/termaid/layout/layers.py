@@ -5,7 +5,7 @@ each layer to minimize edge crossings using a barycenter heuristic.
 """
 from __future__ import annotations
 
-from collections import Counter, deque
+from collections import Counter
 from typing import NamedTuple
 
 from ..graph.model import Edge, Graph, Subgraph
@@ -59,50 +59,16 @@ def assign_layers(graph: Graph) -> dict[str, int]:
     Back-edges (edges that would create cycles) are excluded from
     layer computation to prevent infinite loops and excessive layers.
     """
-    layers: dict[str, int] = {}
-    roots = graph.get_roots()
-
-    # BFS to assign initial layers
-    for root in roots:
-        if root not in layers:
-            layers[root] = 0
-
-    # Detect tree edges via BFS (shortest-path discovery).
-    # BFS ensures each node is discovered at the shallowest depth,
-    # so edges like F->D (where D is also reachable from B at a
-    # shallower level) are correctly treated as back/cross-edges.
-    # A list, not a set: the loop below inserts into `layers` in discovery
-    # order, and later stages must not depend on hash order.
-    tree_edges: list[tuple[str, str]] = []
-    visited: set[str] = set()
-
-    queue: deque[str] = deque()
-    for root in roots:
-        if root not in visited:
-            visited.add(root)
-            queue.append(root)
-
-    while queue:
-        node = queue.popleft()
-        for child in graph.get_children(node):
-            if child not in visited:
-                visited.add(child)
-                tree_edges.append((node, child))
-                queue.append(child)
-
-    # Also BFS from any unvisited nodes (disconnected components)
-    for nid in graph.node_order:
-        if nid not in visited:
-            visited.add(nid)
-            layers.setdefault(nid, 0)  # a component with no root (a cycle) starts here, or its layers never propagate
-            queue.append(nid)
-            while queue:
-                node = queue.popleft()
-                for child in graph.get_children(node):
-                    if child not in visited:
-                        visited.add(child)
-                        tree_edges.append((node, child))
-                        queue.append(child)
+    # Longest path over the edges that close no cycle, as Mermaid ranks
+    # nodes: a node reached by a short and a long path sits below the long
+    # one, so its edges all point down the flow. Edges in definition order,
+    # so which edge of a cycle turns back does not depend on hash order.
+    forward = _without_back_edges(
+        graph.node_order, [e for e in graph.edges if not e.is_self_reference],
+    )
+    tree_edges: list[tuple[str, str]] = list(dict.fromkeys((e.source, e.target) for e in forward))
+    has_parent = {tgt for _, tgt in tree_edges}
+    layers: dict[str, int] = {nid: 0 for nid in graph.node_order if nid not in has_parent}
 
     # Build edge min_length lookup
     edge_min_lengths: dict[tuple[str, str], int] = {}
@@ -151,9 +117,9 @@ def assign_layers(graph: Graph) -> dict[str, int]:
         for nid in graph.node_order:
             if nid not in all_ortho:
                 layers.pop(nid, None)
-        for root in graph.get_roots():
-            if root not in layers:
-                layers[root] = 0
+        for nid in graph.node_order:
+            if nid not in has_parent:
+                layers.setdefault(nid, 0)
 
         changed = True
         max_iter = len(graph.node_order) * 2
