@@ -243,12 +243,12 @@ def _draw_lr(
 
         label = c.label
         label_col = col - display_width(label) // 2
-        canvas.put_text(row + 1, label_col, label, style="label")
+        canvas.put_text(row + 1, label_col, label, style="label", overwrite_spaces=True)
 
         if c.tag:
             tag_text = f"[{c.tag}]"
             tag_col = col - display_width(tag_text) // 2
-            canvas.put_text(row - 1, tag_col, tag_text, style="edge_label")
+            canvas.put_text(row - 1, tag_col, tag_text, style="edge_label", overwrite_spaces=True)
 
 
 def _draw_tb(
@@ -393,17 +393,17 @@ def _draw_tb(
 
         label_col = col - display_width(c.label) // 2
         if bottom_to_top:
-            canvas.put_text(row - 1, label_col, c.label, style="label")
+            canvas.put_text(row - 1, label_col, c.label, style="label", overwrite_spaces=True)
             if c.tag:
                 tag_text = f"[{c.tag}]"
                 tag_col = col - display_width(tag_text) // 2
-                canvas.put_text(row + 1, tag_col, tag_text, style="edge_label")
+                canvas.put_text(row + 1, tag_col, tag_text, style="edge_label", overwrite_spaces=True)
         else:
-            canvas.put_text(row + 1, label_col, c.label, style="label")
+            canvas.put_text(row + 1, label_col, c.label, style="label", overwrite_spaces=True)
             if c.tag:
                 tag_text = f"[{c.tag}]"
                 tag_col = col - display_width(tag_text) // 2
-                canvas.put_text(row - 1, tag_col, tag_text, style="edge_label")
+                canvas.put_text(row - 1, tag_col, tag_text, style="edge_label", overwrite_spaces=True)
 
 
 def render_git_graph(diagram: GitGraph, *, use_ascii: bool = False, cs: CharSet | None = None) -> Canvas:
