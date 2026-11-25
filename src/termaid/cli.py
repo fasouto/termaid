@@ -8,7 +8,6 @@ import shutil
 import sys
 from typing import NoReturn
 
-from .diagnostics import Diagnostic
 from .utils import display_width, fit_to_width, max_line_width
 
 
@@ -22,11 +21,24 @@ def _get_version() -> str:
         return __version__
 
 
+class _VersionAction(argparse._VersionAction):
+    """``--version`` that looks the version up only when asked.
+
+    importlib.metadata takes longer to import than the rest of the Claude
+    hook's start-up, which runs for every batch of every reply.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        self.version = f"%(prog)s {_get_version()}"
+        super().__call__(parser, namespace, values, option_string)
+
+
 class _ArgumentParser(argparse.ArgumentParser):
     diagnostics_format = "text"
 
     def error(self, message: str) -> NoReturn:
         if self.diagnostics_format == "json":
+            from .diagnostics import Diagnostic
             Diagnostic("invalid_arguments", message, exit_code=2).emit("json")
             self.exit(2)
         super().error(message)
@@ -42,6 +54,8 @@ def _report(
     **details: str | int,
 ) -> int:
     """Print a diagnostic in the format chosen by --diagnostics-format."""
+    from .diagnostics import Diagnostic
+
     diagnostic = Diagnostic(code, message, exit_code=exit_code, severity=severity, details=details)
     return diagnostic.emit(args.diagnostics_format)
 
@@ -326,11 +340,7 @@ def _main(argv: list[str] | None) -> int:
         metavar="TYPE",
         help="Render sample diagrams. Use 'all' or a type name (flowchart, sequence, etc.).",
     )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {_get_version()}",
-    )
+    parser.add_argument("--version", action=_VersionAction)
 
     args = parser.parse_args(argv)
     styled = args.output_format == "styled-json"

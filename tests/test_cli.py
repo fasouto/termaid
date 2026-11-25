@@ -28,10 +28,13 @@ class TestCliMain:
         result = main([str(mmd), "--ascii"])
         assert result == 0
 
-    def test_version_flag(self):
+    def test_version_flag(self, capsys):
+        from termaid.cli import _get_version
+
         with pytest.raises(SystemExit) as exc_info:
             main(["--version"])
         assert exc_info.value.code == 0
+        assert capsys.readouterr() == (f"termaid {_get_version()}\n", "")
 
     def test_empty_file(self, tmp_path: Path):
         mmd = tmp_path / "empty.mmd"
