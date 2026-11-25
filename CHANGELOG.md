@@ -9,6 +9,14 @@
 - Flowchart: circle and cross ends on thick and dotted links (`==x`, `-.-o`, `x-.-x`) and without a space (`A --oB`) are links. `A ==x B` was drawn as one box
 - Flowchart: Markdown strings drop their marks in link text and subgraph titles too, and `_italic_` and `__bold__` are read
 - State: `--ascii` draws the start and end states as `*` and `@`
+- Gantt: a task with no start date starts when the task written before it ends, also after an `after` task and across sections. Such tasks had no bar. `until <id>` is read, and `after` may name a task written later
+- Gantt: `excludes weekends`, `excludes <dates>`, `includes` and `weekend friday` are applied. Later dates came out early
+- Gantt: `--width` is honoured down to about 40 columns, with clipped names below that. A gantt was always 81 columns, so narrow Claude Code panes showed it as source. The default drawing is one column narrower
+- Timeline: a line starting with `:` adds an event to the period above, `a : b : c` is three parts, and a comma is plain text. `: Google` was drawn as a period and `YouTube, then Vimeo` as two events
+- Treemap: a value shows whole with thousands separators, or in a short form (`1.5M`, `120k`), or not at all. `120000` was cut to `12`
+- Architecture: every service joined at a junction is connected, and a `--` edge through a junction has no arrowhead. An edge runs the way its `L`/`R`/`T`/`B` sides say, whichever end is written first. `--ascii` drops the emoji icons
+- Block: a link label wider than the gap between two blocks goes on the row above them, and a block is never narrower than its label
+- Gantt, timeline and block: `accTitle`, `accDescr` and `click` lines are no longer drawn as content, and `<br/>` in their labels is a break or a space
 - Mindmap: a node written with an id and a shape, such as `root((Project))` or `id[Text]`, shows only its text. The id and brackets were drawn, and `((Text))` kept one pair of brackets. `::icon(...)` and `:::class` lines are no longer drawn as nodes
 
 ## 0.14.1 (2026-11-25)
