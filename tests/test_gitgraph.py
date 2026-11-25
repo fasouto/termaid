@@ -505,3 +505,38 @@ def test_init_branch_name_escapes_do_not_reach_the_output():
     out = render('%%{init: {"gitGraph": {"mainBranchName": "' + name + '"}}}%%\ngitGraph\n  commit\n')
     assert not [hex(ord(c)) for c in out if c != "\n" and (ord(c) < 0x20 or 0x7F <= ord(c) <= 0x9F)]
     assert "m]0;x[31my2J" in out
+
+
+class TestBranchJunctions:
+    CROSSING = (
+        "gitGraph\n  commit\n  branch a\n  commit\n  checkout main\n  branch b\n  commit\n"
+        "  checkout a\n  commit\n  checkout main\n  merge b\n  checkout a\n  commit"
+    )
+
+    @staticmethod
+    def _row(lines: list[str], name: str) -> str:
+        return next(line for line in lines if line.strip().startswith(name + " "))
+
+    def test_fork_and_merge_points_are_tees_and_corners(self):
+        lines = render("gitGraph\n  commit\n  branch develop\n  commit\n  checkout main\n  merge develop\n  commit").splitlines()
+        main, develop = self._row(lines, "main"), self._row(lines, "develop")
+        fork, merge = develop.index("●"), develop.rindex("┘")
+        assert main[fork] == "┬"
+        assert main[merge] == "●"
+        assert "┼" not in "\n".join(lines)
+
+    def test_only_a_line_passing_another_branch_crosses_it(self):
+        lines = render(self.CROSSING).splitlines()
+        main, a, b = (self._row(lines, name) for name in ("main", "a", "b"))
+        first_fork, second_fork = a.index("●"), b.index("●")
+        assert main[first_fork] == "┬" and main[second_fork] == "┬"
+        assert a[second_fork] == "┼"
+        merge = b.rindex("┘")
+        assert a[merge] == "┼"
+
+    def test_ascii_joins_lines_with_plus(self):
+        lines = render("gitGraph\n  commit\n  branch develop\n  commit\n  checkout main\n  merge develop\n  commit", use_ascii=True).splitlines()
+        main, develop = self._row(lines, "main"), self._row(lines, "develop")
+        assert main[develop.index("o")] == "+"
+        assert develop.rstrip().endswith("+")
+
