@@ -367,7 +367,7 @@ class TestStateDescriptions:
 
     def test_several_descriptions_keep_the_state_name(self):
         g = parse_state_diagram("stateDiagram-v2\n    s1 : first\n    s1 : second")
-        assert g.nodes["s1"].label.split("\n") == ["s1", "first", "second"]
+        assert g.nodes["s1"].label.split("\\n") == ["s1", "first", "second"]
 
     def test_description_titles_a_composite(self):
         output = render(

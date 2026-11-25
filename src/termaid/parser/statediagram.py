@@ -180,12 +180,13 @@ class _StateDiagramParser:
             return
 
         # State description: `s1 : text`
-        desc_match = re.match(r'([^\s:]+)\s*:\s*(.+)$', line)
+        # (`s1:::cls` is a style, not a description)
+        desc_match = re.match(r'([^\s:\[]+)\s*:(?!:)\s*(.+)$', line)
         if desc_match:
             state_id = desc_match.group(1)
             self._resolve_state(state_id, is_source=True)
             self._descriptions.setdefault(state_id, []).append(
-                line_breaks(desc_match.group(2).strip())
+                line_breaks(desc_match.group(2).strip(), "\\n")  # node labels break on a backslash-n
             )
             return
 
@@ -221,7 +222,7 @@ class _StateDiagramParser:
             if len(descriptions) == 1:
                 titles[state_id] = descriptions[0]
             else:
-                titles[state_id] = "\n".join([state_id, *descriptions])
+                titles[state_id] = "\\n".join([state_id, *descriptions])
             node = self.graph.nodes.get(state_id)
             if node is not None:
                 node.label = titles[state_id]
@@ -229,7 +230,7 @@ class _StateDiagramParser:
         def _title(subs: list[Subgraph]) -> None:
             for sg in subs:
                 if sg.id in titles:
-                    sg.label = titles[sg.id].replace("\n", " ")
+                    sg.label = titles[sg.id].replace("\\n", " ")
                 _title(sg.children)
 
         if titles:
