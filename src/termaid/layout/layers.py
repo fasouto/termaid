@@ -66,8 +66,8 @@ def assign_layers(graph: Graph) -> dict[str, int]:
     forward = _without_back_edges(
         graph.node_order, [e for e in graph.edges if not e.is_self_reference],
     )
-    tree_edges: list[tuple[str, str]] = list(dict.fromkeys((e.source, e.target) for e in forward))
-    has_parent = {tgt for _, tgt in tree_edges}
+    links = list(dict.fromkeys((e.source, e.target) for e in forward))
+    has_parent = {tgt for _, tgt in links}
     layers: dict[str, int] = {nid: 0 for nid in graph.node_order if nid not in has_parent}
 
     # Build edge min_length lookup
@@ -76,14 +76,14 @@ def assign_layers(graph: Graph) -> dict[str, int]:
         key = (e.source, e.target)
         edge_min_lengths[key] = max(edge_min_lengths.get(key, 1), e.min_length)
 
-    # Assign layers using only tree edges (no back-edges)
+    # Longest path: push each target below its source until nothing moves
     changed = True
     max_iter = len(graph.node_order) * 2
     iteration = 0
     while changed and iteration < max_iter:
         changed = False
         iteration += 1
-        for src, tgt in tree_edges:
+        for src, tgt in links:
             if src in layers:
                 ml = edge_min_lengths.get((src, tgt), 1)
                 new_layer = layers[src] + ml
@@ -127,7 +127,7 @@ def assign_layers(graph: Graph) -> dict[str, int]:
         while changed and iteration < max_iter:
             changed = False
             iteration += 1
-            for src, tgt in tree_edges:
+            for src, tgt in links:
                 if src in layers:
                     ml = edge_min_lengths.get((src, tgt), 1)
                     new_layer = layers[src] + ml
