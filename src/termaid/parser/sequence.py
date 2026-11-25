@@ -7,6 +7,7 @@ from ..utils import line_breaks
 from .flowchart import _decode_entities
 from ..model.sequence import (
     ActivateEvent,
+    AutonumberEvent,
     Block,
     BlockSection,
     DestroyEvent,
@@ -113,14 +114,14 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         if not stripped or stripped.startswith("sequenceDiagram") or stripped.startswith("%%"):
             continue
 
-        # Autonumber keyword, with an optional start value and increment
-        m = re.match(r"^autonumber(?:\s+(\d+)(?:\s+(\d+))?)?$", stripped, re.IGNORECASE)
+        # Autonumber keyword, with an optional start value and increment, or off
+        m = re.match(r"^autonumber(?:\s+(off)|\s+(\d+)(?:\s+(\d+))?)?$", stripped, re.IGNORECASE)
         if m:
-            diagram.autonumber = True
-            if m.group(1):
-                diagram.autonumber_start = int(m.group(1))
-            if m.group(2):
-                diagram.autonumber_step = int(m.group(2))
+            event_stack[-1].append(AutonumberEvent(
+                visible=m.group(1) is None,
+                start=int(m.group(2)) if m.group(2) else None,
+                step=int(m.group(3)) if m.group(3) else None,
+            ))
             continue
 
         # Skip purely visual constructs

@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Union
 
-from ..model.sequence import ActivateEvent, Block, BlockSection, DestroyEvent, Event, Message, Note, SequenceDiagram
+from ..model.sequence import ActivateEvent, AutonumberEvent, Block, BlockSection, DestroyEvent, Event, Message, Note, SequenceDiagram
 from .canvas import Canvas
 from .charset import CharSet, default_charset
 from .shapes import draw_rectangle, draw_cylinder
@@ -117,11 +117,17 @@ def _collect_labels(diagram: SequenceDiagram, flat_events: list[_FlatEvent], max
         return text.split("\n") if max_label_width is None else wrap_display_text(text, max_label_width)
 
     events: list[list[str]] = []
-    msg_number = diagram.autonumber_start
+    # Mermaid counts every message and shows the count while autonumber is on.
+    msg_number, step, numbered = 1, 1, False
     for ev in flat_events:
-        if isinstance(ev, Message):
-            eff = _effective_label(ev, msg_number if diagram.autonumber else None)
-            msg_number += diagram.autonumber_step
+        if isinstance(ev, AutonumberEvent):
+            msg_number = ev.start if ev.start is not None else msg_number
+            step = ev.step if ev.step is not None else step
+            numbered = ev.visible
+            events.append([])
+        elif isinstance(ev, Message):
+            eff = _effective_label(ev, msg_number if numbered else None)
+            msg_number += step
             events.append(wrap(eff) if eff else [])
         elif isinstance(ev, Note):
             events.append(ev.text.split("\n") if max_label_width is None else wrap(ev.text))
