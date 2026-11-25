@@ -776,3 +776,33 @@ class TestNotesBesideTheFirstParticipant:
         row = _note_row(output, "Alice waits for a reply here")
         left, right = row.index("│"), row.index("│", row.index("here"))
         assert abs((left + right) // 2 - _lifeline_column(output, "Alice")) <= 1
+
+
+class TestSequenceLabelText:
+    def test_entity_codes_are_decoded_everywhere(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  participant A as Caf#233;\n"
+            "  A->>B: I #9829; you!\n"
+            "  Note over A: #quot;hi#quot;\n"
+            "  loop #35;1 first\n"
+            "  B-->>A: ok\n"
+            "  end"
+        )
+        assert "Café" in output and "I ♥ you!" in output and '"hi"' in output and "#1 first" in output
+        assert "#9829;" not in output and "#quot;" not in output
+
+    def test_br_breaks_frame_titles_and_section_labels(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  alt every<br/>minute\n"
+            "  A->>B: one\n"
+            "  else when<br>idle\n"
+            "  B->>A: two\n"
+            "  end"
+        )
+        assert "<br" not in output
+        lines = output.splitlines()
+        assert any(line.rstrip(" │").endswith("every") for line in lines)
+        assert any("minute" in line and "every" not in line for line in lines)
+        assert any("idle" in line and "when" not in line for line in lines)
