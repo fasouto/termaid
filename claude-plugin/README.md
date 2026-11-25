@@ -18,13 +18,13 @@ The `/termaid:mermaid` skill draws diagrams that live in files, Markdown documen
 
 ## What it runs
 
-The plugin has one MessageDisplay hook. The hook runs `python3` on the copy of termaid bundled in `lib/`. It runs locally and uses no network access.
+The plugin has one MessageDisplay hook. The hook runs `python3`, or `python` when `python3` fails, on the copy of termaid bundled in `lib/`. It runs locally and uses no network access.
 
 The hook keeps a small state file for each message in a private folder under the system temp directory. This lets it draw a diagram that is split across several streamed batches.
 
 ## Requirements
 
-You need Python 3.9 or later, available as `python3`. macOS and most Linux systems include it. Without it the plugin does nothing, and replies show as written.
+You need Python 3.9 or later, available as `python3` or `python`. macOS and most Linux systems include it. Without it the plugin does nothing, and replies show as written. On Windows the hook also needs Git Bash, which Claude Code then uses to run hooks. Windows support is untested.
 
 ## Source
 

@@ -40,7 +40,7 @@ uvx termaid diagram.mmd
 
 ### Claude Code plugin
 
-The plugin carries its own copy of termaid. It needs Python 3.9 or later as `python3`, which macOS and most Linux systems already have. Run this in Claude Code 2.1.275 or later:
+The plugin carries its own copy of termaid. It needs Python 3.9 or later as `python3` or `python`, which macOS and most Linux systems already have. Run this in Claude Code 2.1.275 or later:
 
 ```
 /plugin install termaid --marketplace fasouto/termaid
@@ -663,7 +663,7 @@ On Claude Code 2.1.275 or later, install it with one command:
 
 On older versions, add the marketplace first with `/plugin marketplace add fasouto/termaid`
 and then `/plugin install termaid@termaid`. The plugin carries its own copy of termaid
-and needs Python 3.9 or later as `python3`, which macOS and most Linux systems already
+and needs Python 3.9 or later as `python3` or `python`, which macOS and most Linux systems already
 have. It adds:
 
 - a `MessageDisplay` hook that runs the plugin's bundled copy of termaid with `python3`

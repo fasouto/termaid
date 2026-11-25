@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v python3 >/dev/null 2>&1 && python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/termaid.py\" --claude-hook || true",
+            "command": "for py in python3 python; do command -v $py >/dev/null 2>&1 && $py \"${CLAUDE_PLUGIN_ROOT}/scripts/termaid.py\" --claude-hook && exit 0; done; true",
             "timeout": 10
           }
         ]
