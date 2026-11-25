@@ -29,7 +29,7 @@ class TestClassNames:
         assert "~" not in out
 
 
-class TestBreaks:
+class TestBreaksAndNamespaces:
     def test_br_in_note_and_label(self):
         out = render(
             'classDiagram\n  A --> B : first<br/>second\n  note for A "one<br>two"'
@@ -37,3 +37,11 @@ class TestBreaks:
         assert "<br" not in out
         assert "first second" in out
         assert "one" in out and "two" in out
+
+    def test_namespace_is_drawn_around_its_classes(self):
+        out = render(
+            "classDiagram\nnamespace BaseShapes {\n  class Triangle\n  class Rectangle {\n"
+            "    double width\n  }\n}"
+        )
+        assert "BaseShapes" in out
+        assert "Triangle" in out and "Rectangle" in out
