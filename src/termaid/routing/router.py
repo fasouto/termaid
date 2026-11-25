@@ -10,7 +10,7 @@ from enum import Enum, auto
 from itertools import chain
 from typing import Callable
 
-from ..graph.model import Direction, Edge, Graph
+from ..graph.model import Direction, Edge, EdgeStyle, Graph
 from ..layout.grid import (
     SG_BORDER_PAD, GridLayout, NodePlacement, SubgraphBounds, compute_layout,
 )
@@ -197,7 +197,8 @@ def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> 
         edge = graph.edges[i]
         src, tgt = endpoints[i]
 
-        if src is None or tgt is None:
+        # An invisible link (~~~) only places its nodes, so it draws nothing.
+        if src is None or tgt is None or edge.style is EdgeStyle.INVISIBLE:
             continue
 
         if edge.is_self_reference and not edge.source_is_subgraph:
