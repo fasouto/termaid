@@ -53,82 +53,40 @@ def expand_subgraph_edges(graph: Graph) -> list[Edge]:
     return virtual
 
 
-def assign_layers(graph: Graph) -> dict[str, int]:
+def assign_layers(graph: Graph, drawn: list[Edge] | None = None) -> dict[str, int]:
     """Assign each node to a layer based on longest path from a root.
 
     Back-edges (edges that would create cycles) are excluded from
     layer computation to prevent infinite loops and excessive layers.
+    ``drawn`` are the edges that will be drawn, when ``graph.edges`` also
+    holds edges used only to rank nodes; it defaults to all of them.
     """
-    layers: dict[str, int] = {}
-    roots = graph.get_roots()
-
-    # BFS to assign initial layers
-    for root in roots:
-        if root not in layers:
-            layers[root] = 0
-
-    # Detect tree edges via BFS (shortest-path discovery).
-    # BFS ensures each node is discovered at the shallowest depth,
-    # so edges like F->D (where D is also reachable from B at a
-    # shallower level) are correctly treated as back/cross-edges.
-    # A list, not a set: the loop below inserts into `layers` in discovery
-    # order, and later stages must not depend on hash order.
-    tree_edges: list[tuple[str, str]] = []
-    visited: set[str] = set()
-
-    queue: deque[str] = deque()
-    for root in roots:
-        if root not in visited:
-            visited.add(root)
-            queue.append(root)
-
-    while queue:
-        node = queue.popleft()
-        for child in graph.get_children(node):
-            if child not in visited:
-                visited.add(child)
-                tree_edges.append((node, child))
-                queue.append(child)
-
-    # Also BFS from any unvisited nodes (disconnected components)
-    for nid in graph.node_order:
-        if nid not in visited:
-            visited.add(nid)
-            layers.setdefault(nid, 0)  # a component with no root (a cycle) starts here, or its layers never propagate
-            queue.append(nid)
-            while queue:
-                node = queue.popleft()
-                for child in graph.get_children(node):
-                    if child not in visited:
-                        visited.add(child)
-                        tree_edges.append((node, child))
-                        queue.append(child)
-
-    # Build edge min_length lookup
     edge_min_lengths: dict[tuple[str, str], int] = {}
     for e in graph.edges:
         key = (e.source, e.target)
         edge_min_lengths[key] = max(edge_min_lengths.get(key, 1), e.min_length)
 
-    # Assign layers using only tree edges (no back-edges)
-    changed = True
-    max_iter = len(graph.node_order) * 2
-    iteration = 0
-    while changed and iteration < max_iter:
-        changed = False
-        iteration += 1
-        for src, tgt in tree_edges:
-            if src in layers:
-                ml = edge_min_lengths.get((src, tgt), 1)
-                new_layer = layers[src] + ml
-                if tgt not in layers or layers[tgt] < new_layer:
-                    layers[tgt] = new_layer
-                    changed = True
+    # Longest path over the edges that close no cycle, as Mermaid ranks
+    # nodes: a node reached by a short and a long path sits below the long
+    # one, so its edges all point down the flow. Edges in definition order,
+    # so which edge of a cycle turns back does not depend on hash order.
+    forward = _without_back_edges(
+        graph.node_order, [e for e in graph.edges if not e.is_self_reference],
+    )
+    links = list(dict.fromkeys((e.source, e.target) for e in forward))
+    layers = _relax(graph, links, edge_min_lengths)
 
-    # Assign unplaced nodes to layer 0
-    for nid in graph.node_order:
-        if nid not in layers:
-            layers[nid] = 0
+    # In a dense graph longest paths stretch many edges across several
+    # layers, and each layer gap an edge crosses needs a lane of its own, so
+    # the drawing gets much taller and slower to route. There the
+    # breadth-first tree is kept, which ranks each node by its shortest
+    # path from a root.
+    tree = _bfs_tree_links(graph)
+    tree_layers = _relax(graph, tree, edge_min_lengths)
+    drawn = graph.edges if drawn is None else drawn
+    if _span(drawn, layers) - _span(drawn, tree_layers) > _MAX_EXTRA_SPAN:
+        links, layers = tree, tree_layers
+    has_parent = {tgt for _, tgt in links}
 
     # Collapse orthogonal subgraph nodes to the same layer
     ortho_sets = _get_orthogonal_sg_nodes(graph)
@@ -151,9 +109,9 @@ def assign_layers(graph: Graph) -> dict[str, int]:
         for nid in graph.node_order:
             if nid not in all_ortho:
                 layers.pop(nid, None)
-        for root in graph.get_roots():
-            if root not in layers:
-                layers[root] = 0
+        for nid in graph.node_order:
+            if nid not in has_parent:
+                layers.setdefault(nid, 0)
 
         changed = True
         max_iter = len(graph.node_order) * 2
@@ -161,7 +119,7 @@ def assign_layers(graph: Graph) -> dict[str, int]:
         while changed and iteration < max_iter:
             changed = False
             iteration += 1
-            for src, tgt in tree_edges:
+            for src, tgt in links:
                 if src in layers:
                     ml = edge_min_lengths.get((src, tgt), 1)
                     new_layer = layers[src] + ml
@@ -176,6 +134,74 @@ def assign_layers(graph: Graph) -> dict[str, int]:
                 layers[nid] = 0
 
     return layers
+
+
+# Longest-path layering is kept unless its drawn edges cross this many more
+# layer gaps in all than with the breadth-first tree. Measured: at most 8 in
+# the test fixtures, at least 45 in random graphs of 40 nodes and 60 edges.
+_MAX_EXTRA_SPAN = 16
+
+
+def _span(edges: list[Edge], layers: dict[str, int]) -> int:
+    """How many layer gaps the edges cross in all."""
+    return sum(
+        abs(layers[e.target] - layers[e.source])
+        for e in edges if e.source in layers and e.target in layers
+    )
+
+
+def _relax(
+    graph: Graph, links: list[tuple[str, str]], min_lengths: dict[tuple[str, str], int],
+) -> dict[str, int]:
+    """Push each link's target below its source until nothing moves. A
+    node no link reaches sits on layer 0."""
+    has_parent = {tgt for _, tgt in links}
+    layers: dict[str, int] = {nid: 0 for nid in graph.node_order if nid not in has_parent}
+    changed = True
+    max_iter = len(graph.node_order) * 2
+    iteration = 0
+    while changed and iteration < max_iter:
+        changed = False
+        iteration += 1
+        for src, tgt in links:
+            if src in layers:
+                new_layer = layers[src] + min_lengths.get((src, tgt), 1)
+                if tgt not in layers or layers[tgt] < new_layer:
+                    layers[tgt] = new_layer
+                    changed = True
+    for nid in graph.node_order:
+        layers.setdefault(nid, 0)
+    return layers
+
+
+def _bfs_tree_links(graph: Graph) -> list[tuple[str, str]]:
+    """The edges that first reach each node, breadth first from all the
+    roots at once and then from each node not yet reached."""
+    children: dict[str, list[str]] = {}
+    for e in graph.edges:
+        if e.source != e.target:
+            kids = children.setdefault(e.source, [])
+            if e.target not in kids:
+                kids.append(e.target)
+    tree: list[tuple[str, str]] = []
+    visited: set[str] = set()
+
+    def walk(starts: list[str]) -> None:
+        visited.update(starts)
+        queue = deque(starts)
+        while queue:
+            node = queue.popleft()
+            for child in children.get(node, ()):
+                if child not in visited:
+                    visited.add(child)
+                    tree.append((node, child))
+                    queue.append(child)
+
+    walk(list(dict.fromkeys(graph.get_roots())))
+    for nid in graph.node_order:
+        if nid not in visited:
+            walk([nid])
+    return tree
 
 
 def _without_back_edges(nodes: list[str], edges: list[Edge]) -> list[Edge]:
@@ -250,9 +276,6 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
             lo, hi = sg_ranges[sg_id]
             sg_ranges[sg_id] = (min(lo, layer), max(hi, layer))
 
-    if len(sg_ranges) < 2:
-        return layers
-
     # Check for overlapping ranges between different subgraphs.
     # Declaration order, so sibling subgraphs stack the way they were written.
     sg_ids: list[str] = []
@@ -264,7 +287,7 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
             _declared(sg.children)
 
     _declared(graph.subgraphs)
-    has_overlap = False
+    has_overlap = _passes_through(graph, layers, node_sg, sg_ranges)
     for i in range(len(sg_ids)):
         for j in range(i + 1, len(sg_ids)):
             r1 = sg_ranges[sg_ids[i]]
@@ -375,6 +398,43 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
     return new_layers
 
 
+def _passes_through(
+    graph: Graph, layers: dict[str, int], node_sg: dict[str, str],
+    sg_ranges: dict[str, tuple[int, int]],
+) -> bool:
+    """Whether a path leaves a subgraph and comes back through a node
+    outside it, with that node inside the subgraph's layers. Stacked from
+    the subgraph's own edges instead, the members lie side by side and
+    the outside node follows them."""
+    succs: dict[str, list[str]] = {}
+    preds: dict[str, list[str]] = {}
+    for e in graph.edges:
+        succs.setdefault(e.source, []).append(e.target)
+        preds.setdefault(e.target, []).append(e.source)
+
+    def reach(start: set[str], step: dict[str, list[str]]) -> set[str]:
+        seen = set(start)
+        todo = list(start)
+        while todo:
+            for n in step.get(todo.pop(), ()):
+                if n not in seen:
+                    seen.add(n)
+                    todo.append(n)
+        return seen
+
+    for sg_id, (lo, hi) in sg_ranges.items():
+        inside = {
+            nid for nid, layer in layers.items()
+            if lo < layer < hi and nid not in node_sg
+        }
+        if not inside:
+            continue
+        members = {nid for nid, s in node_sg.items() if s == sg_id}
+        if inside & reach(members, succs) & reach(members, preds):
+            return True
+    return False
+
+
 def _count_crossings(graph: Graph, layer_lists: list[list[str]]) -> int:
     """Count the total number of edge crossings between adjacent layers."""
     total = 0
@@ -440,11 +500,12 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
 
     layer_lists = best_ordering
 
-    # Enforce topological order for orthogonal subgraph nodes in the same layer
-    ortho_sets = _get_orthogonal_sg_nodes(graph)
+    # Enforce topological order for orthogonal subgraph nodes in the same
+    # layer, reversed for a subgraph that runs RL or BT.
+    ortho_sets = _orthogonal_subgraphs(graph)
     if ortho_sets:
         for layer in layer_lists:
-            for sg_nodes in ortho_sets:
+            for sg_nodes, backward in ortho_sets:
                 in_layer = [n for n in layer if n in sg_nodes]
                 if len(in_layer) <= 1:
                     continue
@@ -470,16 +531,19 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
                 # A cycle leaves topo incomplete; rewriting then duplicates
                 # some nodes and drops others, so keep the original order.
                 positions = [i for i, n in enumerate(layer) if n in internal]
-                if len(topo) == len(positions):
-                    for idx, pos in enumerate(positions):
-                        layer[pos] = topo[idx]
+                if len(topo) != len(positions):
+                    topo = in_layer
+                if backward:
+                    topo = topo[::-1]
+                for idx, pos in enumerate(positions):
+                    layer[pos] = topo[idx]
 
     return layer_lists
 
 
 class BusKey(NamedTuple):
-    """Names one bus: the node its edges share and which end that is. A
-    fan-in also names how its edges look where they meet the target."""
+    """Names one bus: the node its edges share, which end that is, and how
+    its edges look where they meet that node."""
     fan_in: bool
     hub: str
     look: tuple = ()
@@ -490,8 +554,9 @@ def bus_edges(graph: Graph) -> dict[BusKey, list[int]]:
 
     A fan-out joins the edges of one source whose targets have no other
     incoming edge. A fan-in joins the edges into one target whose sources
-    have no other outgoing edge, and only edges that look alike where
-    they meet the target, so a dotted and a solid edge never share a line.
+    have no other outgoing edge. Either joins only edges that look alike
+    where they meet the shared node, so a dotted and a solid edge never
+    share a line.
     """
     in_degree = Counter(e.target for e in graph.edges)
     out_degree = Counter(e.source for e in graph.edges)
@@ -500,7 +565,8 @@ def bus_edges(graph: Graph) -> dict[BusKey, list[int]]:
         if e.label or e.is_self_reference:
             continue
         if in_degree[e.target] == 1:
-            groups.setdefault(BusKey(False, e.source), []).append(i)
+            look = (e.style, e.has_arrow_start, e.arrow_type_start)
+            groups.setdefault(BusKey(False, e.source, look), []).append(i)
         elif out_degree[e.source] == 1 and not (e.source_is_subgraph or e.target_is_subgraph):
             look = (e.style, e.has_arrow_end, e.arrow_type_end)
             groups.setdefault(BusKey(True, e.target, look), []).append(i)
@@ -554,15 +620,58 @@ def compute_gap_expansions(
 
 def _get_orthogonal_sg_nodes(graph: Graph) -> list[set[str]]:
     """Find sets of node IDs in subgraphs whose direction is orthogonal to the graph's."""
-    graph_vertical = graph.direction.normalized().is_vertical
+    return [nodes for nodes, _ in _orthogonal_subgraphs(graph)]
+
+
+def backward_subgraph_nodes(graph: Graph) -> list[set[str]]:
+    """The members of each subgraph that runs against the graph's flow on
+    the same axis, such as ``direction RL`` inside an LR graph.
+
+    As in Mermaid, a subgraph with a node linked to the outside follows
+    the graph's direction instead.
+    """
+    vertical = graph.direction.normalized().is_vertical
     result: list[set[str]] = []
+
+    def _walk(subs: list[Subgraph]) -> None:
+        for sg in subs:
+            d = sg.direction
+            if d is not None and d.normalized().is_vertical == vertical and d.is_reversed != graph.direction.is_reversed:
+                members = set(sg.node_ids)
+                if not any((e.source in members) != (e.target in members) for e in graph.edges):
+                    result.append(members)
+            _walk(sg.children)
+
+    _walk(graph.subgraphs)
+    return result
+
+
+def reverse_backward_subgraphs(graph: Graph, layers: dict[str, int]) -> dict[str, int]:
+    """Turn the layers of each subgraph that runs against the flow end
+    over end, so its first node sits where its last one did."""
+    for members in backward_subgraph_nodes(graph):
+        present = [n for n in members if n in layers]
+        if len(present) < 2:
+            continue
+        lo = min(layers[n] for n in present)
+        hi = max(layers[n] for n in present)
+        for n in present:
+            layers[n] = lo + hi - layers[n]
+    return layers
+
+
+def _orthogonal_subgraphs(graph: Graph) -> list[tuple[set[str], bool]]:
+    """The node IDs of each subgraph laid out across the graph's flow, and
+    whether it runs backward along that cross axis (RL or BT)."""
+    graph_vertical = graph.direction.normalized().is_vertical
+    result: list[tuple[set[str], bool]] = []
 
     def _walk(subs: list[Subgraph]) -> None:
         for sg in subs:
             if sg.direction is not None:
                 sg_vertical = sg.direction.normalized().is_vertical
                 if sg_vertical != graph_vertical:
-                    result.append(set(sg.node_ids))
+                    result.append((set(sg.node_ids), sg.direction.is_reversed))
             _walk(sg.children)
 
     _walk(graph.subgraphs)

@@ -41,6 +41,90 @@ class TestLayerAssignment:
         assert pa.grid.row < pb.grid.row < pc.grid.row
 
 
+class TestLongestPath:
+    """A node reached by a short and a long path sits below the long one,
+    as in Mermaid, so every edge that closes no cycle points down."""
+
+    @staticmethod
+    def _boxes(src: str, *labels: str) -> list[tuple[int, int, int, int]]:
+        from termaid import render
+        from tests.conftest import find_box
+
+        lines = render(src).split("\n")
+        return [find_box(lines, label) for label in labels]
+
+    def test_a_shortcut_does_not_lift_its_target(self):
+        save, done = self._boxes(
+            "flowchart TD\n  Start --> Validate\n  Validate --> Process --> Save --> Done\n"
+            "  Validate -->|invalid| Done",
+            "Save", "Done",
+        )
+        assert done[0] > save[1]
+
+    def test_a_chain_in_a_subgraph_with_an_edge_into_it_runs_down(self):
+        a, b, c = self._boxes("flowchart TD\n  x --> S\n  subgraph S\n    a --> b --> c\n  end", "a", "b", "c")
+        assert a[1] < b[0] and b[1] < c[0]
+
+    def test_a_node_after_a_subgraph_sits_below_it(self):
+        b, y = self._boxes("flowchart TD\n  subgraph S\n    a --> b\n  end\n  S --> y", "b", "y")
+        assert y[0] > b[1]
+
+    def test_a_dense_graph_keeps_shortest_path_layers(self):
+        """Longest paths through a dense graph stretch most edges across
+        several layers, each needing a lane, so the drawing grew tall and
+        slow; such a graph keeps breadth-first layers."""
+        import random
+
+        rnd = random.Random(2)
+        edges = []
+        for _ in range(60):
+            a, b = sorted((rnd.randrange(40), rnd.randrange(40)))
+            if a != b:
+                edges.append(f"  N{a} --> N{b}\n")
+        layout = compute_layout(parse_flowchart("graph TD\n" + "".join(edges)))
+        assert len(layout.layer_coords) == 3
+
+    def test_edges_fanning_out_of_a_subgraph_turn_above_their_arrowheads(self):
+        from termaid import render
+        from tests.conftest import find_box
+
+        lines = render("flowchart TD\n  subgraph P\n    a --> b\n  end\n  P --> C\n  P --> E").split("\n")
+        top = find_box(lines, "C")[0]
+        assert set(lines[top - 1].strip()) == {"▼", " "}, "\n".join(lines)
+
+
+class TestBackwardSubgraphDirection:
+    """``direction RL`` and ``direction BT`` in a subgraph were drawn as LR
+    and TB."""
+
+    @staticmethod
+    def _boxes(graph: str, sg: str, extra: str = "") -> dict[str, tuple[int, int, int, int]]:
+        from termaid import render
+        from tests.conftest import find_box
+
+        out = render(f"flowchart {graph}\n  subgraph S\n    direction {sg}\n    a --> b --> c\n  end\n{extra}")
+        lines = out.split("\n")
+        return {n: find_box(lines, n) for n in "abc"}
+
+    @pytest.mark.parametrize("graph", ["TB", "LR", "RL"])
+    def test_rl_runs_right_to_left(self, graph):
+        boxes = self._boxes(graph, "RL")
+        assert boxes["c"][3] < boxes["b"][2] and boxes["b"][3] < boxes["a"][2]
+
+    @pytest.mark.parametrize("graph", ["LR", "TB", "BT"])
+    def test_bt_runs_bottom_to_top(self, graph):
+        boxes = self._boxes(graph, "BT")
+        assert boxes["c"][1] < boxes["b"][0] and boxes["b"][1] < boxes["a"][0]
+
+    def test_lr_in_an_rl_graph_runs_left_to_right(self):
+        boxes = self._boxes("RL", "LR")
+        assert boxes["a"][3] < boxes["b"][2] and boxes["b"][3] < boxes["c"][2]
+
+    def test_a_subgraph_linked_outside_follows_the_graph(self):
+        boxes = self._boxes("LR", "RL", "  x --> a\n")
+        assert boxes["a"][3] < boxes["b"][2] and boxes["b"][3] < boxes["c"][2]
+
+
 class TestGridPlacement:
     def test_no_overlap(self):
         """No two nodes should overlap on the grid."""

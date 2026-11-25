@@ -301,6 +301,49 @@ def _find_label(lines: list[str], label: str) -> tuple[int, int]:
     return row, lines[row].index(label)
 
 
+class TestLabelBesideAReturnEdge:
+    """A forward edge's label too wide for the room beside its line was
+    written over the return edge's line."""
+
+    @pytest.mark.parametrize("label", ["HTTP request", "a much longer request label"])
+    def test_both_edges_stay_whole(self, label):
+        from tests.conftest import edge_targets
+
+        out = render(f"flowchart TD\n  Client -->|{label}| Server\n  Server -->|response| Client")
+        lines = out.split("\n")
+        names = ["Client", "Server"]
+        assert label in out and "response" in out, out
+        assert edge_targets(lines, "Server", names) == {"Client"}, out
+
+
+class TestReturnEdgeInASidewaysSubgraph:
+    """In a subgraph laid out across the flow, the return edge between two
+    nodes lost its line and arrowhead under the forward edge's label."""
+
+    def test_flowchart_return_edge_keeps_its_line_and_arrow(self):
+        from tests.conftest import edge_targets
+
+        out = render(
+            "flowchart TB\n  subgraph S\n    direction LR\n"
+            "    A -->|connect| B --> C\n    B -->|fail| A\n    C --> A\n  end"
+        )
+        lines = out.split("\n")
+        assert "connect" in out and "fail" in out, out
+        assert edge_targets(lines, "B", ["A", "B", "C"]) == {"A", "C"}, out
+
+    def test_state_return_edges_keep_their_lines_and_arrows(self):
+        from tests.conftest import edge_targets
+
+        out = render(
+            "stateDiagram-v2\n  [*] --> Conn\n  state Conn {\n    Off --> On : connect\n"
+            "    On --> Off : fail\n    On --> Up\n    Up --> Off : drop\n  }"
+        )
+        lines = out.split("\n")
+        names = ["Off", "On", "Up"]
+        assert edge_targets(lines, "On", names) == {"Off", "Up"}, out
+        assert edge_targets(lines, "Up", names) == {"Off"}, out
+
+
 class TestLayoutLeavesRoomForLabels:
     """Each label gets a spot beside its own edge, cutting no line."""
 
@@ -323,6 +366,7 @@ class TestLayoutLeavesRoomForLabels:
                 "  Draft --> Review : submit\n"
                 "  Review --> Approved : approve\n"
                 "  state Approved {\n"
+                "    direction LR\n"
                 "    [*] --> Queued\n"
                 "    Queued --> Building : runner free\n"
                 "    Building --> Testing : build ok\n"
@@ -630,11 +674,13 @@ class TestGapParameter:
 class TestEdgesKeepOffSubgraphBottomBorders:
     def test_a_line_crosses_a_bottom_border_but_does_not_run_along_it(self):
         src = (FIXTURES_DIR / "flowcharts" / "subgraph_link_mixed.mmd").read_text(encoding="utf-8")
+        from tests.test_subgraph_boxes import subgraph_box
+
         out = render(src)
-        borders = [re.search(r"└\S*", line).group() for line in out.split("\n")
-                   if line.lstrip().startswith("└")]
-        assert len(borders) == 2, out
-        for border in borders:
+        lines = out.split("\n")
+        for title in ("A", "B"):
+            _, bottom, left, right = subgraph_box(lines, title)
+            border = lines[bottom][left:right + 1]
             assert border.endswith("┘") and set(border) <= set("└─┘┼┬"), out
 
 

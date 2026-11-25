@@ -10,11 +10,11 @@ from enum import Enum, auto
 from itertools import chain
 from typing import Callable
 
-from ..graph.model import Direction, Edge, Graph
+from ..graph.model import Direction, Edge, EdgeStyle, Graph
 from ..layout.grid import (
     SG_BORDER_PAD, GridLayout, NodePlacement, SubgraphBounds, compute_layout,
 )
-from ..layout.layers import BusKey, bus_edges
+from ..layout.layers import BusKey, backward_subgraph_nodes, bus_edges
 from .pathfinder import find_path, simplify_path
 
 
@@ -86,7 +86,43 @@ def layout_and_route(
         if sum(bool(r.crowded) for r in next_routed) >= sum(bool(r.crowded) for r in routed):
             break
         extra, layout, routed = grown, next_layout, next_routed
+    lanes = _cramped_arrow_lanes(routed, layout, graph.direction.normalized().is_vertical)
+    if lanes:
+        layout = compute_layout(graph, padding_x, padding_y, gap, max_label_width, extra, lanes)
+        routed = route_edges(graph, layout)
     return layout, routed
+
+
+def _cramped_arrow_lanes(
+    routed: list[RoutedEdge], layout: GridLayout, vertical: bool,
+) -> dict[int, int]:
+    """The gap lanes too narrow for an edge that turns in them to draw its
+    arrowhead apart from its corner, with the size each one needs.
+
+    An edge runs down the middle of a lane, so turning toward its target
+    from the far side of a one-character lane leaves no cell between the
+    corner and the border, and the arrowhead covers the corner.
+    """
+    lanes: dict[int, int] = {}
+    for re in routed:
+        path = re.grid_path
+        if not re.edge.has_arrow_end or len(path) < 3 or re.edge.is_self_reference:
+            continue
+        (c0, r0), (c1, r1) = path[-2], path[-1]
+        across = (c1 == c0) if not vertical else (r1 == r0)
+        if not across:
+            continue
+        lane, end = (c0, c1) if vertical else (r0, r1)
+        if abs(end - lane) != 1:
+            continue
+        sizes = layout.col_widths if vertical else layout.row_heights
+        size = sizes.get(lane, 1)
+        # The edge leaves the lane toward the end: from its first half
+        # into a border after it, or from its middle into one before it.
+        needed = 3 if end > lane else 2
+        if size < needed:
+            lanes[lane] = max(lanes.get(lane, 0), needed)
+    return lanes
 
 
 def _crowded_gaps(
@@ -127,9 +163,15 @@ def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> 
     facing_homes: list[tuple[RoutedEdge, set[str]]] = []
 
     endpoints = [_resolve_endpoints(edge, layout, sg_bounds) for edge in graph.edges]
+    backward = backward_subgraph_nodes(graph)
+    flows = [
+        _BACKWARD[direction]
+        if any(edge.source in nodes and edge.target in nodes for nodes in backward) else direction
+        for edge in graph.edges
+    ]
     places = [_endpoint_places(edge, graph) for edge in graph.edges]
     ends = {
-        i: _end_cells(src, tgt, direction)
+        i: _end_cells(src, tgt, flows[i])
         for i, (src, tgt) in enumerate(endpoints)
         if src is not None and tgt is not None and not graph.edges[i].is_self_reference
     }
@@ -155,7 +197,8 @@ def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> 
         edge = graph.edges[i]
         src, tgt = endpoints[i]
 
-        if src is None or tgt is None:
+        # An invisible link (~~~) only places its nodes, so it draws nothing.
+        if src is None or tgt is None or edge.style is EdgeStyle.INVISIBLE:
             continue
 
         if edge.is_self_reference and not edge.source_is_subgraph:
@@ -179,7 +222,7 @@ def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> 
         key = bus_of.get(i)
         bus = bus_cells.setdefault(key, _BusCells()) if key else _BusCells()
         re = _route_edge(
-            edge, src, tgt, layout, direction, (shared - bus.branches) | forbidden,
+            edge, src, tgt, layout, flows[i], (shared - bus.branches) | forbidden,
             _prefer_cells(bus.preferred, penalty), crossings, blocked, find_crowded,
         )
         re.index = i
@@ -210,9 +253,100 @@ def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> 
     # spreading the start creates jog segments at the border that produce
     # ┼ artifacts when the jog crosses the node border characters.
     _spread_shared_endpoints(routed, layout, sg_bounds, bus_of)
+    _split_unlike_departures(routed, layout, vertical)
     _keep_runs_off_titles(routed, layout)
 
     return routed
+
+
+def _split_unlike_departures(routed: list[RoutedEdge], layout: GridLayout, vertical: bool) -> None:
+    """Give edges that leave one point but look different there (dotted
+    beside solid, two-way beside one-way) their own exits along the border,
+    so no edge is drawn on another's trunk.
+
+    The look that turns soonest keeps the point. Each other
+    look moves its start and first corner a step toward the side it turns
+    to, which only shortens its run along the gap, unless the new first
+    run would touch another edge.
+    """
+    leaving: dict[tuple[int, int], dict[tuple, list[RoutedEdge]]] = {}
+    for re in routed:
+        e = re.edge
+        if len(re.draw_path) >= 2 and not e.is_self_reference and not e.source_is_subgraph:
+            look = (e.style, e.has_arrow_start, e.arrow_type_start)
+            leaving.setdefault(re.draw_path[0], {}).setdefault(look, []).append(re)
+    if all(len(by_look) < 2 for by_look in leaving.values()):
+        return
+
+    along = 0 if vertical else 1
+    drawn: dict[tuple[int, int], set[int]] = {}
+    for re in routed:
+        for cell in _draw_cells(re.draw_path):
+            drawn.setdefault(cell, set()).add(re.index)
+
+    def side_and_reach(lane: list[RoutedEdge], point: tuple[int, int]) -> tuple[int, int] | None:
+        if any(len(re.draw_path) == 2 for re in lane):
+            return None
+        sides = {
+            (re.draw_path[2][along] > re.draw_path[1][along]) - (re.draw_path[2][along] < re.draw_path[1][along])
+            for re in lane
+        }
+        side = sides.pop()
+        if sides or side == 0:
+            return None
+        return side, min(abs(re.draw_path[2][along] - point[along]) for re in lane)
+
+    for point, by_look in leaving.items():
+        if len(by_look) < 2:
+            continue
+        lanes = sorted(by_look.values(), key=lambda lane: (side_and_reach(lane, point) or (0, 0))[1])
+        placement = layout.placements.get(lanes[0][0].edge.source)
+        if placement is None:
+            continue
+        lo, hi = (
+            (placement.draw_x + 1, placement.draw_x + placement.draw_width - 2) if vertical
+            else (placement.draw_y + 1, placement.draw_y + placement.draw_height - 2)
+        )
+        taken = {point[along]}
+        for lane in lanes[1:]:
+            move = side_and_reach(lane, point)
+            if move is None:
+                continue
+            side, reach = move
+            own = {re.index for re in lane}
+
+            def moved(path: list[tuple[int, int]], spot: int) -> list[tuple[int, int]]:
+                out = [list(path[0]), list(path[1])]
+                for xy in out:
+                    xy[along] = spot
+                return [(x, y) for x, y in out]
+
+            def clear(spot: int) -> bool:
+                return all(
+                    drawn.get(cell, set()) <= own
+                    for re in lane for cell in _draw_cells(moved(re.draw_path, spot))
+                )
+
+            spot = next(
+                (point[along] + side * step for step in (2, 1, 3, 4)
+                 if step < reach and lo <= point[along] + side * step <= hi
+                 and point[along] + side * step not in taken and clear(point[along] + side * step)),
+                None,
+            )
+            if spot is None:
+                continue
+            taken.add(spot)
+            for re in lane:
+                re.draw_path[:2] = moved(re.draw_path, spot)
+
+
+def _draw_cells(path: list[tuple[int, int]]) -> set[tuple[int, int]]:
+    cells: set[tuple[int, int]] = set()
+    for (x1, y1), (x2, y2) in zip(path, path[1:]):
+        for x in range(min(x1, x2), max(x1, x2) + 1):
+            for y in range(min(y1, y2), max(y1, y2) + 1):
+                cells.add((x, y))
+    return cells
 
 
 def _keep_runs_off_titles(routed: list[RoutedEdge], layout: GridLayout) -> None:
@@ -527,7 +661,7 @@ def _spread_shared_endpoints(
             )
         if not tgt:
             continue
-        _apply_spread(list(lanes.values()), point, tgt, departure)
+        _apply_spread(list(lanes.values()), point, tgt, departure, layout.placements)
 
 
 def _apply_spread(
@@ -535,6 +669,7 @@ def _apply_spread(
     point: tuple[int, int],
     placement: NodePlacement,
     departure: RoutedEdge | None,
+    placements: dict[str, NodePlacement] | None = None,
 ) -> None:
     """Offset each lane's endpoint along the node border. A lane is the
     edges that arrive on one line.
@@ -550,7 +685,9 @@ def _apply_spread(
     For LEFT/RIGHT attachment (vertical spread): slides the adjacent
     corner along its vertical run, or inserts a short perpendicular jog
     at its x when the approach is straight, so the last segment stays
-    horizontal and the arrow direction is correct.
+    horizontal and the arrow direction is correct. A straight edge whose
+    source border reaches the new row moves its start there too, so it
+    runs beside the line it left rather than jogging along the border.
     """
     px, py = point
     attach = lanes[0][0].end_dir
@@ -627,7 +764,13 @@ def _apply_spread(
             for re in lane:
                 adj_x, adj_y = re.draw_path[-2]
                 re.draw_path[-1] = (px, new_y)
-                if len(re.draw_path) > 2 and re.draw_path[-3][0] == adj_x:
+                source = placements.get(re.edge.source) if placements else None
+                if (
+                    len(re.draw_path) == 2 and source is not None
+                    and source.draw_y < new_y < source.draw_y + source.draw_height - 1
+                ):
+                    re.draw_path[0] = (adj_x, new_y)
+                elif len(re.draw_path) > 2 and re.draw_path[-3][0] == adj_x:
                     re.draw_path[-2] = (adj_x, new_y)
                 else:
                     re.draw_path.insert(-1, (adj_x, new_y))
@@ -783,18 +926,22 @@ def _clip_endpoint_to_box(
     if len(new) >= 4:
         (cx, cy), (nx, ny), (mx, my) = new[0], new[1], new[2]
         px, py = new[3]
+        # The jog stops two cells short of the far end, which keeps a line
+        # cell and an arrowhead there too.
         if cx == nx and ny == my and abs(cy - ny) < 3:
             # Perpendicular jog before a vertical approach
             sign = 1 if cy > ny else -1
             new_y = cy - 3 * sign
-            if (sign > 0 and py < new_y) or (sign < 0 and py > new_y):
+            new_y = max(new_y, py + 2) if sign > 0 else min(new_y, py - 2)
+            if abs(new_y - cy) > abs(ny - cy):
                 new[1] = (nx, new_y)
                 new[2] = (mx, new_y)
         elif cy == ny and nx == mx and abs(cx - nx) < 3:
             # Perpendicular jog before a horizontal approach
             sign = 1 if cx > nx else -1
             new_x = cx - 3 * sign
-            if (sign > 0 and px < new_x) or (sign < 0 and px > new_x):
+            new_x = max(new_x, px + 2) if sign > 0 else min(new_x, px - 2)
+            if abs(new_x - cx) > abs(nx - cx):
                 new[1] = (new_x, ny)
                 new[2] = (new_x, my)
 
@@ -1011,14 +1158,25 @@ def _get_attach_point(
         return (gc.col + 1, gc.row)
 
 
+_BACKWARD = {Direction.LR: Direction.RL, Direction.TB: Direction.BT}
+
+
 def _determine_directions(
     src: NodePlacement,
     tgt: NodePlacement,
     direction: Direction,
 ) -> tuple[tuple[AttachDir, AttachDir], tuple[AttachDir, AttachDir]]:
-    """Determine preferred and alternative start/end attachment directions."""
+    """Determine preferred and alternative start/end attachment directions.
+
+    RL and BT name an edge inside a subgraph that runs against the flow:
+    an edge to the node straight before its source runs forward.
+    """
     sc, sr = src.grid.col, src.grid.row
     tc, tr = tgt.grid.col, tgt.grid.row
+    if direction is Direction.RL and tc < sc and tr == sr:
+        return (AttachDir.LEFT, AttachDir.RIGHT), (AttachDir.LEFT, AttachDir.RIGHT)
+    if direction is Direction.BT and tr < sr and tc == sc:
+        return (AttachDir.TOP, AttachDir.BOTTOM), (AttachDir.TOP, AttachDir.BOTTOM)
 
     if direction.is_horizontal:
         # Primary flow is left-to-right

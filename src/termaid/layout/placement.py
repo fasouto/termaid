@@ -5,7 +5,7 @@ heights based on label content, and normalizing sizes within layers.
 """
 from __future__ import annotations
 
-from ..graph.model import Direction, Graph
+from ..graph.model import Direction, Graph, Subgraph
 from ..graph.shapes import NodeShape
 from ..utils import display_width, wrap_display_text
 from .grid import (
@@ -38,6 +38,8 @@ def _aligned_slots(graph: Graph, layer_order: list[list[str]]) -> dict[str, int]
     with outside nodes makes those boxes collide.
     """
     slots = {nid: i for nodes in layer_order for i, nid in enumerate(nodes)}
+    if graph.subgraphs and not graph.grid_positions:
+        _keep_outsiders_out(graph, layer_order, slots)
     if graph.subgraphs or graph.grid_positions or len(layer_order) < 2:
         return slots
     layer_of = {nid: li for li, nodes in enumerate(layer_order) for nid in nodes}
@@ -87,6 +89,52 @@ def _aligned_slots(graph: Graph, layer_order: list[list[str]]) -> dict[str, int]
         _sweep(layer_order[-2::-1], children)
     lowest = min(slots.values())
     return {nid: slot - lowest for nid, slot in slots.items()}
+
+
+def _keep_outsiders_out(graph: Graph, layer_order: list[list[str]], slots: dict[str, int]) -> None:
+    """Move each node off the slots a subgraph box spans in its layer, so
+    the box is not drawn around a node that is not in it.
+
+    A box spans its members' layers and slots, so a node of another layer
+    between them can sit under it. Such a node moves past the box, with
+    the nodes after it in its layer. A node with members of the box after
+    it in its layer stays put, since moving those members widens the box.
+    """
+    member_sets: list[set[str]] = []
+
+    def collect(subs: list[Subgraph]) -> set[str]:
+        found: set[str] = set()
+        for sg in subs:
+            members = set(sg.node_ids) | collect(sg.children)
+            member_sets.append(members)
+            found |= members
+        return found
+
+    collect(graph.subgraphs)
+    layer_of = {nid: li for li, nodes in enumerate(layer_order) for nid in nodes}
+    for _ in range(len(member_sets) + 1):
+        moved = False
+        for members in member_sets:
+            present = [n for n in members if n in slots]
+            if not present:
+                continue
+            first = min(layer_of[n] for n in present)
+            last = max(layer_of[n] for n in present)
+            low = min(slots[n] for n in present)
+            high = max(slots[n] for n in present)
+            for nodes in layer_order[first:last + 1]:
+                for i, nid in enumerate(nodes):
+                    if nid in members or not low <= slots[nid] <= high:
+                        continue
+                    if any(n in members for n in nodes[i + 1:]):
+                        break
+                    shift = high + 1 - slots[nid]
+                    for n in nodes[i:]:
+                        slots[n] += shift
+                    moved = True
+                    break
+        if not moved:
+            return
 
 
 def place_nodes(
@@ -419,6 +467,37 @@ def _expand_gaps_for_edge_labels(graph: Graph, layout: GridLayout) -> None:
             cur = layout.row_heights.get(gap_row, 3)
             layout.row_heights[gap_row] = max(cur, needed)
         _space_back_edge_lanes(graph, layout)
+        _clear_back_edge_lane_of_labels(graph, layout)
+
+
+def _clear_back_edge_lane_of_labels(graph: Graph, layout: GridLayout) -> None:
+    """Widen a back edge's lane so it runs past the label of a straight
+    edge beside it, when that label is too wide to sit across its own line.
+
+    The label goes right of its line, and the lane runs down the middle of
+    the next column but one, so a wide label would be written over it.
+    """
+    lane = max(p.grid.col for p in layout.placements.values()) + 2
+    if not any(
+        (src := layout.placements.get(e.source)) and (tgt := layout.placements.get(e.target))
+        and tgt.grid.row < src.grid.row and max(src.grid.col, tgt.grid.col) + 2 == lane
+        for e in graph.edges
+    ):
+        return
+    for edge in graph.edges:
+        src = layout.placements.get(edge.source)
+        tgt = layout.placements.get(edge.target)
+        if not edge.label or not src or not tgt or src.grid.col != tgt.grid.col or src.grid.col + 2 != lane:
+            continue
+        if tgt.grid.row <= src.grid.row:
+            continue
+        text_width = max(display_width(line) for line in edge.label.split("\n"))
+        node_width = layout.col_widths.get(src.grid.col, 1)
+        line_x = sum(layout.col_widths.get(c, 1) for c in range(src.grid.col)) + node_width // 2
+        if text_width // 2 <= line_x:
+            continue
+        needed = 2 * (text_width + 1 - (node_width - node_width // 2)) + 1
+        layout.col_widths[lane] = max(layout.col_widths.get(lane, 1), needed)
 
 
 def _space_back_edge_lanes(graph: Graph, layout: GridLayout) -> None:

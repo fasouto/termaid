@@ -150,3 +150,37 @@ class TestTitleWiderThanContents:
         out = render(src, use_ascii=True)
         assert "| Payment . |" in out, out
 
+
+class TestOutsideNodeBetweenMembers:
+    """A node outside a subgraph whose layer falls between the members'
+    layers was drawn inside the box."""
+
+    @pytest.mark.parametrize("d", ["LR", "TB"])
+    def test_a_node_both_fed_by_and_feeding_a_subgraph_stays_outside(self, d):
+        src = (
+            f"flowchart {d}\n"
+            "  subgraph Server\n    api[API]\n    worker[Worker]\n  end\n"
+            "  client[Client] --> api\n  worker --> client\n"
+        )
+        assert_subgraphs(render(src), {"Server": ["API", "Worker"]}, outside=["Client"])
+
+    def test_a_node_on_a_layer_between_members_stays_outside(self):
+        src = (
+            "flowchart TD\n"
+            "  subgraph S\n    a\n    b\n  end\n"
+            "  r --> a\n  r --> q --> p --> b\n"
+        )
+        assert_subgraphs(render(src), {"S": ["a", "b"]}, outside=["r", "q", "p"])
+
+    def test_a_node_between_nested_members_stays_outside_both(self):
+        src = (
+            "flowchart LR\n"
+            "  subgraph Outer\n    subgraph Server\n      api[API]\n      worker[Worker]\n    end\n  end\n"
+            "  client[Client] --> api\n  worker --> client\n"
+        )
+        out = render(src)
+        lines = out.split("\n")
+        client = _node(lines, "Client")
+        for title in ("Outer", "Server"):
+            assert not _touch(client, subgraph_box(lines, title)), out
+
