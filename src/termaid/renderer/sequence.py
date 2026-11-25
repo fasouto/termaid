@@ -151,11 +151,12 @@ def _compute_layout(
     labels: _Labels,
     padding_x: int = _BOX_PAD,
     min_gap: int = _MIN_GAP,
-    wrap_scope_labels: bool = False,
+    max_label_width: int | None = None,
 ) -> tuple[list[int], list[int], int, int, int, list[int], dict[int, tuple[int, int]]]:
     """Compute column center positions and box widths.
 
-    Fills ``labels.block_titles`` and ``labels.sections`` while measuring frames.
+    Fills ``labels.block_titles`` and ``labels.sections`` while measuring frames,
+    and rewraps notes at the diagram's edges when labels wrap.
     Returns (col_centers, box_widths, canvas_width, canvas_height, header_height, row_offsets, block_bounds).
     """
     n = len(diagram.participants)
@@ -223,6 +224,9 @@ def _compute_layout(
     col_centers[0] = box_widths[0] // 2 + 1  # left margin
     for i in range(1, n):
         col_centers[i] = col_centers[i - 1] + gap_mins[i - 1]
+    if max_label_width is not None:
+        right_edge = col_centers[-1] - box_widths[-1] // 2 + box_widths[-1] - 1
+        _wrap_edge_notes(diagram, flat_events, labels, col_centers, right_edge, max_label_width)
 
     # Account for self-messages and notes extending beyond participant headers.
     max_right = col_centers[-1] + box_widths[-1] // 2 + 2
@@ -243,7 +247,9 @@ def _compute_layout(
     # Measure scopes from their contents, then reserve enough space on both sides.
     # Moving lifelines together preserves message geometry and keeps outer frames
     # outside their children even when the first participant is near column zero.
-    raw_block_bounds = _compute_block_bounds(diagram, flat_events, col_centers, labels, wrap_scope_labels)
+    raw_block_bounds = _compute_block_bounds(
+        diagram, flat_events, col_centers, labels, wrap_scope_labels=max_label_width is not None,
+    )
     left_shift = max(0, -min((left for left, _ in raw_block_bounds.values()), default=0))
     shifted_centers = [center + left_shift for center in col_centers]
     block_bounds = {
@@ -282,6 +288,43 @@ def _compute_layout(
     canvas_height = lifeline_end_row + _BOTTOM_MARGIN
 
     return shifted_centers, box_widths, canvas_width, canvas_height, header_height, row_offsets, block_bounds
+
+
+def _wrap_edge_notes(
+    diagram: SequenceDiagram,
+    flat_events: list[_FlatEvent],
+    labels: _Labels,
+    col_centers: list[int],
+    right_edge: int,
+    max_label_width: int,
+) -> None:
+    """Rewrap each note that sticks out past the outer participants to the room it has.
+
+    A note beside an outer participant adds its whole width to the drawing and
+    may wrap to half the label width; a note over one adds half its width and
+    keeps its words whole. So a drawing fitted to a width narrows its notes
+    before its participant names and messages.
+    """
+    last = len(col_centers) - 1
+    for index, event in enumerate(flat_events):
+        if not isinstance(event, Note) or len(event.participants) != 1:
+            continue
+        pi = _participant_index(diagram, event.participants[0])
+        if pi < 0:
+            continue
+        center = col_centers[pi]
+        if event.position == "rightof" and pi == last:
+            room, floor = right_edge - center - 5, (max_label_width + 1) // 2
+        elif event.position == "leftof" and pi == 0:
+            room, floor = center - 6, (max_label_width + 1) // 2
+        elif event.position == "over":
+            room = 2 * min(center, right_edge - center) - 4
+            floor = max((display_width(word) for word in event.text.split()), default=1)
+        else:
+            continue
+        if _lines_width(labels.events[index]) > room:
+            budget = min(max_label_width, max(room, floor, 1))
+            labels.events[index] = wrap_display_text(event.text, budget)
 
 
 # ── Participant drawing functions ─────────────────────────────────
@@ -547,8 +590,7 @@ def render_sequence(
     labels = _collect_labels(diagram, flat_events, max_label_width)
 
     col_centers, box_widths, width, height, header_height, row_offsets, block_bounds = _compute_layout(
-        diagram, flat_events, labels, padding_x=padding_x, min_gap=gap,
-        wrap_scope_labels=max_label_width is not None,
+        diagram, flat_events, labels, padding_x=padding_x, min_gap=gap, max_label_width=max_label_width,
     )
     if width == 0:
         return Canvas(1, 1)
