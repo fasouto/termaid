@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 
 from ..model.quadrant import QuadrantChart, QuadrantPoint
+from ..utils import line_breaks, without_meta_lines
 
 
 def parse_quadrant(text: str) -> QuadrantChart:
@@ -27,12 +28,13 @@ def parse_quadrant(text: str) -> QuadrantChart:
     if not lines:
         return qc
 
-    for line in lines[1:]:  # skip "quadrantChart" header
+    for line in without_meta_lines(lines[1:]):  # skip "quadrantChart" header
         comment_idx = line.find("%%")
         if comment_idx >= 0:
             line = line[:comment_idx]
 
-        stripped = line.strip()
+        # Every label here has one row.
+        stripped = line_breaks(line.strip(), " ")
         if not stripped:
             continue
 
@@ -59,7 +61,8 @@ def parse_quadrant(text: str) -> QuadrantChart:
             # Try to parse as a point: "Label: [x, y]"
             m = re.match(r'^(.+?):\s*\[\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*\]', stripped)
             if m:
-                label = m.group(1).strip()
+                # A :::class names a style, not text.
+                label = re.sub(r":::[\w-]+$", "", m.group(1).strip()).rstrip()
                 x = float(m.group(2))
                 y = float(m.group(3))
                 qc.points.append(QuadrantPoint(label=label, x=x, y=y))

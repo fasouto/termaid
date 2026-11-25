@@ -1,5 +1,6 @@
                        Priority Matrix
 
+  ↑ Low Impact -> High Impact
                                 │
                                 │
                                 │
