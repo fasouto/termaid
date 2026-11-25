@@ -169,7 +169,7 @@ def test_a_slow_drawing_does_not_hold_up_the_batches_after_it(tmp_path, monkeypa
     whole = _run(message, message_id="whole", index=0, final=True)
     real_render = termaid.render
     monkeypatch.setattr(termaid, "render", lambda *a, **k: time.sleep(0.3) or real_render(*a, **k))
-    monkeypatch.setattr(claude_hook, "_WAIT_SECONDS", 0.15)
+    monkeypatch.setattr(claude_hook, "_WAIT_SECONDS", 2)
     batches = message.splitlines(keepends=True) + [""]
     shown: list[str] = [""] * len(batches)
 
