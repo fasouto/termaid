@@ -68,6 +68,43 @@ def test_build_tree(built):
     assert not (built / "bin").exists()
 
 
+def _run_hook_command(root, bin_dir):
+    hooks = json.loads((root / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    command = hooks["hooks"]["MessageDisplay"][0]["hooks"][0]["command"]
+    env = {"PATH": str(bin_dir), "CLAUDE_PLUGIN_ROOT": str(root), "COLUMNS": "80"}
+    return subprocess.run(["/bin/sh", "-c", command], input=json.dumps(EVENT),
+                          capture_output=True, encoding="utf-8", env=env)
+
+
+def _fake_program(path, body):
+    path.write_text("#!/bin/sh\n" + body + "\n")
+    path.chmod(0o755)
+
+
+@pytest.mark.skipif(not os.path.exists("/bin/sh"), reason="runs the hook command in a POSIX shell")
+@pytest.mark.parametrize("python3", [None, "exit 49"])
+def test_hook_command_falls_back_to_python(built, tmp_path, python3):
+    # On Windows, python3 is often only the Microsoft Store stub, which fails,
+    # while Python itself is installed as python.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    if python3:
+        _fake_program(bin_dir / "python3", python3)
+    _fake_program(bin_dir / "python", f'exec "{sys.executable}" "$@"')
+    result = _run_hook_command(built, bin_dir)
+    assert result.returncode == 0, result.stderr
+    assert "┌" in json.loads(result.stdout)["hookSpecificOutput"]["displayContent"]
+
+
+@pytest.mark.skipif(not os.path.exists("/bin/sh"), reason="runs the hook command in a POSIX shell")
+def test_hook_command_without_python_does_nothing(built, tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _fake_program(bin_dir / "python3", "exit 49")
+    result = _run_hook_command(built, bin_dir)
+    assert (result.returncode, result.stdout) == (0, "")
+
+
 def test_build_is_idempotent_and_clears_output(built):
     (built / ".git").mkdir()
     (built / ".git" / "HEAD").write_text("ref")
