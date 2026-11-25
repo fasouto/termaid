@@ -210,9 +210,100 @@ def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> 
     # spreading the start creates jog segments at the border that produce
     # ┼ artifacts when the jog crosses the node border characters.
     _spread_shared_endpoints(routed, layout, sg_bounds, bus_of)
+    _split_unlike_departures(routed, layout, vertical)
     _keep_runs_off_titles(routed, layout)
 
     return routed
+
+
+def _split_unlike_departures(routed: list[RoutedEdge], layout: GridLayout, vertical: bool) -> None:
+    """Give edges that leave one point but look different there (dotted
+    beside solid, two-way beside one-way) their own exits along the border,
+    so no edge is drawn on another's trunk.
+
+    The look that turns soonest keeps the point. Each other
+    look moves its start and first corner a step toward the side it turns
+    to, which only shortens its run along the gap, unless the new first
+    run would touch another edge.
+    """
+    leaving: dict[tuple[int, int], dict[tuple, list[RoutedEdge]]] = {}
+    for re in routed:
+        e = re.edge
+        if len(re.draw_path) >= 2 and not e.is_self_reference and not e.source_is_subgraph:
+            look = (e.style, e.has_arrow_start, e.arrow_type_start)
+            leaving.setdefault(re.draw_path[0], {}).setdefault(look, []).append(re)
+    if all(len(by_look) < 2 for by_look in leaving.values()):
+        return
+
+    along = 0 if vertical else 1
+    drawn: dict[tuple[int, int], set[int]] = {}
+    for re in routed:
+        for cell in _draw_cells(re.draw_path):
+            drawn.setdefault(cell, set()).add(re.index)
+
+    def side_and_reach(lane: list[RoutedEdge], point: tuple[int, int]) -> tuple[int, int] | None:
+        if any(len(re.draw_path) == 2 for re in lane):
+            return None
+        sides = {
+            (re.draw_path[2][along] > re.draw_path[1][along]) - (re.draw_path[2][along] < re.draw_path[1][along])
+            for re in lane
+        }
+        side = sides.pop()
+        if sides or side == 0:
+            return None
+        return side, min(abs(re.draw_path[2][along] - point[along]) for re in lane)
+
+    for point, by_look in leaving.items():
+        if len(by_look) < 2:
+            continue
+        lanes = sorted(by_look.values(), key=lambda lane: (side_and_reach(lane, point) or (0, 0))[1])
+        placement = layout.placements.get(lanes[0][0].edge.source)
+        if placement is None:
+            continue
+        lo, hi = (
+            (placement.draw_x + 1, placement.draw_x + placement.draw_width - 2) if vertical
+            else (placement.draw_y + 1, placement.draw_y + placement.draw_height - 2)
+        )
+        taken = {point[along]}
+        for lane in lanes[1:]:
+            move = side_and_reach(lane, point)
+            if move is None:
+                continue
+            side, reach = move
+            own = {re.index for re in lane}
+
+            def moved(path: list[tuple[int, int]], spot: int) -> list[tuple[int, int]]:
+                out = [list(path[0]), list(path[1])]
+                for xy in out:
+                    xy[along] = spot
+                return [(x, y) for x, y in out]
+
+            def clear(spot: int) -> bool:
+                return all(
+                    drawn.get(cell, set()) <= own
+                    for re in lane for cell in _draw_cells(moved(re.draw_path, spot))
+                )
+
+            spot = next(
+                (point[along] + side * step for step in (2, 1, 3, 4)
+                 if step < reach and lo <= point[along] + side * step <= hi
+                 and point[along] + side * step not in taken and clear(point[along] + side * step)),
+                None,
+            )
+            if spot is None:
+                continue
+            taken.add(spot)
+            for re in lane:
+                re.draw_path[:2] = moved(re.draw_path, spot)
+
+
+def _draw_cells(path: list[tuple[int, int]]) -> set[tuple[int, int]]:
+    cells: set[tuple[int, int]] = set()
+    for (x1, y1), (x2, y2) in zip(path, path[1:]):
+        for x in range(min(x1, x2), max(x1, x2) + 1):
+            for y in range(min(y1, y2), max(y1, y2) + 1):
+                cells.add((x, y))
+    return cells
 
 
 def _keep_runs_off_titles(routed: list[RoutedEdge], layout: GridLayout) -> None:

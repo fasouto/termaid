@@ -478,8 +478,8 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
 
 
 class BusKey(NamedTuple):
-    """Names one bus: the node its edges share and which end that is. A
-    fan-in also names how its edges look where they meet the target."""
+    """Names one bus: the node its edges share, which end that is, and how
+    its edges look where they meet that node."""
     fan_in: bool
     hub: str
     look: tuple = ()
@@ -490,8 +490,9 @@ def bus_edges(graph: Graph) -> dict[BusKey, list[int]]:
 
     A fan-out joins the edges of one source whose targets have no other
     incoming edge. A fan-in joins the edges into one target whose sources
-    have no other outgoing edge, and only edges that look alike where
-    they meet the target, so a dotted and a solid edge never share a line.
+    have no other outgoing edge. Either joins only edges that look alike
+    where they meet the shared node, so a dotted and a solid edge never
+    share a line.
     """
     in_degree = Counter(e.target for e in graph.edges)
     out_degree = Counter(e.source for e in graph.edges)
@@ -500,7 +501,8 @@ def bus_edges(graph: Graph) -> dict[BusKey, list[int]]:
         if e.label or e.is_self_reference:
             continue
         if in_degree[e.target] == 1:
-            groups.setdefault(BusKey(False, e.source), []).append(i)
+            look = (e.style, e.has_arrow_start, e.arrow_type_start)
+            groups.setdefault(BusKey(False, e.source, look), []).append(i)
         elif out_degree[e.source] == 1 and not (e.source_is_subgraph or e.target_is_subgraph):
             look = (e.style, e.has_arrow_end, e.arrow_type_end)
             groups.setdefault(BusKey(True, e.target, look), []).append(i)
