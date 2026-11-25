@@ -328,6 +328,18 @@ class TestThemeOptionInteractions:
             return max(len(line) for line in text.splitlines())
         assert max_width(narrow) < max_width(wide)
 
+    def test_theme_piped_keeps_wide_lines_whole(self, tmp_path: Path):
+        mmd = tmp_path / "wide.mmd"
+        mmd.write_text("graph LR\n  " + " --> ".join(f"N{i}[Service number {i}]" for i in range(6)))
+        def run(*extra: str) -> str:
+            return subprocess.run(
+                [sys.executable, "-m", "termaid", str(mmd), *extra],
+                capture_output=True, encoding="utf-8", check=True,
+            ).stdout
+        plain = run()
+        assert max(len(line) for line in plain.splitlines()) > 80
+        assert _strip_ansi(run("--theme", "default")) == plain
+
     def test_theme_respects_width(self, tmp_path: Path):
         source = "graph LR\n  A[aaaa] --> B[bbbb] --> C[cccc] --> D[dddd]"
         full = self._render_to_file(tmp_path, source, [], "full.txt")
