@@ -351,3 +351,34 @@ class TestCompositeDirection:
         )
         assert _row_of(output, "Idle") == _row_of(output, "Done")
         assert _row_of(output, "Load") < _row_of(output, "Run")
+
+
+class TestStateDescriptions:
+    def test_description_is_the_state_label(self):
+        output = render("stateDiagram-v2\n    s1 : Waiting for payment\n    s1 --> s2")
+        assert "Waiting for payment" in output
+        assert "s2" in output
+
+    def test_diagram_of_only_a_description_renders(self):
+        output = render("stateDiagram-v2\n    s2 : This is a state description")
+        assert "This is a state description" in output
+
+    def test_several_descriptions_keep_the_state_name(self):
+        g = parse_state_diagram("stateDiagram-v2\n    s1 : first\n    s1 : second")
+        assert g.nodes["s1"].label.split("\n") == ["s1", "first", "second"]
+
+    def test_description_titles_a_composite(self):
+        output = render(
+            "stateDiagram-v2\n"
+            "    [*] --> NamedComposite\n"
+            "    NamedComposite: Another Composite\n"
+            "    state NamedComposite {\n"
+            "        [*] --> namedSimple\n"
+            "        namedSimple --> [*]\n"
+            "        namedSimple: Another simple\n"
+            "    }"
+        )
+        assert "Another Composite" in output
+        assert "Another simple" in output
+        assert "NamedComposite" not in output
+        assert "namedSimple" not in output
