@@ -586,4 +586,4 @@ def test_a_diagram_after_a_block_too_long_to_hold_is_still_drawn():
     shown = r.feed(big + "Next one:\n```mermaid\ngraph LR; A --> B\n```\nend\n", final=True)
     assert shown.startswith(big + "Next one:\n")
     assert "A --> B" not in shown and "─►" in shown
-    assert shown.endswith("```\nend")
+    assert shown.endswith("```\nend\n")

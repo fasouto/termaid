@@ -81,6 +81,7 @@ class StreamRenderer:
         held: list[str] | None = None,
         carry: str = "",
         other_fence: str = "",
+        released: bool = False,
     ) -> None:
         self.width = width
         self.use_ascii = use_ascii
@@ -90,6 +91,9 @@ class StreamRenderer:
         self.held = [] if held is None else held  # original lines, fence included
         self.carry = carry              # a final batch may end mid-line
         self.other_fence = other_fence  # an open block of another language, passed through unsearched
+        # other_fence is a Mermaid block too long to hold. It may never close,
+        # so a new Mermaid fence ends it, which CommonMark would not do.
+        self.released = released
         self.held_size = sum(len(line) + 1 for line in self.held)  # held's characters, line breaks included
 
     def feed(self, text: str, final: bool = False) -> str:
@@ -117,6 +121,7 @@ class StreamRenderer:
                 parts.extend(line + "\n" for line in self.held)
                 self._reset()
             self.other_fence = ""
+            self.released = False
             if tail:
                 last = parts[-1]
                 if isinstance(last, Diagram):
@@ -139,24 +144,29 @@ class StreamRenderer:
             )
             if not close.match(line):
                 if self.held_size > _MAX_HELD_CHARS:
-                    held = self.held
+                    # The rest of the block passes through as written, up to its own closing fence.
+                    held, self.other_fence, self.released = self.held, self.fence, True
                     self._reset()
                     return [held_line + "\n" for held_line in held]
                 return []
             diagram = Diagram(self.held, self.indent)
             self._reset()
             return [diagram]
-        if self.other_fence:
+        match = OPEN_FENCE.match(line)
+        if match and match.group("fence")[0] == "`" and "`" in match.group("info"):
+            match = None
+        if self.other_fence and not (self.released and match and _is_mermaid(match)):
             close = re.compile(
                 r"^[ \t]*" + re.escape(self.other_fence[0]) + "{" + str(len(self.other_fence)) + r",}[ \t]*\r?$"
             )
             if close.match(line):
                 self.other_fence = ""
+                self.released = False
             return [line + "\n"]
-        match = OPEN_FENCE.match(line)
-        if match and not (match.group("fence")[0] == "`" and "`" in match.group("info")):
-            words = match.group("info").split()
-            if words and words[0].lower() == "mermaid":
+        self.other_fence = ""
+        self.released = False
+        if match:
+            if _is_mermaid(match):
                 self.fence = match.group("fence")
                 self.indent = match.group("indent")
                 self.held = [line]
@@ -219,7 +229,7 @@ class StreamRenderer:
     def to_json(self) -> str:
         return json.dumps({
             "fence": self.fence, "indent": self.indent, "held": self.held,
-            "carry": self.carry, "other_fence": self.other_fence,
+            "carry": self.carry, "other_fence": self.other_fence, "released": self.released,
         })
 
     def load(self, data: str) -> None:
@@ -236,6 +246,12 @@ class StreamRenderer:
         self.held_size = sum(len(line) + 1 for line in self.held)
         self.carry = saved.get("carry", "")
         self.other_fence = saved.get("other_fence", "")
+        self.released = saved.get("released") is True
+
+
+def _is_mermaid(match: re.Match) -> bool:
+    words = match.group("info").split()
+    return bool(words) and words[0].lower() == "mermaid"
 
 
 def _state_dir() -> str | None:
