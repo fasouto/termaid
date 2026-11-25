@@ -636,3 +636,21 @@ class TestEdgesKeepOffSubgraphBottomBorders:
         assert len(borders) == 2, out
         for border in borders:
             assert border.endswith("┘") and set(border) <= set("└─┘┼┬"), out
+
+
+_BOXED_TEXT = {
+    "class": "classDiagram\n  class Animal {\n    +String name\n    +makeSound()\n  }\n  Animal <|-- Dog",
+    "er": "erDiagram\n  CUSTOMER ||--o{ ORDER : places\n  CUSTOMER {\n    string name PK\n  }",
+    "journey": "journey\n  section Work\n    Make tea: 5: Me\n    Do work: 1: Me, Cat",
+    "kanban": "kanban\n  Todo\n    Design homepage\n  Done\n    Setup",
+}
+
+
+@pytest.mark.parametrize("kind", _BOXED_TEXT)
+def test_padding_below_one_draws_as_padding_one(kind):
+    """Box text starts padding_x columns in from the border, so 0 would put it on the border.
+
+    fit_to_width's last spacing step asks for padding_x=0.
+    """
+    source = _BOXED_TEXT[kind]
+    assert render(source, padding_x=0, gap=1) == render(source, padding_x=1, gap=1)
