@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.1 (2026-11-25)
 
 ### Behavior changes
 - Flowchart: the extra passes that add space between crowded layers now run only on graphs of up to 24 edges. Larger flowcharts draw several times faster and can come out a little narrower or shorter, with a few more lines sharing a gap
