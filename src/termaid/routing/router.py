@@ -618,7 +618,7 @@ def _spread_shared_endpoints(
             )
         if not tgt:
             continue
-        _apply_spread(list(lanes.values()), point, tgt, departure)
+        _apply_spread(list(lanes.values()), point, tgt, departure, layout.placements)
 
 
 def _apply_spread(
@@ -626,6 +626,7 @@ def _apply_spread(
     point: tuple[int, int],
     placement: NodePlacement,
     departure: RoutedEdge | None,
+    placements: dict[str, NodePlacement] | None = None,
 ) -> None:
     """Offset each lane's endpoint along the node border. A lane is the
     edges that arrive on one line.
@@ -641,7 +642,9 @@ def _apply_spread(
     For LEFT/RIGHT attachment (vertical spread): slides the adjacent
     corner along its vertical run, or inserts a short perpendicular jog
     at its x when the approach is straight, so the last segment stays
-    horizontal and the arrow direction is correct.
+    horizontal and the arrow direction is correct. A straight edge whose
+    source border reaches the new row moves its start there too, so it
+    runs beside the line it left rather than jogging along the border.
     """
     px, py = point
     attach = lanes[0][0].end_dir
@@ -718,7 +721,13 @@ def _apply_spread(
             for re in lane:
                 adj_x, adj_y = re.draw_path[-2]
                 re.draw_path[-1] = (px, new_y)
-                if len(re.draw_path) > 2 and re.draw_path[-3][0] == adj_x:
+                source = placements.get(re.edge.source) if placements else None
+                if (
+                    len(re.draw_path) == 2 and source is not None
+                    and source.draw_y < new_y < source.draw_y + source.draw_height - 1
+                ):
+                    re.draw_path[0] = (adj_x, new_y)
+                elif len(re.draw_path) > 2 and re.draw_path[-3][0] == adj_x:
                     re.draw_path[-2] = (adj_x, new_y)
                 else:
                     re.draw_path.insert(-1, (adj_x, new_y))

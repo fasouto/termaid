@@ -822,21 +822,25 @@ def _place_past_turn(
 def _place_across_own_line(
     canvas: Canvas, path: list[tuple[int, int]], order: list[int],
     lines: list[str], placed_labels: list[tuple[int, int, int]],
-    own: set[tuple[int, int]],
+    may_cover: set[tuple[int, int]],
 ) -> bool:
-    """Place a label too wide for either side of a vertical run across
-    that run, as Mermaid does, so it breaks its own line and no other.
-    It keeps off the run's end rows, where the arrowhead and the tee are."""
+    """Place a label with no room beside its edge across one of the edge's
+    own runs, as Mermaid does, so it breaks its own line and no other.
+    ``may_cover`` leaves out the arrowheads, which must stay visible."""
     width = _block_width(lines)
-    rules = _LabelRules(may_cover=own, share_rows=True)
+    rules = _LabelRules(may_cover=may_cover, share_rows=True)
     for i in order:
         (x1, y1), (x2, y2) = path[i], path[i + 1]
-        if x1 != x2:
-            continue
-        lo, hi = min(y1, y2) + 2, max(y1, y2) - 2
-        mid = (lo + hi) // 2
-        for row in sorted(range(lo, hi + 1), key=lambda r: abs(r - mid)):
-            if _try_place_label(canvas, row, x1 - width // 2, lines, placed_labels, rules):
+        if x1 == x2:
+            lo, hi = min(y1, y2) + 1, max(y1, y2) - 1
+            mid = (lo + hi) // 2
+            spots = [(row, x1 - width // 2) for row in sorted(range(lo, hi + 1), key=lambda r: abs(r - mid))]
+        else:
+            lo, hi = min(x1, x2) + 1, max(x1, x2) - width
+            mid = (lo + hi) // 2
+            spots = [(y1, col) for col in sorted(range(lo, hi + 1), key=lambda c: abs(c - mid))]
+        for row, col in spots:
+            if _try_place_label(canvas, row, col, lines, placed_labels, rules):
                 return True
     return False
 
@@ -902,7 +906,9 @@ def _draw_edge_label(
     ):
         if rules.may_cover is None and (
             _place_past_turn(canvas, path, preferred + remaining, lines, placed_labels)
-            or _place_across_own_line(canvas, path, preferred + remaining, lines, placed_labels, own)
+            or _place_across_own_line(
+                canvas, path, preferred + remaining, lines, placed_labels, own - _arrow_cells(re),
+            )
         ):
             return
         for i in preferred + remaining:
@@ -941,6 +947,21 @@ def _draw_edge_label(
         for col in (mx + 1, mx - width // 2, mx - width):
             if _try_place_label(canvas, top + offset, col, lines, placed_labels, rules):
                 return
+
+
+def _arrow_cells(re: RoutedEdge) -> set[tuple[int, int]]:
+    """The cells an edge's arrowheads are drawn in, next to its ends."""
+    def beside(end: tuple[int, int], toward: tuple[int, int]) -> tuple[int, int]:
+        (x, y), (tx, ty) = end, toward
+        return x + (tx > x) - (tx < x), y + (ty > y) - (ty < y)
+
+    path = re.draw_path
+    cells = set()
+    if re.edge.has_arrow_end:
+        cells.add(beside(path[-1], path[-2]))
+    if re.edge.has_arrow_start:
+        cells.add(beside(path[0], path[1]))
+    return cells
 
 
 @dataclass
