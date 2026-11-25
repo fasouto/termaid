@@ -321,6 +321,35 @@ class TestFanIn:
             assert edge_targets(out.split("\n"), source, names) == {"T"}
 
 
+class TestNarrowBackEdges:
+    """With one-line gaps, a back edge's arrowhead replaced its last
+    corner, and its label sat between the boxes under another edge."""
+
+    NARROW = {"gap": 1, "padding_x": 0, "max_label_width": 9}
+
+    def test_arrowhead_and_corner_both_show(self):
+        from termaid import render
+
+        out = render("graph LR\n  A --> B --> C --> A", **self.NARROW)
+        lines = out.split("\n")
+        arrow_row = next(r for r, line in enumerate(lines) if "▲" in line)
+        assert "─" not in lines[arrow_row] and "╰" in lines[arrow_row + 1], out
+
+    def test_label_sits_by_its_own_edge(self):
+        from termaid import render
+
+        out = render(
+            "flowchart LR\n  Draft --> Review\n  Review -->|changes requested| Draft\n  Review --> Merge",
+            **self.NARROW,
+        )
+        lines = out.split("\n")
+        box_bottom = next(r for r, line in enumerate(lines) if line.startswith("└"))
+        lane = next(r for r, line in enumerate(lines) if "╰" in line)
+        label = next(r for r, line in enumerate(lines) if "changes" in line)
+        assert label > box_bottom and abs(label - lane) == 1, out
+        assert "─" not in lines[lane - 1], out
+
+
 class TestFanOutKeepsEachEdgeLook:
     """A fan-out shares its trunk only between edges that look alike at the
     source, so a dotted or two-way edge never borrows another's line."""
