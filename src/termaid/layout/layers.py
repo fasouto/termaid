@@ -250,9 +250,6 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
             lo, hi = sg_ranges[sg_id]
             sg_ranges[sg_id] = (min(lo, layer), max(hi, layer))
 
-    if len(sg_ranges) < 2:
-        return layers
-
     # Check for overlapping ranges between different subgraphs.
     # Declaration order, so sibling subgraphs stack the way they were written.
     sg_ids: list[str] = []
@@ -264,7 +261,7 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
             _declared(sg.children)
 
     _declared(graph.subgraphs)
-    has_overlap = False
+    has_overlap = _passes_through(graph, layers, node_sg, sg_ranges)
     for i in range(len(sg_ids)):
         for j in range(i + 1, len(sg_ids)):
             r1 = sg_ranges[sg_ids[i]]
@@ -373,6 +370,43 @@ def separate_subgraph_layers(graph: Graph, layers: dict[str, int]) -> dict[str, 
                 new_layers[nid] = best + 1
 
     return new_layers
+
+
+def _passes_through(
+    graph: Graph, layers: dict[str, int], node_sg: dict[str, str],
+    sg_ranges: dict[str, tuple[int, int]],
+) -> bool:
+    """Whether a path leaves a subgraph and comes back through a node
+    outside it, with that node inside the subgraph's layers. Stacked from
+    the subgraph's own edges instead, the members lie side by side and
+    the outside node follows them."""
+    succs: dict[str, list[str]] = {}
+    preds: dict[str, list[str]] = {}
+    for e in graph.edges:
+        succs.setdefault(e.source, []).append(e.target)
+        preds.setdefault(e.target, []).append(e.source)
+
+    def reach(start: set[str], step: dict[str, list[str]]) -> set[str]:
+        seen = set(start)
+        todo = list(start)
+        while todo:
+            for n in step.get(todo.pop(), ()):
+                if n not in seen:
+                    seen.add(n)
+                    todo.append(n)
+        return seen
+
+    for sg_id, (lo, hi) in sg_ranges.items():
+        inside = {
+            nid for nid, layer in layers.items()
+            if lo < layer < hi and nid not in node_sg
+        }
+        if not inside:
+            continue
+        members = {nid for nid, s in node_sg.items() if s == sg_id}
+        if inside & reach(members, succs) & reach(members, preds):
+            return True
+    return False
 
 
 def _count_crossings(graph: Graph, layer_lists: list[list[str]]) -> int:
