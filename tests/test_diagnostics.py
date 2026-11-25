@@ -87,6 +87,16 @@ class TestJsonErrors:
         assert code == 2 == d["exit_code"]
         assert d["code"] == "invalid_arguments"
 
+    @pytest.mark.parametrize("flag", ["--padding-x", "--padding-y", "--gap"])
+    def test_negative_spacing(self, diagram: Path, capsys, flag: str):
+        code = main(["--diagnostics-format", "json", flag, "-1", str(diagram)])
+        captured = capsys.readouterr()
+        d = _single(captured.err)
+        assert code == 2 == d["exit_code"]
+        assert d["code"] == "invalid_arguments"
+        assert flag in d["message"]
+        assert captured.out == ""
+
     def test_markdown_with_json_ingest(self, diagram: Path, capsys):
         code = main(["--diagnostics-format", "json", "--markdown", "--json", "pie", str(diagram)])
         d = _single(capsys.readouterr().err)

@@ -937,3 +937,21 @@ class TestLongerLinks:
     def test_longer_link_beside_other_nodes(self):
         out = render("graph LR\n  A --> B\n  C ----> D")
         assert all(name in out for name in "ABCD")
+
+
+_SPACED_SOURCES = [
+    "graph LR\n  A[Hello] --> B[World]",
+    "sequenceDiagram\n  A->>B: hi",
+    "classDiagram\n  class A {\n    +x\n  }\n  A <|-- B",
+    "erDiagram\n  A ||--o{ B : has",
+    "journey\n  section s\n    a: 5: Me",
+    "block-beta\n  columns 2\n  A B",
+    "kanban\n  Todo\n    a",
+    "packet-beta\n  0-15: \"Source Port\"",
+]
+
+
+@pytest.mark.parametrize("option", ["padding_x", "padding_y", "gap"])
+@pytest.mark.parametrize("source", _SPACED_SOURCES, ids=lambda s: s.split()[0])
+def test_negative_spacing_draws_as_zero(source, option):
+    assert render(source, **{option: -100}) == render(source, **{option: 0})
