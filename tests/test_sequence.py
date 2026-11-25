@@ -84,13 +84,6 @@ class TestSequenceParser:
         )
         assert len(d.events) == 1
 
-    def test_autonumber(self):
-        d = parse_sequence_diagram(
-            "sequenceDiagram\n"
-            "  autonumber\n"
-            "  A->>B: msg"
-        )
-        assert d.autonumber is True
 
     def test_comments_ignored(self):
         d = parse_sequence_diagram(
@@ -810,3 +803,16 @@ class TestSequenceLabelText:
         assert any(line.rstrip(" │").endswith("every") for line in lines)
         assert any("minute" in line and "every" not in line for line in lines)
         assert any("idle" in line and "when" not in line for line in lines)
+
+
+class TestAutonumberToggles:
+    def test_autonumber_off_stops_the_numbers(self):
+        output = render("sequenceDiagram\n  autonumber\n  A->>B: one\n  autonumber off\n  A->>B: two")
+        assert "1: one" in output
+        assert "two" in output and "2: two" not in output
+
+    def test_numbers_start_where_autonumber_appears_and_count_every_message(self):
+        # Mermaid counts every message and shows the count from the autonumber statement on.
+        output = render("sequenceDiagram\n  A->>B: zero\n  autonumber\n  A->>B: one\n  B->>A: two")
+        assert "zero" in output and "1: zero" not in output
+        assert "2: one" in output and "3: two" in output
