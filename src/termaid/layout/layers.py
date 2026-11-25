@@ -5,7 +5,7 @@ each layer to minimize edge crossings using a barycenter heuristic.
 """
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
 from typing import NamedTuple
 
 from ..graph.model import Edge, Graph, Subgraph
@@ -53,12 +53,19 @@ def expand_subgraph_edges(graph: Graph) -> list[Edge]:
     return virtual
 
 
-def assign_layers(graph: Graph) -> dict[str, int]:
+def assign_layers(graph: Graph, drawn: list[Edge] | None = None) -> dict[str, int]:
     """Assign each node to a layer based on longest path from a root.
 
     Back-edges (edges that would create cycles) are excluded from
     layer computation to prevent infinite loops and excessive layers.
+    ``drawn`` are the edges that will be drawn, when ``graph.edges`` also
+    holds edges used only to rank nodes; it defaults to all of them.
     """
+    edge_min_lengths: dict[tuple[str, str], int] = {}
+    for e in graph.edges:
+        key = (e.source, e.target)
+        edge_min_lengths[key] = max(edge_min_lengths.get(key, 1), e.min_length)
+
     # Longest path over the edges that close no cycle, as Mermaid ranks
     # nodes: a node reached by a short and a long path sits below the long
     # one, so its edges all point down the flow. Edges in definition order,
@@ -67,34 +74,19 @@ def assign_layers(graph: Graph) -> dict[str, int]:
         graph.node_order, [e for e in graph.edges if not e.is_self_reference],
     )
     links = list(dict.fromkeys((e.source, e.target) for e in forward))
+    layers = _relax(graph, links, edge_min_lengths)
+
+    # In a dense graph longest paths stretch many edges across several
+    # layers, and each layer gap an edge crosses needs a lane of its own, so
+    # the drawing gets much taller and slower to route. There the
+    # breadth-first tree is kept, which ranks each node by its shortest
+    # path from a root.
+    tree = _bfs_tree_links(graph)
+    tree_layers = _relax(graph, tree, edge_min_lengths)
+    drawn = graph.edges if drawn is None else drawn
+    if _span(drawn, layers) - _span(drawn, tree_layers) > _MAX_EXTRA_SPAN:
+        links, layers = tree, tree_layers
     has_parent = {tgt for _, tgt in links}
-    layers: dict[str, int] = {nid: 0 for nid in graph.node_order if nid not in has_parent}
-
-    # Build edge min_length lookup
-    edge_min_lengths: dict[tuple[str, str], int] = {}
-    for e in graph.edges:
-        key = (e.source, e.target)
-        edge_min_lengths[key] = max(edge_min_lengths.get(key, 1), e.min_length)
-
-    # Longest path: push each target below its source until nothing moves
-    changed = True
-    max_iter = len(graph.node_order) * 2
-    iteration = 0
-    while changed and iteration < max_iter:
-        changed = False
-        iteration += 1
-        for src, tgt in links:
-            if src in layers:
-                ml = edge_min_lengths.get((src, tgt), 1)
-                new_layer = layers[src] + ml
-                if tgt not in layers or layers[tgt] < new_layer:
-                    layers[tgt] = new_layer
-                    changed = True
-
-    # Assign unplaced nodes to layer 0
-    for nid in graph.node_order:
-        if nid not in layers:
-            layers[nid] = 0
 
     # Collapse orthogonal subgraph nodes to the same layer
     ortho_sets = _get_orthogonal_sg_nodes(graph)
@@ -142,6 +134,74 @@ def assign_layers(graph: Graph) -> dict[str, int]:
                 layers[nid] = 0
 
     return layers
+
+
+# Longest-path layering is kept unless its drawn edges cross this many more
+# layer gaps in all than with the breadth-first tree. Measured: at most 8 in
+# the test fixtures, at least 45 in random graphs of 40 nodes and 60 edges.
+_MAX_EXTRA_SPAN = 16
+
+
+def _span(edges: list[Edge], layers: dict[str, int]) -> int:
+    """How many layer gaps the edges cross in all."""
+    return sum(
+        abs(layers[e.target] - layers[e.source])
+        for e in edges if e.source in layers and e.target in layers
+    )
+
+
+def _relax(
+    graph: Graph, links: list[tuple[str, str]], min_lengths: dict[tuple[str, str], int],
+) -> dict[str, int]:
+    """Push each link's target below its source until nothing moves. A
+    node no link reaches sits on layer 0."""
+    has_parent = {tgt for _, tgt in links}
+    layers: dict[str, int] = {nid: 0 for nid in graph.node_order if nid not in has_parent}
+    changed = True
+    max_iter = len(graph.node_order) * 2
+    iteration = 0
+    while changed and iteration < max_iter:
+        changed = False
+        iteration += 1
+        for src, tgt in links:
+            if src in layers:
+                new_layer = layers[src] + min_lengths.get((src, tgt), 1)
+                if tgt not in layers or layers[tgt] < new_layer:
+                    layers[tgt] = new_layer
+                    changed = True
+    for nid in graph.node_order:
+        layers.setdefault(nid, 0)
+    return layers
+
+
+def _bfs_tree_links(graph: Graph) -> list[tuple[str, str]]:
+    """The edges that first reach each node, breadth first from all the
+    roots at once and then from each node not yet reached."""
+    children: dict[str, list[str]] = {}
+    for e in graph.edges:
+        if e.source != e.target:
+            kids = children.setdefault(e.source, [])
+            if e.target not in kids:
+                kids.append(e.target)
+    tree: list[tuple[str, str]] = []
+    visited: set[str] = set()
+
+    def walk(starts: list[str]) -> None:
+        visited.update(starts)
+        queue = deque(starts)
+        while queue:
+            node = queue.popleft()
+            for child in children.get(node, ()):
+                if child not in visited:
+                    visited.add(child)
+                    tree.append((node, child))
+                    queue.append(child)
+
+    walk(list(dict.fromkeys(graph.get_roots())))
+    for nid in graph.node_order:
+        if nid not in visited:
+            walk([nid])
+    return tree
 
 
 def _without_back_edges(nodes: list[str], edges: list[Edge]) -> list[Edge]:

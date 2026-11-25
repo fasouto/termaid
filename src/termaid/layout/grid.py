@@ -222,7 +222,7 @@ def compute_layout(
         virtual_edges = expand_subgraph_edges(graph)
         graph.edges.extend(virtual_edges)
         try:
-            layers = assign_layers(graph)
+            layers = assign_layers(graph, graph.edges[:len(graph.edges) - len(virtual_edges)])
 
             # Step 1b: Fix overlapping subgraph layer ranges
             layers = separate_subgraph_layers(graph, layers)
