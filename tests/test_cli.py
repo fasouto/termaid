@@ -235,6 +235,18 @@ class TestCliPipe:
         assert "D" in result.stdout
 
 
+    @pytest.mark.parametrize("extra", [[], ["--theme", "default"], ["--format", "styled-json"], ["--demo"]])
+    def test_closed_pipe_exits_quietly(self, extra: list[str]):
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "termaid", *extra],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        proc.stdout.close()
+        _, err = proc.communicate(b"graph TD\n" + b"".join(b"  N%d --> N%d\n" % (i, i + 1) for i in range(50)))
+        assert err.decode() == ""
+        assert proc.returncode == 1
+
+
 def _boom(*args, **kwargs):
     raise RuntimeError("internal failure")
 
@@ -328,6 +340,18 @@ class TestThemeOptionInteractions:
             return max(len(line) for line in text.splitlines())
         assert max_width(narrow) < max_width(wide)
 
+    def test_theme_piped_keeps_wide_lines_whole(self, tmp_path: Path):
+        mmd = tmp_path / "wide.mmd"
+        mmd.write_text("graph LR\n  " + " --> ".join(f"N{i}[Service number {i}]" for i in range(6)))
+        def run(*extra: str) -> str:
+            return subprocess.run(
+                [sys.executable, "-m", "termaid", str(mmd), *extra],
+                capture_output=True, encoding="utf-8", check=True,
+            ).stdout
+        plain = run()
+        assert max(len(line) for line in plain.splitlines()) > 80
+        assert _strip_ansi(run("--theme", "default")) == plain
+
     def test_theme_respects_width(self, tmp_path: Path):
         source = "graph LR\n  A[aaaa] --> B[bbbb] --> C[cccc] --> D[dddd]"
         full = self._render_to_file(tmp_path, source, [], "full.txt")
@@ -335,3 +359,30 @@ class TestThemeOptionInteractions:
         def max_width(text: str) -> int:
             return max(len(line) for line in text.splitlines())
         assert max_width(fitted) < max_width(full)
+
+
+class TestDemoOptions:
+    """--demo draws each sample exactly as termaid draws that source with the same flags."""
+
+    @pytest.mark.parametrize("flags", [
+        ["--ascii"],
+        ["--width", "30"],
+        ["--padding-x", "1", "--padding-y", "0", "--gap", "1"],
+        ["--sharp-edges", "--arrow-style", "triangle"],
+        ["--theme", "default"],
+    ], ids=" ".join)
+    @pytest.mark.parametrize("kind", ["flowchart", "sequence"])
+    def test_demo_honours_drawing_flags(self, tmp_path: Path, capsys, kind: str, flags: list[str]):
+        from termaid.cli import _DEMO_SOURCES
+
+        title, source = _DEMO_SOURCES[kind]
+        mmd = tmp_path / "demo.mmd"
+        mmd.write_text(source)
+        assert main([str(mmd), *flags]) == 0
+        drawn = capsys.readouterr().out
+        assert main(["--demo", kind, *flags]) == 0
+        assert capsys.readouterr().out == f"=== {title} ===\n{drawn}\n"
+
+    def test_demo_rejects_a_bad_width(self, capsys):
+        assert main(["--demo", "flowchart", "--width", "0"]) == 2
+        assert capsys.readouterr().out == ""

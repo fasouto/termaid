@@ -154,6 +154,18 @@ def _use_color(args: argparse.Namespace) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
+    try:
+        status = _main(argv)
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # The reader left, as `head` does. Without this, Python reports the
+        # unwritten output again when it flushes stdout at exit.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 1
+    return status
+
+
+def _main(argv: list[str] | None) -> int:
     # Pipes and redirects use the locale encoding, which on Windows is a
     # code page that cannot encode box-drawing characters.
     # A stream that is not a text file, or was already read, keeps its own.
@@ -341,11 +353,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.arrow_styles:
         return _list_arrow_styles()
 
-    if args.demo is not None:
-        return _run_demo(args)
+    for flag, value in (("--padding-x", args.padding_x), ("--padding-y", args.padding_y), ("--gap", args.gap)):
+        if value < 0:
+            return _report(args, "invalid_arguments", f"{flag} must not be negative.", exit_code=2)
 
     if args.width is not None and args.width < 1:
         return _report(args, "invalid_arguments", "--width must be positive.", exit_code=2)
+
+    if args.demo is not None:
+        return _run_demo(args)
 
     # Read input
     source = _read_source(args)
@@ -383,8 +399,7 @@ def main(argv: list[str] | None = None) -> int:
     use_color = not styled and _use_color(args)
     if use_color:
         try:
-            from rich import print as rprint
-            from rich.console import Console
+            import rich  # noqa: F401
         except ImportError:
             return _report(
                 args,
@@ -415,20 +430,14 @@ def main(argv: list[str] | None = None) -> int:
             return failed
 
         if use_color:
-            rich_result = result
             if args.output:
                 try:
                     with open(args.output, "w", encoding="utf-8") as f:
-                        console = Console(
-                            file=f,
-                            force_terminal=True,
-                            width=max(max_line_width(_plain(rich_result)), 80),
-                        )
-                        console.print(rich_result)
+                        _print_rich(result, f)
                 except OSError as e:
                     return _report(args, "output_write_failed", f"Error writing to {args.output}: {e}", path=args.output)
             else:
-                rprint(rich_result)
+                _print_rich(result)
         else:
             if styled:
                 result = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
@@ -440,10 +449,19 @@ def main(argv: list[str] | None = None) -> int:
                     return _report(args, "output_write_failed", f"Error writing to {args.output}: {e}", path=args.output)
             else:
                 print(result)
+    except BrokenPipeError:
+        raise
     except Exception as e:
         return _report(args, "render_failed", f"Error rendering diagram: {e}")
 
     return 0
+
+
+def _print_rich(result, file=None) -> None:
+    """Print a coloured drawing. A drawing is never wrapped, whatever the console width."""
+    from rich.console import Console
+
+    Console(file=file, force_terminal=True if file else None, soft_wrap=True).print(result)
 
 
 def _check_output(text: str, args: argparse.Namespace) -> int | None:
@@ -546,6 +564,7 @@ def _indent(result, indent: str):
 def _run_tui(source: str, args: argparse.Namespace) -> int:
     """Launch the TUI viewer."""
     try:
+        from rich.text import Text
         from textual.app import App, ComposeResult
         from textual.widgets import Static
         from termaid import render as _render
@@ -561,7 +580,8 @@ def _run_tui(source: str, args: argparse.Namespace) -> int:
         CSS = "Static { width: auto; height: auto; }"
 
         def compose(self) -> ComposeResult:
-            yield Static(_render(
+            # Text, not str: Static reads a str as markup.
+            yield Static(Text(_render(
                 source,
                 use_ascii=args.ascii,
                 padding_x=args.padding_x,
@@ -569,7 +589,7 @@ def _run_tui(source: str, args: argparse.Namespace) -> int:
                 rounded_edges=not args.sharp_edges,
                 gap=args.gap,
                 arrow_style=args.arrow_style,
-            ))
+            )))
 
     DiagramApp().run()
     return 0
@@ -673,22 +693,28 @@ def _run_demo(args: argparse.Namespace) -> int:
             f"Unknown demo type: {demo_type}\nAvailable: all, {', '.join(_DEMO_SOURCES.keys())}",
         )
 
+    from termaid import render, render_rich
+
     use_color = _use_color(args)
+    if use_color:
+        try:
+            import rich  # noqa: F401
+        except ImportError:
+            use_color = False
+
+    def render_fn(src: str, **kwargs):
+        if use_color:
+            return render_rich(src, theme=args.theme, **kwargs)
+        return render(src, **kwargs)
 
     for key in keys:
         title, source = _DEMO_SOURCES[key]
         print(f"=== {title} ===")
+        drawn = _render_one(source, args, render_fn, target_width=args.width)
         if use_color:
-            try:
-                from termaid import render_rich
-                from rich import print as rprint
-                rprint(render_rich(source, theme=args.theme or "default"))
-            except ImportError:
-                from termaid import render
-                print(render(source))
+            _print_rich(drawn)
         else:
-            from termaid import render
-            print(render(source))
+            print(drawn)
         print()
 
     return 0

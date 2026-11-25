@@ -58,6 +58,8 @@ def render_journey(
     # Collect all tasks and compute widths
     all_tasks: list[tuple[str, list[dict]]] = []  # (section_title, tasks)
     all_actors: set[str] = set()
+    # A task box is its title plus padding_x each side: at 0 the title covers the border.
+    padding_x = max(padding_x, 1)
     task_width = max(8, padding_x * 4)  # minimum task box width
 
     for section in diagram.sections:

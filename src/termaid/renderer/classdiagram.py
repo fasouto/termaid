@@ -812,6 +812,8 @@ def _layout_notes(
 def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padding_x: int = 2, gap: int = 4, cs: CharSet | None = None) -> Canvas:
     """Render a ClassDiagram to a Canvas."""
     cs = cs or default_charset(use_ascii)
+    # Text starts padding_x columns in from the border: at 0 it would cover it.
+    padding_x = max(padding_x, 1)
 
     positions, sizes, width, height, layer_of, run_rows = _compute_layout(diagram, padding_x=padding_x, gap=gap)
     if width <= 1 and not diagram.notes:
