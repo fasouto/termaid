@@ -417,7 +417,7 @@ class TestCliArgumentEdges:
     def test_markdown_with_json_is_an_argument_error(self, tmp_path: Path):
         doc = tmp_path / "d.md"
         doc.write_text("text\n")
-        assert main([str(doc), "--markdown", "--json", "tree"]) == 2
+        assert main([str(doc), "--markdown", "--json", "pie"]) == 2
 
     def test_an_unknown_demo_is_an_argument_error(self):
         assert main(["--demo", "nosuch"]) == 2
@@ -427,4 +427,4 @@ class TestCliArgumentEdges:
         doc.write_text("# Doc\n\n" + "word " * 14 + "\n\n```mermaid\ngraph LR; A-->B\n```\n")
         assert main([str(doc), "--markdown", "--strict-width", "--width", "40"]) == 2
         err = capsys.readouterr().err
-        assert "diagram is" not in err and "line 3 of the output is 69 cols wide" in err
+        assert "diagram is" not in err and "line 3 of the output is 70 cols wide" in err

@@ -166,7 +166,7 @@ class TestCliMarkdown:
 
     @pytest.mark.parametrize("flag", [["--json", "pie"], ["--tui"]])
     def test_conflicting_flags(self, tmp_path: Path, flag: list[str], capsys):
-        assert self._run(tmp_path, "x", *flag) == 1
+        assert self._run(tmp_path, "x", *flag) == 2
         assert "--markdown" in capsys.readouterr().err
 
 
