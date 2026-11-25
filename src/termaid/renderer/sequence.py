@@ -729,9 +729,9 @@ def _compute_block_bounds(
                         wrap_display_text(f"[{section.label}]", max(title_budget - 2, 3)) if section.label else []
                     )
             else:
-                labels.block_titles[id(block)] = [title]
+                labels.block_titles[id(block)] = title.split("\n")
                 for section in block.sections:
-                    labels.sections[id(section)] = [f"[{section.label}]"] if section.label else []
+                    labels.sections[id(section)] = f"[{section.label}]".split("\n") if section.label else []
             title_width = _lines_width(labels.block_titles[id(block)])
             section_width = max((
                 _lines_width(labels.sections[id(section)]) + 2

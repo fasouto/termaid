@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from ..utils import line_breaks
+from .flowchart import _decode_entities
 from ..model.sequence import (
     ActivateEvent,
     Block,
@@ -82,6 +83,11 @@ def _lookup_arrow(arrow_str: str) -> tuple[str, str]:
     return "solid", "open"
 
 
+def _label_text(text: str) -> str:
+    """A label as drawn: <br> breaks lines and entity codes such as #9829; are decoded."""
+    return _decode_entities(line_breaks(text.strip()))
+
+
 def _ensure_participant(diagram: SequenceDiagram, pid: str) -> None:
     """Add participant if not already present (auto-create on first mention)."""
     for p in diagram.participants:
@@ -132,7 +138,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         m = _BLOCK_SECTION_RE.match(stripped)
         if m and block_stack:
             section_keyword = m.group(1).lower()
-            section_label = m.group(2).strip()
+            section_label = _label_text(m.group(2))
             section = BlockSection(label=section_label, events=[])
             block_stack[-1].sections.append(section)
             # Switch current event target to this section's events
@@ -143,7 +149,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         m = _BLOCK_START_RE.match(stripped)
         if m:
             kind = m.group(1).lower()
-            label = m.group(2).strip()
+            label = _label_text(m.group(2))
             block = Block(kind=kind, label=label)
             event_stack[-1].append(block)
             block_stack.append(block)
@@ -173,7 +179,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             _ensure_participant(diagram, p1)
             if p2:
                 _ensure_participant(diagram, p2)
-            note_text = line_breaks(note_text.strip())
+            note_text = _label_text(note_text)
             event_stack[-1].append(Note(
                 text=note_text,
                 position=position,
@@ -193,7 +199,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         m = _PARTICIPANT_KIND_RE.match(stripped)
         if m:
             kind, pid, label = m.group(1).lower(), m.group(2), m.group(3)
-            label = line_breaks(label.strip()) if label else pid
+            label = _label_text(label) if label else pid
             found = False
             for p in diagram.participants:
                 if p.id == pid:
@@ -234,7 +240,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             event_stack[-1].append(Message(
                 source=source,
                 target=target,
-                label=line_breaks(label.strip()) if label else "",
+                label=_label_text(label) if label else "",
                 line_type=line_type,
                 arrow_type=arrow_type,
             ))
