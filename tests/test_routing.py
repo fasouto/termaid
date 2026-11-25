@@ -321,6 +321,26 @@ class TestFanIn:
             assert edge_targets(out.split("\n"), source, names) == {"T"}
 
 
+class TestInvisibleLinks:
+    """An invisible link (~~~) places its nodes and draws nothing, not even
+    the stubs where a line would leave or reach a box."""
+
+    @pytest.mark.parametrize("src, box", [
+        ("flowchart LR\n  A ~~~ B\n  B --> C", "A"),
+        ("flowchart TD\n  A ~~~ B\n  A --> C", "B"),
+    ])
+    def test_no_stub_on_a_box_only_linked_invisibly(self, src, box):
+        from termaid import render
+        from tests.conftest import find_box
+
+        out = render(src)
+        lines = out.split("\n")
+        top, bottom, left, right = find_box(lines, box)
+        ring = [lines[top][left:right + 1], lines[bottom][left:right + 1]]
+        ring += [lines[r][c] for r in range(top + 1, bottom) for c in (left, right)]
+        assert not set("".join(ring)) & set("┬┴├┤┼"), out
+
+
 class TestNarrowBackEdges:
     """With one-line gaps, a back edge's arrowhead replaced its last
     corner, and its label sat between the boxes under another edge."""
