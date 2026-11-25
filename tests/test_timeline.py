@@ -77,3 +77,10 @@ def test_accessibility_lines_are_not_drawn():
     assert "2023" in out
     for word in ("acc", "Hidden", "block"):
         assert word not in out
+
+
+def test_br_tags_break_or_join_lines():
+    out = render('timeline\n  title Story<br/>so far\n  section Early<br>days\n  2004<br/>Q1 : Facebook<br/>launch\n')
+    assert "<br" not in out.lower()
+    for words in ['Story so far', 'Early days', '2004 Q1', 'Facebook', 'launch']:
+        assert words in out, words

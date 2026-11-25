@@ -431,3 +431,10 @@ def test_accessibility_and_click_lines_are_not_drawn():
     assert "Build" in out
     for word in ("acc", "Hidden", "block", "click", "http"):
         assert word not in out
+
+
+def test_br_tags_break_or_join_lines():
+    out = render('gantt\n  title Plan<br/>2024\n  dateFormat YYYY-MM-DD\n  section Phase<br>one\n    Build<br/>it :b, 2024-01-01, 3d\n')
+    assert "<br" not in out.lower()
+    for words in ['Plan 2024', 'Phase one', 'Build it']:
+        assert words in out, words

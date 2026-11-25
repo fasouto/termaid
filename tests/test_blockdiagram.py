@@ -270,3 +270,10 @@ def test_accessibility_and_click_lines_are_not_drawn():
     assert "App" in out and "Db" in out
     for word in ("acc", "Hidden", "block", "click", "http"):
         assert word not in out
+
+
+def test_br_tags_break_or_join_lines():
+    out = render('block-beta\n  columns 2\n  a["Web<br/>app"] b["Main<br>db"]\n  a -- "reads<br/>rows" --> b\n')
+    assert "<br" not in out.lower()
+    for words in ['Web app', 'Main db', 'reads rows']:
+        assert words in out, words

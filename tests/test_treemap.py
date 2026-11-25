@@ -290,3 +290,10 @@ class TestTreemapValues:
         assert self._numbers(output) == {"90,000,000"}
         output = render('treemap-beta\n"Bigger": 1500000\n"Other": 90000000\n')
         assert self._numbers(output) == {"90,000,000", "1.5M"}
+
+
+def test_br_tags_break_or_join_lines():
+    out = render('treemap-beta\n"Disk<br/>usage"\n    "node<br>modules": 10\n    "source<br/>code": 5\n')
+    assert "<br" not in out.lower()
+    for words in ['Disk usage', 'node modules', 'source code']:
+        assert words in out, words

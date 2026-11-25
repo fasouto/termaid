@@ -135,3 +135,10 @@ class TestEdgeSides:
         )
         assert out.isascii()
         assert "Database" in out and "Server" in out
+
+
+def test_br_tags_break_or_join_lines():
+    out = render('architecture-beta\n  group api(cloud)[API<br/>tier]\n  service db(database)[Main<br/>db] in api\n  service s(server)[Web<br>app] in api\n  s:R -- L:db\n')
+    assert "<br" not in out.lower()
+    for words in ['API tier', 'Main', 'db', 'Web', 'app']:
+        assert words in out, words
