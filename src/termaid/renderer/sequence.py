@@ -20,7 +20,7 @@ _BOX_PAD = 4          # horizontal padding inside participant boxes
 _MIN_GAP = 16         # minimum gap between participant centers
 _EVENT_ROW_H = 2      # rows per message event
 _NOTE_ROW_H = 4       # rows per note event (3-row box + 1 gap)
-_BLOCK_START_H = 3    # rows for block start (border + label + gap)
+_BLOCK_START_H = 2    # rows for block start (border + next label), plus one per title line
 _BLOCK_SECTION_H = 2  # rows for section break (dashed line + gap)
 _BLOCK_END_H = 2      # rows for block end (bottom border + gap)
 _TOP_MARGIN = 0
@@ -271,7 +271,7 @@ def _compute_layout(
         elif isinstance(ev, Note):
             cumulative += len(lines) + 2 + 1  # border top + content lines + border bottom + gap
         elif isinstance(ev, _BlockStart):
-            cumulative += _BLOCK_START_H + _extra_rows(labels.block_titles[id(ev.block)])
+            cumulative += _BLOCK_START_H + len(labels.block_titles[id(ev.block)])
         elif isinstance(ev, _BlockSectionBreak):
             cumulative += _BLOCK_SECTION_H + _extra_rows(labels.sections[id(ev.section)])
         elif isinstance(ev, _BlockEnd):
@@ -719,7 +719,10 @@ def _compute_block_bounds(
             block = event.block
             prefix = f"[{block.kind}]"
             title = f"{prefix} {block.label}".rstrip()
-            if wrap_scope_labels:
+            if block.kind == "rect":
+                # Mermaid shades a rect's background and writes nothing on it.
+                labels.block_titles[id(block)] = []
+            elif wrap_scope_labels:
                 # The title starts one cell inside the frame and is measured with
                 # two cells of slack; sections start one cell further in.
                 title_budget = max(content_right - content_left + 2, display_width(prefix) + 3)

@@ -149,7 +149,8 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         m = _BLOCK_START_RE.match(stripped)
         if m:
             kind = m.group(1).lower()
-            label = _label_text(m.group(2))
+            # A rect's argument is its background colour, which a terminal does not draw.
+            label = "" if kind == "rect" else _label_text(m.group(2))
             block = Block(kind=kind, label=label)
             event_stack[-1].append(block)
             block_stack.append(block)
