@@ -14,6 +14,7 @@ Syntax:
 from __future__ import annotations
 
 from ..model.journey import Journey, JourneySection, JourneyTask
+from ..utils import line_breaks, without_meta_lines
 
 
 def parse_journey(text: str) -> Journey:
@@ -26,12 +27,13 @@ def parse_journey(text: str) -> Journey:
 
     current_section: JourneySection | None = None
 
-    for line in lines[1:]:  # skip "journey" header
+    for line in without_meta_lines(lines[1:]):  # skip "journey" header
         comment_idx = line.find("%%")
         if comment_idx >= 0:
             line = line[:comment_idx]
 
-        stripped = line.strip()
+        # Every label here has one row.
+        stripped = line_breaks(line.strip(), " ")
         if not stripped:
             continue
 

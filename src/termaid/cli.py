@@ -123,7 +123,7 @@ def _auto_fit(
 
 def _read_source(args: argparse.Namespace) -> str | None:
     """Read diagram source from file or stdin. Returns None on error."""
-    if args.file:
+    if args.file and args.file != "-":
         try:
             with open(args.file, encoding="utf-8") as f:
                 return f.read()
@@ -133,7 +133,7 @@ def _read_source(args: argparse.Namespace) -> str | None:
         except (OSError, UnicodeDecodeError) as e:
             _report(args, "input_missing", f"Error reading file: {e}", path=args.file)
             return None
-    elif not sys.stdin.isatty():
+    elif args.file == "-" or not sys.stdin.isatty():
         try:
             return sys.stdin.read()
         except UnicodeDecodeError as e:
@@ -373,6 +373,13 @@ def _main(argv: list[str] | None) -> int:
     if args.demo is not None:
         return _run_demo(args)
 
+    if args.markdown and (args.json or args.tui):
+        return _report(args, "invalid_arguments", "--markdown cannot be combined with --json or --tui.", exit_code=2)
+    if args.strict_width and args.width is None:
+        return _report(args, "invalid_arguments", "--strict-width requires --width.", exit_code=2)
+    if args.max_height is not None and args.max_height < 1:
+        return _report(args, "invalid_arguments", "--max-height must be positive.", exit_code=2)
+
     # Read input
     source = _read_source(args)
     if source is None:
@@ -382,14 +389,6 @@ def _main(argv: list[str] | None) -> int:
     source = source.rstrip() if args.markdown else source.strip()
     if not source.strip():
         return _report(args, "input_empty", "Empty input.")
-
-    if args.markdown and (args.json or args.tui):
-        return _report(args, "invalid_arguments", "--markdown cannot be combined with --json or --tui.")
-
-    if args.strict_width and args.width is None:
-        return _report(args, "invalid_arguments", "--strict-width requires --width.", exit_code=2)
-    if args.max_height is not None and args.max_height < 1:
-        return _report(args, "invalid_arguments", "--max-height must be positive.", exit_code=2)
 
     # JSON ingest: convert structured data to Mermaid syntax
     if args.json:
@@ -479,9 +478,14 @@ def _check_output(text: str, args: argparse.Namespace) -> int | None:
     width = max_line_width(text)
     height = len(text.split("\n"))
     if args.strict_width and width > args.width:
+        # In a Markdown document the widest line may be prose, so name it.
+        what = "diagram"
+        if args.markdown:
+            line = next(i for i, row in enumerate(text.split("\n"), 1) if max_line_width(row) == width)
+            what = f"line {line} of the output"
         return _report(
             args, "width_exceeded",
-            f"diagram is {width} cols wide but target is {args.width}.",
+            f"{what} is {width} cols wide but target is {args.width}.",
             exit_code=2, actual_width=width, max_width=args.width,
         )
     if args.max_height is not None and height > args.max_height:
@@ -612,9 +616,14 @@ def _apply_show_ids(source: str) -> str:
     ``ID["ID: Label"]`` to the source so the parser picks up the new label.
     Non-flowchart diagrams are returned unchanged.
     """
+    from termaid import _prepare_source, _skip_directives, _typed
+
+    text = _typed(_skip_directives(_prepare_source(source)))
+    if not text or text.split(None, 1)[0].split("-", 1)[0].rstrip(":;").lower() not in ("graph", "flowchart"):
+        return source
     try:
-        from termaid import _prepare_source, _skip_directives, parse
-        graph = parse(source)
+        from termaid.parser.flowchart import parse_flowchart
+        graph = parse_flowchart(text)
     except Exception:
         return source
 
@@ -630,7 +639,7 @@ def _apply_show_ids(source: str) -> str:
         return source
 
     # Insert the redefinitions right after the graph/flowchart header line.
-    lines = _skip_directives(_prepare_source(source)).split("\n")
+    lines = text.split("\n")
     return lines[0] + "\n" + "\n".join(extra_lines) + "\n" + "\n".join(lines[1:])
 
 
@@ -701,6 +710,7 @@ def _run_demo(args: argparse.Namespace) -> int:
             args,
             "invalid_arguments",
             f"Unknown demo type: {demo_type}\nAvailable: all, {', '.join(_DEMO_SOURCES.keys())}",
+            exit_code=2,
         )
 
     from termaid import render, render_rich

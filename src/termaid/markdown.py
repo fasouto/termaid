@@ -8,10 +8,9 @@ in place and everything else passed through untouched:
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
-from .utils import OPEN_FENCE, dedent_line
+from .utils import OPEN_FENCE, closes_fence, unfence
 
 
 @dataclass
@@ -64,20 +63,27 @@ def split_markdown(text: str) -> list[Segment]:
             i += 1
             continue
 
-        close = re.compile(r"^[ \t]*" + re.escape(fence[0]) + "{" + str(len(fence)) + r",}[ \t]*\r?$")
-        end = next((j for j in range(i + 1, len(lines)) if close.match(lines[j])), None)
+        indent = match.group("indent")
+        body: list[str] = []
+        end = None
+        for j in range(i + 1, len(lines)):
+            line = unfence(lines[j], indent)
+            if line is None:
+                break  # the blockquote holding the fence ended first
+            if closes_fence(line, fence):
+                end = j
+                break
+            body.append(line.rstrip("\r"))
         words = match.group("info").split()
         is_mermaid = bool(words) and words[0].lower() == "mermaid"
 
         if end is None or not is_mermaid:
             # Not a diagram: keep the whole block, unsearched, as text.
-            stop = len(lines) if end is None else end + 1
+            stop = i + 1 + len(body) if end is None else end + 1
             pending.extend(lines[i:stop])
             i = stop
             continue
 
-        indent = match.group("indent")
-        body = [dedent_line(line, len(indent)).rstrip("\r") for line in lines[i + 1:end]]
         flush()
         segments.append(Segment(
             "\n".join(body),

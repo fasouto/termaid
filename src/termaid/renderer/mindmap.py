@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from ..model.mindmap import Mindmap, MindmapNode
 from .canvas import Canvas
-from ..utils import display_width
+from ..utils import display_width, wrap_display_text
 
 # When root has more children than this, spill some to the left
 _OVERFLOW_THRESHOLD = 6
@@ -67,16 +67,17 @@ def render_mindmap(
     *,
     use_ascii: bool = False,
     rounded: bool = True,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render a Mindmap model to a Canvas."""
+    """Render a Mindmap model to a Canvas, wrapping labels wider than *max_label_width*."""
     if diagram.root is None:
         return Canvas(1, 1)
 
     ch = _make_chars(use_ascii, rounded)
-    root = diagram.root
+    root = diagram.root if max_label_width is None else _wrapped(diagram.root, max(max_label_width, 1))
 
     if not root.children:
-        lines = [root.label]
+        lines = root.label.split("\n")
     else:
         left_children, right_children = _split_children(root.children)
         if not left_children:
@@ -92,6 +93,14 @@ def render_mindmap(
     for r, line in enumerate(lines):
         canvas.put_text(r, 0, line, style="node")
     return canvas
+
+
+def _wrapped(node: MindmapNode, width: int) -> MindmapNode:
+    """A copy of the tree under *node* with every label wrapped to *width* columns."""
+    return MindmapNode(
+        label="\n".join(wrap_display_text(node.label, width, hard_break=False)) or node.label,
+        children=[_wrapped(child, width) for child in node.children],
+    )
 
 
 def _split_children(
@@ -114,20 +123,30 @@ def _render_subtree_right(node: MindmapNode, ch: _Chars) -> tuple[list[str], int
 
     Returns (lines, connect_row).
     """
+    label = node.label.split("\n")
     if not node.children:
-        return [node.label], 0
+        return label, 0
 
     child_block, child_conn = _stack_right(node.children, ch)
+    child_block, label_rows = _beside(label, child_block, child_conn)
 
-    connector = node.label + " " + ch.h + ch.h
-    pad = " " * display_width(connector)
+    label_width = max(display_width(line) for line in label)
+    pad = " " * (label_width + 3)
     result: list[str] = []
     for i, line in enumerate(child_block):
         if i == child_conn:
-            result.append(connector + line)
+            result.append(_pad_right(label[0], label_width) + " " + ch.h + ch.h + line)
+        elif i in label_rows:
+            result.append(_pad_right(label[i - child_conn], label_width) + "   " + line)
         else:
             result.append(pad + line)
     return result, child_conn
+
+
+def _beside(label: list[str], block: list[str], conn: int) -> tuple[list[str], range]:
+    """*block* grown to hold *label*, whose first line sits on row *conn*, and the label's rows."""
+    rows = range(conn, conn + len(label))
+    return block + [""] * (rows.stop - len(block)), rows
 
 
 def _stack_right(children: list[MindmapNode], ch: _Chars) -> tuple[list[str], int]:
@@ -190,19 +209,23 @@ def _stack_right(children: list[MindmapNode], ch: _Chars) -> tuple[list[str], in
 
 def _render_subtree_left(node: MindmapNode, ch: _Chars) -> tuple[list[str], int]:
     """Render a node with children branching to the left (mirrored)."""
+    label = node.label.split("\n")
     if not node.children:
-        return [node.label], 0
+        return label, 0
 
     child_block, child_conn = _stack_left(node.children, ch)
+    child_block, label_rows = _beside(label, child_block, child_conn)
     child_width = max(display_width(line) for line in child_block)
     child_block = [_pad_left(line, child_width) for line in child_block]
 
-    connector = ch.h + ch.h + " " + node.label
-    pad = " " * display_width(connector)
+    label_width = max(display_width(line) for line in label)
+    pad = " " * (label_width + 3)
     result: list[str] = []
     for i, line in enumerate(child_block):
         if i == child_conn:
-            result.append(line + connector)
+            result.append(line + ch.h + ch.h + " " + label[0])
+        elif i in label_rows:
+            result.append(line + "   " + label[i - child_conn])
         else:
             result.append(line + pad)
     return result, child_conn
@@ -278,20 +301,21 @@ def _render_both_sides(
     ch: _Chars,
 ) -> list[str]:
     """Render root in the center with left and right subtrees."""
-    right_block, _ = _stack_right(right_children, ch)
-    left_block, _ = _stack_left(left_children, ch)
+    right_block, right_conn = _stack_right(right_children, ch)
+    left_block, left_conn = _stack_left(left_children, ch)
 
     left_width = max((display_width(line) for line in left_block), default=0)
     rh = len(right_block)
     lh = len(left_block)
-    total = max(rh, lh)
+    label = root_label.split("\n")
+    # Both sides meet the root on its first row.
+    root_row = max(right_conn, left_conn)
+    r_off = root_row - right_conn
+    l_off = root_row - left_conn
+    total = max(r_off + rh, l_off + lh, root_row + len(label))
 
-    r_off = (total - rh) // 2
-    l_off = (total - lh) // 2
-    root_row = total // 2
-
-    root_part = ch.h + ch.h + " " + root_label + " " + ch.h + ch.h
-    pad = " " * display_width(root_part)
+    label_width = max(display_width(line) for line in label)
+    pad = " " * (label_width + 6)
 
     result: list[str] = []
     for row in range(total):
@@ -299,7 +323,12 @@ def _render_both_sides(
         left = _pad_right(left_block[li], left_width) if 0 <= li < lh else " " * left_width
         ri = row - r_off
         right = right_block[ri] if 0 <= ri < rh else ""
-        center = root_part if row == root_row else pad
+        if row == root_row:
+            center = ch.h + ch.h + " " + _pad_right(label[0], label_width) + " " + ch.h + ch.h
+        elif root_row < row < root_row + len(label):
+            center = "   " + _pad_right(label[row - root_row], label_width) + "   "
+        else:
+            center = pad
         result.append(left + center + right)
 
     return result

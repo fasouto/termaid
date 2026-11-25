@@ -123,7 +123,7 @@ class TestCliWrapFit:
         import argparse
         from termaid import render
         from termaid.cli import _auto_fit
-        source = 'pie title Languages\n  "Python" : 45\n  "Go" : 30\n  "Rust" : 25'
+        source = 'timeline\n  title Plan\n  2024 : Design the thing\n  2025 : Build the thing'
         args = argparse.Namespace(
             gap=4, padding_x=4, padding_y=2, ascii=False, sharp_edges=False,
             inline_edge_labels=False, no_auto_fit=False, strict_width=False, arrow_style="pointer",
@@ -306,6 +306,21 @@ class TestShowIds:
         assert "B: End" in content
         assert "graph LR" not in content
 
+    @pytest.mark.parametrize("source", [
+        "mindmap\n  root[Project]\n    Design\n",
+        'block-beta\n  a["Alpha"] b["Beta"]\n',
+        "stateDiagram-v2\n  s1: Hello\n  s1 --> s2\n",
+        "kanban\n  todo[Todo]\n    t1[Write docs]\n",
+    ], ids=["mindmap", "block", "state", "kanban"])
+    def test_other_types_draw_as_without_the_flag(self, tmp_path: Path, source: str):
+        from termaid import render
+
+        mmd = tmp_path / "t.mmd"
+        mmd.write_text(source)
+        out = tmp_path / "out.txt"
+        assert main([str(mmd), "--show-ids", "-o", str(out)]) == 0
+        assert out.read_text(encoding="utf-8").strip("\n") == render(source).strip("\n")
+
 
 class TestThemeOptionInteractions:
     """--theme must not silently drop -o, --show-ids, --gap, or --width."""
@@ -389,3 +404,49 @@ class TestDemoOptions:
     def test_demo_rejects_a_bad_width(self, capsys):
         assert main(["--demo", "flowchart", "--width", "0"]) == 2
         assert capsys.readouterr().out == ""
+
+
+class TestCliArgumentEdges:
+    def test_a_dash_reads_stdin(self, monkeypatch, capsys):
+        import io
+
+        monkeypatch.setattr("sys.stdin", io.StringIO("graph LR\n  A --> B\n"))
+        assert main(["-"]) == 0
+        assert "─►" in capsys.readouterr().out
+
+    def test_markdown_with_json_is_an_argument_error(self, tmp_path: Path):
+        doc = tmp_path / "d.md"
+        doc.write_text("text\n")
+        assert main([str(doc), "--markdown", "--json", "pie"]) == 2
+
+    def test_an_unknown_demo_is_an_argument_error(self):
+        assert main(["--demo", "nosuch"]) == 2
+
+    def test_strict_width_names_the_wide_line_in_markdown(self, tmp_path: Path, capsys):
+        doc = tmp_path / "d.md"
+        doc.write_text("# Doc\n\n" + "word " * 14 + "\n\n```mermaid\ngraph LR; A-->B\n```\n")
+        assert main([str(doc), "--markdown", "--strict-width", "--width", "40"]) == 2
+        err = capsys.readouterr().err
+        assert "diagram is" not in err and "line 3 of the output is 70 cols wide" in err
+
+
+class TestChartsHonourWidth:
+    """--width narrows charts too, so a narrow pane gets a drawing, not the source."""
+
+    @pytest.mark.parametrize("fixture, width", [
+        ("packet/packet_01.mmd", 60),
+        ("packet/packet_01.mmd", 40),
+        ("mindmap/corner_cases_04.mmd", 30),
+        ("quadrant/quadrant_01.mmd", 44),
+        ("pie/piechart_10.mmd", 50),
+        ("xychart/showcase_horizontal_bars.mmd", 45),
+        ("xychart/showcase_simple_bar_chart.mmd", 60),
+        ("kanban/mermaid_docs_board.mmd", 160),
+    ])
+    def test_fits_the_width(self, tmp_path: Path, fixture: str, width: int):
+        from termaid.utils import max_line_width
+
+        out = tmp_path / "out.txt"
+        source = Path(__file__).parent / "fixtures" / fixture
+        assert main([str(source), "--width", str(width), "-o", str(out)]) == 0
+        assert max_line_width(out.read_text(encoding="utf-8").rstrip("\n")) <= width

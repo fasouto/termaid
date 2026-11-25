@@ -33,6 +33,17 @@
 - Class: `note for X` no longer covers the class beside X, and a free-standing note no longer sends lines through a box
 - Class: `class Car["Fast car"]` and backtick names are read, generics show as `Box<T>` and `List<T>`, `<br/>` breaks a note's line, and a `namespace` gets a frame when its classes sit together
 - Class with `--ascii`: lines have `+` corners, and inheritance is drawn `A`/`V`, apart from an association's `^`/`v`
+- Claude Code hook: after a Mermaid block longer than 8 KB, the next diagram in the same reply is drawn. The long block's closing fence was read as the start of a new block, which swallowed it
+- Claude Code hook and `--markdown`: a Mermaid block inside a blockquote (`> ```mermaid`) is drawn, inside the quote
+- `--show-ids` leaves every type but flowcharts as it is. It rewrote mindmap, kanban and block sources as if they were flowcharts
+- `--width` narrows packet (16 or 8 bits to a row), pie, quadrant, xychart, mindmap and kanban drawings. They ignored it, so narrow Claude Code panes showed them as source
+- Kanban: `@{ assigned: ..., ticket: ..., priority: ... }` at the end of a card is read. The ticket and assignee go on a second line and the priority shows on the card's left border. It was printed raw, and any `@` split the card's text
+- xychart: `x-axis Quarter [Q1, Q2, Q3]` keeps its title and its categories, quoted categories keep their commas, and a value outside the y-axis is held at the axis limit. A value far outside it never finished drawing (#66)
+- Quadrant: the y-axis label is drawn, `:::class` is dropped from a point's label, a quadrant title wraps inside its quadrant, and a point's label moves to a free spot before it covers a title or another label
+- Packet: one-bit fields get a letter each (`U`, `A`, `P`) with a legend, where every one was a `.`; bit numbers show where they fit; `title` is drawn; a short last row ends at its last field
+- Mindmap: Markdown strings lose their marks and may span lines
+- Journey, mindmap, kanban, pie, quadrant and packet: `accTitle`, `accDescr` and `click` lines are no longer drawn as content, and `<br/>` in their labels is a break or a space
+- CLI: `termaid -` reads stdin; `--markdown` with `--json` or `--tui`, and an unknown `--demo` type, exit 2 like other argument errors; the `--strict-width` message for Markdown names the line that is too wide
 - Mindmap: a node written with an id and a shape, such as `root((Project))` or `id[Text]`, shows only its text. The id and brackets were drawn, and `((Text))` kept one pair of brackets. `::icon(...)` and `:::class` lines are no longer drawn as nodes
 
 ## 0.14.1 (2026-11-25)

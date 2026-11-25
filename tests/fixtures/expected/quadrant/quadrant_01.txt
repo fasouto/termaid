@@ -1,5 +1,6 @@
                        Priority Matrix
 
+  ↑ Low Impact -> High Impact
                                 │
                                 │
                                 │
@@ -13,7 +14,7 @@
   ──────────────────────────────┼─────────────────────────────
                                 │
                                 │
-                                │               Rewrite●
+                                │              Rewrite ●
                                 │
              Delegate           │            Skip
                                 │

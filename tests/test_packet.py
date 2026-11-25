@@ -68,3 +68,43 @@ class TestPacketWideChars:
         # content row keeps its left border, field separator, and right border
         content_row = next(l for l in lines if "Rest" in l)
         assert content_row.count("│") >= 3
+
+
+TCP_FLAGS = (
+    "packet-beta\n"
+    '0-9: "Reserved"\n10: "URG"\n11: "ACK"\n12: "PSH"\n13: "RST"\n14: "SYN"\n15: "FIN"\n'
+    '16-31: "Window"\n'
+)
+
+
+class TestPacketNarrowFields:
+    def test_one_bit_fields_can_be_told_apart(self):
+        out = render(TCP_FLAGS)
+        box_row = next(line for line in out.splitlines() if "Reserved" in line)
+        keys = [cell.strip() for cell in box_row.split("│")[2:8]]
+        assert len(set(keys)) == 6 and all(keys)
+        for key, name, bit in zip(keys, ("URG", "ACK", "PSH", "RST", "SYN", "FIN"), range(10, 16)):
+            assert f"{key} = {name} [{bit}]" in out
+
+    def test_one_bit_fields_show_their_bit_numbers(self):
+        numbers = render(TCP_FLAGS).splitlines()[0].split()
+        assert numbers == ["0", "9", "10", "11", "12", "13", "14", "15", "16", "31"]
+
+    def test_the_last_row_ends_at_its_last_field(self):
+        out = render('packet-beta\n0-15: "Source Port"\n16-31: "Destination Port"\n32: "A"\n33: "B"\n')
+        last_box = [line for line in out.splitlines() if "B" in line and "│" in line][-1]
+        assert last_box.rstrip().endswith("│B │")
+
+
+class TestPacketTitle:
+    def test_title_keyword(self):
+        out = render('packet-beta\n  title UDP Packet\n  0-15: "Source Port"\n')
+        assert out.splitlines()[0].strip() == "UDP Packet"
+
+    def test_frontmatter_title(self):
+        out = render('---\ntitle: TCP Packet\n---\npacket-beta\n  0-15: "Source Port"\n')
+        assert out.splitlines()[0].strip() == "TCP Packet"
+
+    def test_labels_stay_inside_at_no_vertical_padding(self):
+        out = render('packet-beta\n  0-15: "Source Port"\n', padding_y=0)
+        assert any(line.startswith(" │") and "Source Port" in line for line in out.splitlines())

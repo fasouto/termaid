@@ -6,7 +6,7 @@ Supports vertical (default) and horizontal orientations.
 from __future__ import annotations
 
 from ..model.xychart import XYChart
-from ..utils import display_width
+from ..utils import display_width, truncate_to_width
 from .canvas import Canvas
 
 _CHART_H = 15     # chart area height (rows for data) in vertical mode
@@ -25,14 +25,20 @@ def render_xychart(
     *,
     use_ascii: bool = False,
     rounded: bool = True,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render an XYChart model to a Canvas."""
+    """Render an XYChart model to a Canvas.
+
+    With *max_label_width*, the plot narrows to about that many columns:
+    thinner bars and cut category names when upright, shorter bars when
+    horizontal.
+    """
     if not diagram.datasets:
         return Canvas(1, 1)
 
     if diagram.horizontal:
-        return _render_horizontal(diagram, use_ascii=use_ascii)
-    return _render_vertical(diagram, use_ascii=use_ascii, rounded=rounded)
+        return _render_horizontal(diagram, use_ascii=use_ascii, max_width=max_label_width)
+    return _render_vertical(diagram, use_ascii=use_ascii, rounded=rounded, max_width=max_label_width)
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +58,9 @@ def _draw_axis_header(canvas: Canvas, row: int, margin_l: int, label: str) -> No
     canvas.put_text(row, col, label, style="edge_label")
 
 
-def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = True) -> Canvas:
+def _render_vertical(
+    diagram: XYChart, use_ascii: bool = False, rounded: bool = True, max_width: int | None = None,
+) -> Canvas:
     bar_char = "#" if use_ascii else _BAR_CHAR
     bar_half = "=" if use_ascii else _BAR_HALF
     marker = "*" if use_ascii else _LINE_MARKER
@@ -90,8 +98,18 @@ def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = 
 
     cat_width = max(display_width(c) for c in categories) if categories else 2
     col_width = max(_BAR_WIDTH, cat_width + 1)
+    gap = _BAR_GAP
+    # A numeric axis can skip tick labels; named categories are cut short instead.
+    skip_labels = bool(diagram.x_range and not diagram.x_categories)
+    if max_width is not None:
+        room = max_width - _MARGIN_L - 3
+        if (room + gap) // n_points - gap < 1:
+            gap = 1
+        col_width = max(1, min(col_width, (room + gap) // n_points - gap))
+        if not skip_labels:
+            categories = [truncate_to_width(c, col_width + gap - 1) for c in categories]
 
-    chart_w = n_points * (col_width + _BAR_GAP) - _BAR_GAP
+    chart_w = n_points * (col_width + gap) - gap
     total_w = _MARGIN_L + 1 + chart_w + 2
 
     title_lines = _header_rows(diagram.title, diagram.y_label)
@@ -129,10 +147,11 @@ def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = 
 
     # Draw datasets
     for ds in diagram.datasets:
-        for i, val in enumerate(ds.values):
+        values = _clamped(ds.values, min_val, max_val)
+        for i, val in enumerate(values):
             if i >= n_points:
                 break
-            col_x = _MARGIN_L + 1 + i * (col_width + _BAR_GAP)
+            col_x = _MARGIN_L + 1 + i * (col_width + gap)
             bar_h = int((val - min_val) / val_range * _CHART_H)
 
             if ds.chart_type == "bar":
@@ -155,18 +174,22 @@ def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = 
                 canvas.put(row, mid_x, line_ch, merge=False, style="edge")
 
                 if i > 0:
-                    prev_val = ds.values[i - 1]
+                    prev_val = values[i - 1]
                     prev_h = int((prev_val - min_val) / val_range * _CHART_H)
                     prev_row = row_offset + _CHART_H - 1 - max(0, prev_h - 1)
-                    prev_x = _MARGIN_L + 1 + (i - 1) * (col_width + _BAR_GAP) + col_width // 2
+                    prev_x = _MARGIN_L + 1 + (i - 1) * (col_width + gap) + col_width // 2
                     _draw_line_v(canvas, prev_x, prev_row, mid_x, row, use_ascii, rounded)
 
     # X-axis ticks and labels
+    label_end = 0
     for i, cat in enumerate(categories):
-        col_x = _MARGIN_L + 1 + i * (col_width + _BAR_GAP) + col_width // 2
+        col_x = _MARGIN_L + 1 + i * (col_width + gap) + col_width // 2
         canvas.put(axis_row, col_x, tick, merge=False, style="edge")
-        label_x = col_x - display_width(cat) // 2
-        canvas.put_text(axis_row + 1, max(0, label_x), cat, style="edge_label")
+        label_x = max(0, col_x - display_width(cat) // 2)
+        if skip_labels and label_x <= label_end and i:
+            continue
+        canvas.put_text(axis_row + 1, label_x, cat, style="edge_label")
+        label_end = label_x + display_width(cat)
 
     if diagram.x_label:
         lx = _MARGIN_L + 1 + (chart_w - display_width(diagram.x_label)) // 2
@@ -179,7 +202,7 @@ def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = 
 # Horizontal chart
 # ---------------------------------------------------------------------------
 
-def _render_horizontal(diagram: XYChart, use_ascii: bool = False) -> Canvas:
+def _render_horizontal(diagram: XYChart, use_ascii: bool = False, max_width: int | None = None) -> Canvas:
     bar_char = "#" if use_ascii else _BAR_CHAR
     bar_half = "|" if use_ascii else _BAR_HALF_H
     marker = "*" if use_ascii else _LINE_MARKER
@@ -220,7 +243,7 @@ def _render_horizontal(diagram: XYChart, use_ascii: bool = False) -> Canvas:
     bar_height = 1  # each bar is 1 row tall
     row_gap = 1     # gap between rows
     chart_h = n_points * (bar_height + row_gap) - row_gap
-    chart_w = _CHART_W
+    chart_w = _CHART_W if max_width is None else max(10, min(_CHART_W, max_width - margin_l - 3))
 
     title_lines = _header_rows(diagram.title, diagram.x_label)
     total_h = title_lines + chart_h + 3  # chart + axis + value labels
@@ -264,7 +287,8 @@ def _render_horizontal(diagram: XYChart, use_ascii: bool = False) -> Canvas:
 
     # Draw datasets
     for ds in diagram.datasets:
-        for i, val in enumerate(ds.values):
+        values = _clamped(ds.values, min_val, max_val)
+        for i, val in enumerate(values):
             if i >= n_points:
                 break
             row = row_offset + i * (bar_height + row_gap)
@@ -287,7 +311,7 @@ def _render_horizontal(diagram: XYChart, use_ascii: bool = False) -> Canvas:
             point_x = margin_l + int((val - min_val) / val_range * (chart_w - 1))
             canvas.put(row, point_x, vt, merge=False, style="edge")
             if i > 0:
-                prev_val = ds.values[i - 1]
+                prev_val = values[i - 1]
                 prev_x = margin_l + int((prev_val - min_val) / val_range * (chart_w - 1))
                 prev_row = row_offset + (i - 1) * (bar_height + row_gap)
                 _draw_line_h(canvas, prev_x, prev_row, point_x, row, use_ascii)
@@ -373,6 +397,12 @@ def _draw_line_h(canvas: Canvas, x1: int, y1: int, x2: int, y2: int, use_ascii: 
 
         for r in range(mid_y + 1, y2):
             canvas.put(r, x2, vt, merge=False, style="edge")
+
+
+def _clamped(values: list[float], lo: float, hi: float) -> list[float]:
+    """*values* held to the axis range: a value past it draws at its edge, as in Mermaid."""
+    lo, hi = min(lo, hi), max(lo, hi)
+    return [min(max(value, lo), hi) for value in values]
 
 
 def _format_val(val: float) -> str:

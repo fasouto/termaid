@@ -120,3 +120,39 @@ class TestNodeShapes:
     def test_icon_and_class_lines_are_not_nodes(self):
         out = render("mindmap\n  root((termaid))\n    Library\n    ::icon(fa fa-book)\n    :::urgent\n")
         assert "icon" not in out and "urgent" not in out and "Library" in out
+
+
+class TestMindmapLabelText:
+    """Mermaid draws Markdown strings and <br> as formatted text, and never draws meta lines."""
+
+    def test_markdown_strings_print_their_text(self):
+        out = render(
+            'mindmap\n'
+            '    id1["`**Root** with\n'
+            'a second line`"]\n'
+            '      id2["`The dog in **the** hog`"]\n'
+            '      id3[Regular label]\n'
+        )
+        assert "`" not in out and "*" not in out and "id1" not in out
+        assert "The dog in the hog" in out
+        rows = out.splitlines()
+        root_row = next(i for i, row in enumerate(rows) if "Root with" in row)
+        assert "a second line" in rows[root_row + 1]
+        assert "a second line" not in rows[root_row]
+
+    def test_br_breaks_a_label(self):
+        out = render("mindmap\n  root[One<br/>Two]\n    Leaf\n")
+        assert "<br" not in out
+        assert [row.strip()[:3] for row in out.splitlines()[:2]] == ["One", "Two"]
+
+    def test_meta_lines_are_not_nodes(self):
+        mm = parse_mindmap(
+            "mindmap\n"
+            "  accTitle: Plans\n"
+            "  accDescr { Many\n"
+            "  lines }\n"
+            "  root((Plans))\n"
+            "    A\n"
+        )
+        assert mm.root.label == "Plans"
+        assert [c.label for c in mm.root.children] == ["A"]

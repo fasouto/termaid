@@ -69,3 +69,53 @@ class TestMalformedQuadrantInput:
             "    Good: [0.2, 0.3]"
         )
         assert [p.label for p in qc.points] == ["Good"]
+
+
+DOCS_EXAMPLE = (
+    "quadrantChart\n"
+    "    title Reach and engagement of campaigns\n"
+    "    x-axis Low Reach --> High Reach\n"
+    "    y-axis Low Engagement --> High Engagement\n"
+    "    quadrant-1 We should expand\n"
+    "    quadrant-2 Need to promote\n"
+    "    quadrant-3 Re-evaluate\n"
+    "    quadrant-4 May be improved\n"
+    "    Campaign A: [0.3, 0.6]\n"
+    "    Campaign B: [0.45, 0.23]\n"
+    "    Campaign C: [0.57, 0.69]\n"
+    "    Campaign D: [0.78, 0.34]\n"
+    "    Campaign E: [0.40, 0.34]\n"
+    "    Campaign F: [0.35, 0.78]\n"
+)
+
+
+class TestQuadrantText:
+    def test_the_y_axis_label_is_drawn(self):
+        out = render(DOCS_EXAMPLE)
+        assert "Low Engagement" in out and "High Engagement" in out
+
+    def test_every_label_and_quadrant_title_is_whole(self):
+        out = render(DOCS_EXAMPLE)
+        for text in ("We should expand", "Need to promote", "Re-evaluate", "May be improved"):
+            assert text in out
+        for name in "ABCDEF":
+            assert f"Campaign {name}" in out
+        assert out.count("●") == 6
+
+    def test_a_class_on_a_point_is_not_drawn(self):
+        out = render("quadrantChart\n    Point B:::hot: [0.2, 0.3]\n")
+        assert ":::" not in out and "Point B" in out
+
+    def test_a_long_quadrant_title_is_not_cut_by_the_axis(self):
+        out = render(
+            "quadrantChart\n"
+            "    quadrant-1 Quick wins for the next sprint\n"
+            "    quadrant-2 Major projects worth a look\n"
+        )
+        words = " ".join(out.replace("│", " ").split())
+        for word in "Quick wins for the next sprint Major projects worth a look".split():
+            assert f" {word} " in f" {words} "
+
+    def test_br_tags_do_not_print(self):
+        out = render("quadrantChart\n    title A<br/>B\n    quadrant-1 C<br>D\n    P<br>Q: [0.2, 0.3]\n")
+        assert "<br" not in out

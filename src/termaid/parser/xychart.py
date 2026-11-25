@@ -13,12 +13,17 @@ Syntax:
 """
 from __future__ import annotations
 
+import math
 import re
 
 from ..model.xychart import XYChart, XYDataset
 
 # A number that float() is guaranteed to accept (rejects e.g. "0.1.2")
 _NUM = r"-?\d+(?:\.\d+)?"
+# An axis: an optional title, quoted or not, then categories or a range.
+_AXIS = re.compile(rf'^(.*?)\s*(?:\[(.*)\]|(?<!\S)({_NUM})\s*-->\s*({_NUM}))?\s*$')
+_LIMIT = 1e300
+_LIST_ITEM = re.compile(r'\s*(?:"[^"]*"|[^,]+)')
 
 
 def parse_xychart(text: str) -> XYChart:
@@ -64,67 +69,29 @@ def parse_xychart(text: str) -> XYChart:
 
 
 def _parse_axis(rest: str, chart: XYChart, is_x: bool) -> None:
-    """Parse axis config: title, categories, or numeric range."""
-    # Try: "title" [cat1, cat2, ...]
-    m = re.match(r'^"([^"]+)"\s*\[(.+)\]', rest)
-    if m:
-        if is_x:
-            chart.x_label = m.group(1)
-            chart.x_categories = [_strip_quotes(c.strip()) for c in m.group(2).split(",")]
-        else:
-            chart.y_label = m.group(1)
-        return
-
-    # Try: [cat1, cat2, ...]
-    bracket = _parse_bracket_list(rest)
-    if bracket is not None:
-        if is_x:
-            chart.x_categories = bracket
-        return
-
-    # Try: title min --> max  or  "title" min --> max
-    m = re.match(rf'^(?:"([^"]+)"|(\S+))\s+({_NUM})\s*-->\s*({_NUM})', rest)
-    if m:
-        label = m.group(1) or m.group(2)
-        lo, hi = float(m.group(3)), float(m.group(4))
-        if is_x:
-            chart.x_label = label
-            chart.x_range = (lo, hi)
-        else:
-            chart.y_label = label
-            chart.y_range = (lo, hi)
-        return
-
-    # Try: min --> max (no title)
-    m = re.match(rf'^({_NUM})\s*-->\s*({_NUM})', rest)
-    if m:
-        lo, hi = float(m.group(1)), float(m.group(2))
-        if is_x:
-            chart.x_range = (lo, hi)
-        else:
-            chart.y_range = (lo, hi)
-        return
-
-    # Just a title/label
+    """Parse axis config: an optional title, then categories or a numeric range."""
+    m = _AXIS.match(rest)
+    label = _strip_quotes(m.group(1))
     if is_x:
-        chart.x_label = _strip_quotes(rest)
+        chart.x_label = label or chart.x_label
     else:
-        chart.y_label = _strip_quotes(rest)
+        chart.y_label = label or chart.y_label
+    if m.group(2) is not None:
+        if is_x:
+            items = (_strip_quotes(item.strip()) for item in _LIST_ITEM.findall(m.group(2)))
+            chart.x_categories = [item for item in items if item]
+    elif m.group(3) is not None:
+        axis_range = (_bounded(float(m.group(3))), _bounded(float(m.group(4))))
+        if is_x:
+            chart.x_range = axis_range
+        else:
+            chart.y_range = axis_range
 
 
 def _strip_quotes(text: str) -> str:
     if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
         return text[1:-1]
     return text
-
-
-def _parse_bracket_list(text: str) -> list[str] | None:
-    """Parse [item1, item2, ...] into a list of strings."""
-    m = re.match(r'\[(.+)\]', text)
-    if not m:
-        return None
-    items = m.group(1).split(",")
-    return [_strip_quotes(item.strip()) for item in items if item.strip()]
 
 
 def _parse_number_list(text: str) -> list[float]:
@@ -137,7 +104,15 @@ def _parse_number_list(text: str) -> list[float]:
     for item in items:
         item = item.strip().lstrip("+")
         try:
-            result.append(float(item))
+            value = float(item)
         except ValueError:
             continue
+        # Mermaid reads only plain numbers, never inf or nan.
+        if math.isfinite(value):
+            result.append(_bounded(value))
     return result
+
+
+def _bounded(value: float) -> float:
+    """*value* held within ±1e300, so the chart's arithmetic cannot overflow."""
+    return max(-_LIMIT, min(_LIMIT, value))

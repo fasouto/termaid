@@ -21,8 +21,13 @@ def render_pie_chart(
     diagram: PieChart,
     *,
     use_ascii: bool = False,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render a PieChart as a horizontal bar chart on a Canvas."""
+    """Render a PieChart as a horizontal bar chart on a Canvas.
+
+    With *max_label_width*, the bars are no longer than it.
+    """
+    bar_width = _BAR_WIDTH if max_label_width is None else max(1, min(_BAR_WIDTH, max_label_width))
 
     if not diagram.slices:
         canvas = Canvas(1, 1)
@@ -48,8 +53,8 @@ def render_pie_chart(
     bar_left = label_col_w
     # One cell per slice at least, so a chart with more slices than cells
     # gets a longer stacked bar instead of losing slices.
-    stacked_w = max(_BAR_WIDTH, len(diagram.slices))
-    canvas_w = bar_left + _BAR_WIDTH + max_suffix_len + _MARGIN
+    stacked_w = max(bar_width, len(diagram.slices))
+    canvas_w = bar_left + bar_width + max_suffix_len + _MARGIN
     canvas_w = max(canvas_w, bar_left + 1 + stacked_w + _MARGIN)
     if diagram.title:
         canvas_w = max(canvas_w, display_width(diagram.title) + 2 * _MARGIN)
@@ -102,7 +107,7 @@ def render_pie_chart(
     for i, s in enumerate(diagram.slices):
         row = bars_top + i
         fill = fills[i % len(fills)]
-        bar_len = max(1, round(s.value / total * _BAR_WIDTH))
+        bar_len = max(1, round(s.value / total * bar_width))
 
         # Label (right-aligned)
         label_text = " " * (max_label_len - display_width(s.label)) + s.label

@@ -6,11 +6,12 @@ at their (x, y) positions using marker characters.
 from __future__ import annotations
 
 from ..model.quadrant import QuadrantChart
-from ..utils import display_width, iter_cells
+from ..utils import display_width, iter_cells, wrap_display_text
 from .canvas import Canvas
 
 
 _CHART_W = 60  # chart area width
+_MIN_CHART_W = 16
 _CHART_H = 20  # chart area height
 _MARGIN_L = 2  # left margin for y-axis label
 _MARGIN_B = 2  # bottom margin for x-axis label
@@ -20,8 +21,12 @@ def render_quadrant(
     diagram: QuadrantChart,
     *,
     use_ascii: bool = False,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render a QuadrantChart model to a Canvas."""
+    """Render a QuadrantChart model to a Canvas, no wider than *max_label_width* when it is given."""
+    chart_w = _CHART_W
+    if max_label_width is not None:
+        chart_w = max(_MIN_CHART_W, min(_CHART_W, max_label_width - _MARGIN_L - 1))
     hz = "-" if use_ascii else "─"
     vt = "|" if use_ascii else "│"
     cross = "+" if use_ascii else "┼"
@@ -32,9 +37,12 @@ def render_quadrant(
 
     # Title
     if diagram.title:
-        pad = (_MARGIN_L + _CHART_W - display_width(diagram.title)) // 2
+        pad = (_MARGIN_L + chart_w - display_width(diagram.title)) // 2
         lines.append(" " * max(0, pad) + diagram.title)
         lines.append("")
+    # The y-axis runs up the chart, so its label heads the grid.
+    if diagram.y_label:
+        lines.append(" " * _MARGIN_L + ("^ " if use_ascii else "↑ ") + diagram.y_label)
 
     # Build the chart grid
     # Quadrant labels centered in their quadrant
@@ -43,11 +51,11 @@ def render_quadrant(
     q3_label = diagram.quadrant_3  # bottom-left
     q4_label = diagram.quadrant_4  # bottom-right
 
-    half_w = _CHART_W // 2
+    half_w = chart_w // 2
     half_h = _CHART_H // 2
 
     # Create empty grid
-    grid: list[list[str]] = [[" " for _ in range(_CHART_W)] for _ in range(_CHART_H)]
+    grid: list[list[str]] = [[" " for _ in range(chart_w)] for _ in range(_CHART_H)]
 
     # Place quadrant labels (centered in each quadrant)
     _place_label(grid, q2_label, half_w // 2, half_h // 2)     # top-left
@@ -56,32 +64,40 @@ def render_quadrant(
     _place_label(grid, q4_label, half_w + half_w // 2, half_h + half_h // 2)  # bottom-right
 
     # Draw axes (center lines)
-    for c in range(_CHART_W):
+    for c in range(chart_w):
         grid[half_h][c] = hz
     for r in range(_CHART_H):
         grid[r][half_w] = vt
     grid[half_h][half_w] = cross
 
-    # Plot points
+    # Plot points: every marker first, so no label covers one.
+    spots: list[tuple[int, int]] = []
     for point in diagram.points:
-        px = int(point.x * (_CHART_W - 1))
+        px = int(point.x * (chart_w - 1))
         py = int((1 - point.y) * (_CHART_H - 1))  # y is inverted (0=bottom)
-        px = max(0, min(_CHART_W - 1, px))
+        px = max(0, min(chart_w - 1, px))
         py = max(0, min(_CHART_H - 1, py))
         grid[py][px] = marker
-        # Place label to the right of the marker (with 1 char gap)
-        label = " " + point.label
-        start = px + 1
-        if start + display_width(label) > _CHART_W:
-            # Doesn't fit on right, try left
-            start = px - display_width(label)
-        if start >= 0:
-            _write_cells(grid[py], start, label)
+        spots.append((px, py))
+    free = (" ", hz, vt, cross)
+    for point, (px, py) in zip(diagram.points, spots):
+        # A space keeps the label off its marker.
+        after, before = " " + point.label, point.label + " "
+        width = display_width(after)
+        # Right of the marker, then left of it, then centred on the row
+        # above or below; the first that covers nothing wins.
+        tries = [(py, px + 1, after), (py, px - width, before)]
+        tries += [(row, max(0, min(chart_w - width, px - width // 2)), after) for row in (py - 1, py + 1)]
+        fitting = [spot for spot in tries if 0 <= spot[0] < _CHART_H and 0 <= spot[1] <= chart_w - width]
+        clear = [spot for spot in fitting if all(cell in free for cell in grid[spot[0]][spot[1]:spot[1] + width])]
+        if clear or fitting:
+            row, col, text = (clear or fitting)[0]
+            _write_cells(grid[row], col, text)
 
     # Build a style grid matching the char grid
-    style_grid: list[list[str]] = [["default" for _ in range(_CHART_W)] for _ in range(_CHART_H)]
+    style_grid: list[list[str]] = [["default" for _ in range(chart_w)] for _ in range(_CHART_H)]
     for r in range(_CHART_H):
-        for c in range(_CHART_W):
+        for c in range(chart_w):
             if r < half_h and c < half_w:
                 style_grid[r][c] = "section:1"   # Q2 top-left
             elif r < half_h and c >= half_w:
@@ -91,7 +107,7 @@ def render_quadrant(
             else:
                 style_grid[r][c] = "section:3"   # Q4 bottom-right
     # Axes get edge style
-    for c in range(_CHART_W):
+    for c in range(chart_w):
         style_grid[half_h][c] = "edge"
     for r in range(_CHART_H):
         style_grid[r][half_w] = "edge"
@@ -102,12 +118,12 @@ def render_quadrant(
     # X-axis label
     x_label_line = ""
     if diagram.x_label:
-        x_pad = _MARGIN_L + (_CHART_W - display_width(diagram.x_label)) // 2
+        x_pad = _MARGIN_L + (chart_w - display_width(diagram.x_label)) // 2
         x_label_line = " " * max(0, x_pad) + diagram.x_label
 
     # Compute canvas size
     total_h = title_lines + _CHART_H + (2 if x_label_line else 0)
-    width = _MARGIN_L + _CHART_W + 1
+    width = _MARGIN_L + chart_w + 1
     canvas = Canvas(width, total_h)
 
     # Write title lines
@@ -119,7 +135,7 @@ def render_quadrant(
     # For spaces, write the style directly since put() skips them.
     for r in range(_CHART_H):
         row_y = title_lines + r
-        for c in range(_CHART_W):
+        for c in range(chart_w):
             col_x = _MARGIN_L + c
             ch = grid[r][c]
             style = style_grid[r][c]
@@ -136,10 +152,12 @@ def render_quadrant(
 
 
 def _place_label(grid: list[list[str]], label: str, cx: int, cy: int) -> None:
-    """Place a label centered at (cx, cy) in the grid."""
-    start_x = cx - display_width(label) // 2
-    if 0 <= cy < len(grid):
-        _write_cells(grid[cy], start_x, label)
+    """Place a label centered at (cx, cy) in the grid, wrapped to stay inside its quadrant."""
+    rows = wrap_display_text(label, len(grid[0]) // 2 - 2) if label else []
+    top = cy - (len(rows) - 1) // 2
+    for i, text in enumerate(rows):
+        if 0 <= top + i < len(grid):
+            _write_cells(grid[top + i], cx - display_width(text) // 2, text)
 
 
 def _write_cells(row: list[str], start: int, text: str) -> None:

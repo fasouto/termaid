@@ -100,13 +100,13 @@ class TestJsonErrors:
     def test_markdown_with_json_ingest(self, diagram: Path, capsys):
         code = main(["--diagnostics-format", "json", "--markdown", "--json", "pie", str(diagram)])
         d = _single(capsys.readouterr().err)
-        assert code == 1
+        assert code == 2
         assert d["code"] == "invalid_arguments"
 
     def test_unknown_demo(self, capsys):
         code = main(["--diagnostics-format", "json", "--demo", "nope"])
         d = _single(capsys.readouterr().err)
-        assert code == 1
+        assert code == 2
         assert d["code"] == "invalid_arguments"
 
     def test_json_conversion_failure(self, tmp_path: Path, capsys):

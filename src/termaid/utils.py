@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Iterator
+from typing import Iterable, Iterator
 
 # A %%{...}%% directive, which may span lines. It ends at the next %%{, so an
 # unclosed one is not rescanned to the end of the source from every later %%{.
@@ -11,8 +11,10 @@ DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
 
 # An opening Markdown fence: three or more backticks or tildes, then an info
 # string. Any indentation is accepted so that diagrams nested in list items
-# are found; the indent is removed from the diagram's lines.
-OPEN_FENCE = re.compile(r"^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+# are found, and so are blockquote markers; :func:`unfence` removes the
+# indent from the block's lines.
+OPEN_FENCE = re.compile(r"^(?P<indent>(?:[ \t]*>[ \t]?)*[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+_QUOTE_MARK = re.compile(r"[ \t]*>[ \t]?")
 
 
 def dedent_line(line: str, width: int) -> str:
@@ -23,16 +25,32 @@ def dedent_line(line: str, width: int) -> str:
     return line[n:]
 
 
-_META_LINE = re.compile(r"(?:accTitle\s*:|accDescr\s*[:{]|click\s)")
+def _unquote(line: str, depth: int) -> str | None:
+    for _ in range(depth):
+        match = _QUOTE_MARK.match(line)
+        if match is None:
+            return None
+        line = line[match.end():]
+    return line
 
 
-def is_meta_line(line: str) -> bool:
-    """Whether a stripped line is an accTitle, an accDescr or a click handler, which Mermaid does not draw.
+def unfence(line: str, indent: str) -> str | None:
+    """*line* of a fenced block whose fence had *indent*, with that indent removed.
 
-    An ``accDescr {`` without its ``}`` runs on to the line holding the ``}``;
-    the caller skips those lines too.
+    None when the line lacks the indent's blockquote markers, which ends
+    the quote and so the block.
     """
-    return _META_LINE.match(line) is not None
+    depth = indent.count(">")
+    rest = _unquote(line, depth)
+    if rest is None:
+        return None
+    return dedent_line(rest, len(_unquote(indent, depth)))
+
+
+def closes_fence(line: str, fence: str) -> bool:
+    """Whether *line*, its indent removed, closes a block opened with *fence*."""
+    stripped = line.strip(" \t\r")
+    return len(stripped) >= len(fence) and stripped == fence[0] * len(stripped)
 
 
 _BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
@@ -54,6 +72,26 @@ def line_breaks(text: str, sep: str = "\n") -> str:
         part.strip() if 0 < i < last else part.rstrip() if i == 0 else part.lstrip()
         for i, part in enumerate(parts)
     )
+
+
+_META_LINE = re.compile(r"\s*(?:acc(?:Title|Descr)\s*:|accDescr\s*\{|click\s+[\w-]+\s+(?:href\b|call\b|[\"']))")
+
+
+def is_meta_line(line: str) -> bool:
+    """Whether *line* is an ``accTitle:``, ``accDescr:`` or ``click`` line, which Mermaid never draws."""
+    return _META_LINE.match(line) is not None
+
+
+def without_meta_lines(lines: Iterable[str]) -> Iterator[str]:
+    """*lines* without their meta lines, an ``accDescr { … }`` block included."""
+    in_block = False
+    for line in lines:
+        if in_block:
+            in_block = "}" not in line
+        elif is_meta_line(line):
+            in_block = line.lstrip().startswith("accDescr") and "{" in line and "}" not in line
+        else:
+            yield line
 
 
 _SOFT_HYPHEN = "­"
