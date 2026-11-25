@@ -30,6 +30,7 @@ class _StateDiagramParser:
         self._aliases: dict[str, str] = {}  # alias -> display label
         self._subgraph_stack: list[Subgraph] = []
         self._descriptions: dict[str, list[str]] = {}  # state id -> `id : text` lines
+        self._open_note: GraphNote | None = None  # a note whose `end note` hasn't come
         self._start_count = 0
         self._end_count = 0
 
@@ -45,7 +46,10 @@ class _StateDiagramParser:
         lines = lines[1:]
 
         for line in lines:
-            self._parse_line(line)
+            if self._open_note is not None:
+                self._note_line(self._open_note, line)
+            else:
+                self._parse_line(line)
 
         self._apply_descriptions()
         self._resolve_composite_edges()
@@ -63,6 +67,12 @@ class _StateDiagramParser:
             if stripped:
                 result.append(stripped)
         return result
+
+    def _note_line(self, note: GraphNote, line: str) -> None:
+        if line.lower() == "end note":
+            self._open_note = None
+        else:
+            note.text = "\n".join(filter(None, [note.text, line_breaks(line)]))
 
     def _parse_line(self, line: str) -> None:
         lower = line.strip().lower()
@@ -87,18 +97,24 @@ class _StateDiagramParser:
                 self._subgraph_stack.pop()
             return
 
-        # Note: note right of A : text  OR  note left of A : text
+        # Note: `note right of A : text`, or `note left of A` with its text
+        # on the lines up to `end note`
         note_match = re.match(
-            r'note\s+(right\s+of|left\s+of)\s+(\S+)\s*:\s*(.*)',
+            r'note\s+(right|left)\s+of\s+([^\s:]+)\s*(?::\s*(.*))?$',
             line, re.IGNORECASE
         )
         if note_match:
-            position = note_match.group(1).lower().replace(" ", "")  # "rightof"/"leftof"
             target = note_match.group(2)
-            text = line_breaks(note_match.group(3).strip())
             if target not in self.graph.nodes:
                 self._ensure_node(target, self._aliases.get(target, target), NodeShape.ROUNDED)
-            self.graph.notes.append(GraphNote(text=text, position=position, target=target))
+            note = GraphNote(
+                text=line_breaks((note_match.group(3) or "").strip()),
+                position=note_match.group(1).lower() + "of",
+                target=target,
+            )
+            self.graph.notes.append(note)
+            if note_match.group(3) is None:
+                self._open_note = note
             return
         # Skip other note variants we don't handle yet
         if lower.startswith("note "):

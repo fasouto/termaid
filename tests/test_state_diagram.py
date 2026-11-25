@@ -4,6 +4,8 @@ Modeled after beautiful-mermaid's parser.test.ts state diagram section.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from termaid import parse, render
@@ -392,10 +394,8 @@ def test_ascii_start_and_end_states_use_ascii_marks():
 
 def _assert_notes_clear_of_states(source: str, states: list[str], notes: list[str]) -> str:
     output = render(source)
-    for name in states:
-        assert f"│  {name}  │" in output, f"{name} is covered:\n{output}"
-    for text in notes:
-        assert f"│ {text} │" in output, f"{text!r} is covered:\n{output}"
+    for text in [*states, *notes]:
+        assert re.search(rf"[│├┤] +{text} +[│├┤]", output), f"{text!r} is covered:\n{output}"
     return output
 
 
