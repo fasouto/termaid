@@ -104,8 +104,9 @@ class TestSubgraphsLinkedBothWays:
 
 
 class TestTitleWiderThanContents:
-    """A title wider than the nodes in its subgraph stretches the box, and the
-    gap beside it has to grow with it, or the box covers its neighbours."""
+    """A title wider than the nodes in its subgraph stretches the box only as
+    far as the next node or box. Past that the title is clipped, so the
+    drawing gets no wider and the box covers no neighbour."""
 
     @pytest.mark.parametrize("d", ["LR", "RL"])
     def test_next_node_stays_outside(self, d):
@@ -115,11 +116,9 @@ class TestTitleWiderThanContents:
             "  pay --> db[(Ledger)]\n"
         )
         out = render(src)
-        assert_subgraphs(out, {"Payment processing service": ["pay"]}, outside=["Ledger"])
-        lines = out.split("\n")
-        box, ledger = subgraph_box(lines, "Payment processing service"), find_box(lines, "Ledger")
-        gap = ledger[2] - box[3] if d == "LR" else box[2] - ledger[3]
-        assert gap <= 4, f"The gap grew by more than the title needs:\n{out}"
+        assert_subgraphs(out, {"Payment …": ["pay"]}, outside=["Ledger"])
+        plain = render(src.replace("Payment processing service", "Pay"))
+        assert len(out.split("\n")[0]) <= max(map(len, plain.split("\n"))), out
 
     @pytest.mark.parametrize("d", ["TD", "BT"])
     def test_node_beside_stays_outside(self, d):
@@ -127,9 +126,7 @@ class TestTitleWiderThanContents:
             f"flowchart {d}\n  start --> pay & audit\n"
             "  subgraph A [Payment processing service]\n    pay\n  end\n"
         )
-        assert_subgraphs(
-            render(src), {"Payment processing service": ["pay"]}, outside=["start", "audit"],
-        )
+        assert_subgraphs(render(src), {"Payment proce…": ["pay"]}, outside=["start", "audit"])
 
     def test_next_subgraph_stays_apart(self):
         src = (
@@ -138,6 +135,18 @@ class TestTitleWiderThanContents:
             "  subgraph B [Billing]\n    pay\n  end\n"
             "  login --> pay\n"
         )
-        assert_subgraphs(
-            render(src), {"Authentication and session service": ["login"], "Billing": ["pay"]},
+        assert_subgraphs(render(src), {"Authenticatio…": ["login"], "Billing": ["pay"]})
+
+    def test_title_with_nothing_beside_it_is_whole(self):
+        out = render("flowchart TD\n  subgraph A [Payment processing service]\n    pay\n  end\n")
+        assert "│ Payment processing service │" in out
+
+    def test_ascii_clips_with_a_dot(self):
+        src = (
+            "flowchart LR\n"
+            "  subgraph A [Payment processing service]\n    pay\n  end\n"
+            "  pay --> db[Ledger]\n"
         )
+        out = render(src, use_ascii=True)
+        assert "| Payment . |" in out, out
+

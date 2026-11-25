@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from ..graph.model import Direction, Graph, Subgraph
 from ..utils import display_width
-from .coordinates import compute_draw_coords
 from .grid import (
     SG_BORDER_PAD,
     SG_GAP_PER_LEVEL,
@@ -117,8 +116,13 @@ def expand_gaps_for_subgraphs(
 def compute_subgraph_bounds(
     graph: Graph,
     layout: GridLayout,
+    title_caps: dict[str, int] | None = None,
 ) -> None:
-    """Compute bounding boxes for subgraphs."""
+    """Compute bounding boxes for subgraphs.
+
+    *title_caps* maps a subgraph id to the widest its title may make its box.
+    """
+    title_caps = title_caps or {}
     def _compute(sg: Subgraph) -> SubgraphBounds | None:
         # Recursively compute children first
         child_bounds: list[SubgraphBounds] = []
@@ -175,7 +179,7 @@ def compute_subgraph_bounds(
 
         content_width = int(max_x - min_x) + SG_BORDER_PAD * 2
         label_width = display_width(sg.label) + 4
-        final_width = max(content_width, label_width)
+        final_width = max(content_width, min(label_width, title_caps.get(sg.id, label_width)))
 
         bounds = SubgraphBounds(
             subgraph=sg,
@@ -197,25 +201,22 @@ _TITLE_CLEARANCE = 3  # cells between a box's side and a neighbour, room for `â”
 
 
 def fit_titles(graph: Graph, layout: GridLayout) -> None:
-    """Widen the gap after a subgraph whose title is wider than its nodes.
+    """Narrow a subgraph box that its title stretched onto a neighbour.
 
-    The box grows rightwards to fit its title. Where that would cover a
-    node or box outside the subgraph, the gap column right after its nodes
-    grows by what that neighbour needs to keep clear, and the coordinates
-    and boxes are computed again. A widened nested box can stretch its
-    parent's box onto a neighbour in turn, so this repeats, at most once
-    per subgraph.
+    A box grows rightwards to fit a title wider than its nodes. Where that
+    would cover a node or box outside the subgraph, the box stops short of
+    that neighbour, never narrower than its nodes need, and the title is
+    clipped when drawn. A nested box that narrows lets its parent narrow
+    too, so this repeats, at most once per subgraph.
     """
+    caps: dict[str, int] = {}
     for _ in range(len(layout.subgraph_bounds)):
-        widen: dict[int, int] = {}
+        changed = False
         for sb in layout.subgraph_bounds:
             if sb.width <= sb.content_width:
                 continue
             members: set[str] = set()
             _gather_all_nodes(sb.subgraph, members)
-            cols = [layout.placements[n].grid.col for n in members if n in layout.placements]
-            if not cols:
-                continue
             content_side = sb.x + sb.content_width - 1
             reach = sb.x + sb.width + _TITLE_CLEARANCE
             lefts = [
@@ -231,15 +232,12 @@ def fit_titles(graph: Graph, layout: GridLayout) -> None:
                 and content_side < other.x < reach
             ]
             if lefts:
-                gap_col = max(cols) + 2
-                widen[gap_col] = max(widen.get(gap_col, 0), reach - min(lefts))
-        if not widen:
+                caps[sb.subgraph.id] = max(sb.content_width, min(lefts) - _TITLE_CLEARANCE - sb.x)
+                changed = True
+        if not changed:
             return
-        for col, extra in widen.items():
-            layout.col_widths[col] = layout.col_widths.get(col, 1) + extra
-        compute_draw_coords(layout)
         layout.subgraph_bounds.clear()
-        compute_subgraph_bounds(graph, layout)
+        compute_subgraph_bounds(graph, layout, caps)
 
 
 def _nested(a: Subgraph, b: Subgraph) -> bool:

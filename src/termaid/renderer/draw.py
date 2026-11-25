@@ -18,7 +18,7 @@ from ..graph.shapes import NodeShape
 from ..layout.grid import GridLayout, NodePlacement, SubgraphBounds, compute_layout
 from ..routing.router import AttachDir, RoutedEdge, layout_and_route
 from .canvas import Canvas
-from ..utils import display_width
+from ..utils import display_width, truncate_to_width
 from .charset import ASCII, CharSet, UNICODE, default_charset
 from .shapes import SHAPE_RENDERERS, draw_rectangle
 
@@ -219,9 +219,15 @@ def _draw_subgraph_labels(canvas: Canvas, layout: GridLayout, cs: CharSet) -> No
         x = max(0, x)
         y = max(0, y)
 
-        label = sb.subgraph.label
+        label = _subgraph_title(sb, cs)
         if label:
             canvas.put_text(y + 1, x + 2, label, style="subgraph_label")
+
+
+def _subgraph_title(sb, cs: CharSet | None = None) -> str:
+    """The title as drawn: clipped when its box had to stay narrower than it."""
+    ellipsis = "." if cs is not None and cs.horizontal == "-" else "…"
+    return truncate_to_width(sb.subgraph.label, max(sb.width - 4, 1), ellipsis)
 
 
 def _protect_subgraphs(canvas: Canvas, layout: GridLayout) -> None:
@@ -238,7 +244,7 @@ def _protect_subgraphs(canvas: Canvas, layout: GridLayout) -> None:
         for r in range(y + 1, bottom):
             canvas.protect(r, x)
             canvas.protect(r, right)
-        for c in range(x + 2, x + 2 + display_width(sb.subgraph.label)):
+        for c in range(x + 2, x + 2 + display_width(_subgraph_title(sb))):
             canvas.protect(y + 1, c)
 
 
