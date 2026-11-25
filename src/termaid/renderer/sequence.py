@@ -8,7 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Union
 
-from ..model.sequence import ActivateEvent, AutonumberEvent, Block, BlockSection, DestroyEvent, Event, Message, Note, SequenceDiagram
+from ..model.sequence import (
+    ActivateEvent, AutonumberEvent, Block, BlockSection, DestroyEvent, Event, Message, Note, ParticipantBox,
+    SequenceDiagram,
+)
 from .canvas import Canvas
 from .charset import CharSet, default_charset
 from .shapes import draw_rectangle, draw_cylinder
@@ -158,22 +161,23 @@ def _compute_layout(
     padding_x: int = _BOX_PAD,
     min_gap: int = _MIN_GAP,
     max_label_width: int | None = None,
-) -> tuple[list[int], list[int], int, int, int, list[int], dict[int, tuple[int, int]]]:
+) -> tuple[list[int], list[int], int, int, int, list[int], dict[int, tuple[int, int]], list[_BoxFrame]]:
     """Compute column center positions and box widths.
 
     Fills ``labels.block_titles`` and ``labels.sections`` while measuring frames,
     and rewraps notes at the diagram's edges when labels wrap.
-    Returns (col_centers, box_widths, canvas_width, canvas_height, header_height, row_offsets, block_bounds).
+    Returns (col_centers, box_widths, canvas_width, canvas_height, header_height, row_offsets,
+    block_bounds, box_frames).
     """
     n = len(diagram.participants)
     if n == 0:
-        return [], [], 0, 0, 0, [], {}
+        return [], [], 0, 0, 0, [], {}, []
 
     box_widths = [_lines_width(lines) + padding_x + 2 for lines in labels.participants]  # +2 for borders
 
     header_height = max(
         _participant_height(p, lines) for p, lines in zip(diagram.participants, labels.participants)
-    )
+    ) + (1 if diagram.boxes else 0)  # a box's top border runs above the participants
 
     # Compute per-gap minimum widths based on message labels between adjacent pairs
     gap_mins = [min_gap] * (n - 1) if n > 1 else []
@@ -230,13 +234,14 @@ def _compute_layout(
     col_centers[0] = box_widths[0] // 2 + 1  # left margin
     for i in range(1, n):
         col_centers[i] = col_centers[i - 1] + gap_mins[i - 1]
+    box_frames = _place_box_frames(diagram, col_centers, box_widths)
     if max_label_width is not None:
         right_edge = col_centers[-1] - box_widths[-1] // 2 + box_widths[-1] - 1
         _wrap_edge_notes(diagram, flat_events, labels, col_centers, right_edge, max_label_width)
 
     # Account for self-messages and notes extending beyond participant headers.
-    max_right = col_centers[-1] + box_widths[-1] // 2 + 2
-    min_left = 0
+    max_right = max([col_centers[-1] + box_widths[-1] // 2 + 2, *(frame.right + 1 for frame in box_frames)])
+    min_left = min([0, *(frame.left for frame in box_frames)])
     for event_index, event in enumerate(flat_events):
         if isinstance(event, Message) and event.source == event.target:
             source_index = _participant_index(diagram, event.source)
@@ -262,6 +267,7 @@ def _compute_layout(
         for block_id, (left, right) in raw_block_bounds.items()
     }
     framed_right = max((right + 1 for _, right in block_bounds.values()), default=0)
+    box_frames = [_BoxFrame(frame.left + left_shift, frame.right + left_shift, frame.title) for frame in box_frames]
 
     # Row offsets: cumulative event heights, each grown by its label's extra lines
     lifeline_start = _TOP_MARGIN + header_height
@@ -292,7 +298,45 @@ def _compute_layout(
     lifeline_end_row = cumulative
     canvas_height = lifeline_end_row + _BOTTOM_MARGIN
 
-    return shifted_centers, box_widths, canvas_width, canvas_height, header_height, row_offsets, block_bounds
+    return shifted_centers, box_widths, canvas_width, canvas_height, header_height, row_offsets, block_bounds, box_frames
+
+
+@dataclass
+class _BoxFrame:
+    left: int
+    right: int
+    title: str
+
+
+def _place_box_frames(diagram: SequenceDiagram, col_centers: list[int], box_widths: list[int]) -> list[_BoxFrame]:
+    """Frame each box's participants, moving later lifelines right to clear each frame and its title."""
+    def box_left(i: int) -> int:
+        return col_centers[i] - box_widths[i] // 2
+
+    first_of: dict[int, ParticipantBox] = {}
+    last_of: dict[int, int] = {}  # last member -> first member
+    for box in diagram.boxes:
+        indices = sorted(i for i in (_participant_index(diagram, pid) for pid in box.participants) if i >= 0)
+        if indices:
+            first_of[indices[0]] = box
+            last_of[indices[-1]] = indices[0]
+
+    frames: list[_BoxFrame] = []
+    previous_right = -2
+    for i in range(len(col_centers)):
+        # A frame keeps one blank column inside it and one outside it.
+        left = box_left(i) - (2 if i in first_of else 0)
+        if (i in first_of or i - 1 in last_of) and left < previous_right + 2:
+            for j in range(i, len(col_centers)):
+                col_centers[j] += previous_right + 2 - left
+        previous_right = box_left(i) + box_widths[i] - 1
+        if i in last_of:
+            first = last_of[i]
+            title = first_of[first].title.replace("\n", " ")
+            frame_left = box_left(first) - 2
+            previous_right = max(previous_right + 2, frame_left + display_width(title) + 3 if title else 0)
+            frames.append(_BoxFrame(frame_left, previous_right, title))
+    return frames
 
 
 def _wrap_edge_notes(
@@ -594,7 +638,7 @@ def render_sequence(
     flat_events = _flatten_events(diagram.events)
     labels = _collect_labels(diagram, flat_events, max_label_width)
 
-    col_centers, box_widths, width, height, header_height, row_offsets, block_bounds = _compute_layout(
+    col_centers, box_widths, width, height, header_height, row_offsets, block_bounds, box_frames = _compute_layout(
         diagram, flat_events, labels, padding_x=padding_x, min_gap=gap, max_label_width=max_label_width,
     )
     if width == 0:
@@ -604,6 +648,9 @@ def render_sequence(
 
     # Compute activation ranges
     activation_ranges = _compute_activation_ranges(flat_events, row_offsets, labels)
+
+    for frame in box_frames:
+        _draw_box_frame(canvas, frame, cs)
 
     # ── 1. Draw participant headers at top ────────────────────────
     for i, p in enumerate(diagram.participants):
@@ -697,6 +744,21 @@ def render_sequence(
 
 
 # ── Block frame drawing ──────────────────────────────────────────
+
+def _draw_box_frame(canvas: Canvas, frame: _BoxFrame, cs: CharSet) -> None:
+    """Draw a box around its participants' columns, its title in the top border."""
+    bottom = canvas.height - 1
+    for row in range(1, bottom):
+        canvas.put(row, frame.left, cs.vertical, merge=False, style="node")
+        canvas.put(row, frame.right, cs.vertical, merge=False, style="node")
+    for row, left_corner, right_corner in ((0, cs.top_left, cs.top_right), (bottom, cs.bottom_left, cs.bottom_right)):
+        canvas.put(row, frame.left, left_corner, merge=False, style="node")
+        for col in range(frame.left + 1, frame.right):
+            canvas.put(row, col, cs.horizontal, merge=False, style="node")
+        canvas.put(row, frame.right, right_corner, merge=False, style="node")
+    if frame.title:
+        canvas.put_text(0, frame.left + 1, f" {frame.title} ", style="edge_label", overwrite_spaces=True)
+
 
 def _compute_block_bounds(
     diagram: SequenceDiagram,

@@ -62,6 +62,13 @@ class AutonumberEvent:
     step: int | None = None
 
 
+@dataclass
+class ParticipantBox:
+    """``box [colour] [title] ... end``: a titled frame around the participants declared inside."""
+    title: str
+    participants: list[str] = field(default_factory=list)
+
+
 # Union type for all event types
 Event = Union[Message, Note, ActivateEvent, Block, DestroyEvent, AutonumberEvent]
 
@@ -70,4 +77,5 @@ Event = Union[Message, Note, ActivateEvent, Block, DestroyEvent, AutonumberEvent
 class SequenceDiagram:
     participants: list[Participant] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
+    boxes: list[ParticipantBox] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)

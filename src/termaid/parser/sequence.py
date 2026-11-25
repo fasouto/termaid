@@ -14,6 +14,7 @@ from ..model.sequence import (
     Message,
     Note,
     Participant,
+    ParticipantBox,
     SequenceDiagram,
 )
 
@@ -60,6 +61,28 @@ _BLOCK_SECTION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# box [colour] [title]: a CSS colour function or a word, then the title
+_BOX_RE = re.compile(r"^\s*box\b\s*((?:rgba?|hsla?)\s*\(.*?\)|\w*)(.*?)\s*$", re.IGNORECASE)
+
+# The CSS colour names; Mermaid takes a box's first word as its colour when it is one.
+_CSS_COLOURS = frozenset("""
+aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown
+burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan
+darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid
+darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet
+deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro
+ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki
+lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow
+lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray
+lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine
+mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise
+mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab
+orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru
+pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown
+seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan
+teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen transparent
+""".split())
+
 # Block end
 _BLOCK_END_RE = re.compile(r"^\s*end\s*$", re.IGNORECASE)
 
@@ -105,6 +128,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
     # event_stack[0] is the top-level events list
     event_stack: list[list] = [diagram.events]
     block_stack: list[Block] = []
+    open_box: ParticipantBox | None = None
 
     lines = text.split("\n")
     for line in lines:
@@ -128,9 +152,11 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         if _SKIP_RE.match(stripped):
             continue
 
-        # Block end
+        # Block end; a box holds only declarations, so an end inside one closes it
         if _BLOCK_END_RE.match(stripped):
-            if block_stack:
+            if open_box is not None:
+                open_box = None
+            elif block_stack:
                 block_stack.pop()
                 event_stack.pop()
             continue
@@ -144,6 +170,15 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             block_stack[-1].sections.append(section)
             # Switch current event target to this section's events
             event_stack[-1] = section.events
+            continue
+
+        m = _BOX_RE.match(stripped)
+        if m and not _MESSAGE_RE.match(stripped):
+            colour, title = m.group(1), m.group(2).strip()
+            if not (colour.lower() in _CSS_COLOURS or "(" in colour):
+                title = f"{colour} {title}".strip()
+            open_box = ParticipantBox(title=_label_text(title))
+            diagram.boxes.append(open_box)
             continue
 
         # Block start (loop, alt, opt, par, critical, break)
@@ -211,6 +246,8 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
                     break
             if not found:
                 diagram.participants.append(Participant(id=pid, label=label, kind=kind))
+            if open_box is not None:
+                open_box.participants.append(pid)
             continue
 
         # message lines
