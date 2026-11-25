@@ -428,3 +428,24 @@ class TestCliArgumentEdges:
         assert main([str(doc), "--markdown", "--strict-width", "--width", "40"]) == 2
         err = capsys.readouterr().err
         assert "diagram is" not in err and "line 3 of the output is 70 cols wide" in err
+
+
+class TestChartsHonourWidth:
+    """--width narrows charts too, so a narrow pane gets a drawing, not the source."""
+
+    @pytest.mark.parametrize("fixture, width", [
+        ("packet/packet_01.mmd", 60),
+        ("packet/packet_01.mmd", 40),
+        ("mindmap/mindmap_01.mmd", 32),
+        ("quadrant/quadrant_01.mmd", 44),
+        ("pie/piechart_10.mmd", 50),
+        ("xychart/showcase_horizontal_bars.mmd", 45),
+        ("xychart/showcase_simple_bar_chart.mmd", 60),
+    ])
+    def test_fits_the_width(self, tmp_path: Path, fixture: str, width: int):
+        from termaid.utils import max_line_width
+
+        out = tmp_path / "out.txt"
+        source = Path(__file__).parent / "fixtures" / fixture
+        assert main([str(source), "--width", str(width), "-o", str(out)]) == 0
+        assert max_line_width(out.read_text(encoding="utf-8").rstrip("\n")) <= width
