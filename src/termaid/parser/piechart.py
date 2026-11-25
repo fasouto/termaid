@@ -12,6 +12,7 @@ import math
 import re
 
 from ..model.piechart import PieChart, PieSlice
+from ..utils import line_breaks, without_meta_lines
 
 _SLICE_RE = re.compile(r'^\s*"([^"]+)"\s*:\s*([0-9]+(?:\.[0-9]*)?)$')
 
@@ -29,8 +30,9 @@ def parse_pie_chart(text: str) -> PieChart:
         chart.show_data = True
         header = header[len("showData"):]
 
-    for line in [header, *lines[1:]]:
-        stripped = line.strip()
+    for line in without_meta_lines([header, *lines[1:]]):
+        # Every label here has one row.
+        stripped = line_breaks(line.strip(), " ")
         if not stripped:
             continue
 

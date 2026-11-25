@@ -17,6 +17,7 @@ class PacketField:
 
 @dataclass
 class Packet:
+    title: str = ""
     fields: list[PacketField] = field(default_factory=list)
     row_bits: int = 32  # bits per row (standard network packet)
     warnings: list[str] = field(default_factory=list)

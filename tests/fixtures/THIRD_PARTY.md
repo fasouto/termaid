@@ -6,3 +6,7 @@ diagrams (https://github.com/lukilabs/beautiful-mermaid, MIT License, Copyright
 (https://github.com/AlexanderGrooff/mermaid-ascii, MIT License, Copyright (c)
 Alexander Grooff). Only the Mermaid sources are reused. The expected drawings
 are termaid's own.
+
+`kanban/mermaid_docs_board.mmd` is the example board from the Mermaid kanban
+documentation (https://mermaid.js.org/syntax/kanban.html, MIT License, Copyright
+(c) 2014 - 2022 Knut Sveidqvist).

@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 
 from ..model.packet import Packet, PacketField
+from ..utils import line_breaks, without_meta_lines
 
 
 def parse_packet(text: str) -> Packet:
@@ -28,13 +29,18 @@ def parse_packet(text: str) -> Packet:
 
     next_bit = 0
 
-    for line in lines[1:]:  # skip "packet-beta" header
+    for line in without_meta_lines(lines[1:]):  # skip "packet-beta" header
         comment_idx = line.find("%%")
         if comment_idx >= 0:
             line = line[:comment_idx]
 
-        stripped = line.strip()
+        # Every label here has one row.
+        stripped = line_breaks(line.strip(), " ")
         if not stripped:
+            continue
+
+        if stripped.lower().startswith("title "):
+            packet.title = stripped[6:].strip().strip('"')
             continue
 
         # Try: start-end: "label" or start-end: label

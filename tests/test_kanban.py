@@ -83,5 +83,48 @@ class TestKanbanBracketIdsWithMetadata:
             "    spike[Research vector DB options] @alice"
         )
         card = kb.columns[0].cards[0]
-        assert card.title == "Research vector DB options"
-        assert card.metadata == "@alice"
+        assert card.title == "Research vector DB options @alice"
+
+
+class TestKanbanCardData:
+    """Mermaid reads ``@{ … }`` only at the end of a card and draws its fields, never the raw text."""
+
+    BOARD = (
+        "kanban\n"
+        "  todo[Todo]\n"
+        "    id8[Design grammar]@{ assigned: 'knsv', priority: 'High', ticket: MC-2036 }\n"
+        "    id9[Email bob@example.com]\n"
+        "    id10[Low one]@{ priority: 'Very Low' }\n"
+    )
+
+    def test_shape_data_is_read_into_fields(self):
+        cards = parse_kanban(self.BOARD).columns[0].cards
+        assert cards[0].title == "Design grammar"
+        assert (cards[0].assigned, cards[0].priority, cards[0].ticket) == ("knsv", "High", "MC-2036")
+        assert cards[1].title == "Email bob@example.com"
+        assert cards[2].priority == "Very Low"
+
+    def test_the_drawing_shows_fields_not_raw_shape_data(self):
+        out = render(self.BOARD)
+        assert "@{" not in out and "assigned" not in out
+        assert "Email bob@example.com" in out
+        assert "MC-2036" in out and "knsv" in out
+        assert "┃" in out and "┆" in out
+        assert max(len(line) for line in out.splitlines()) < 40
+
+    def test_meta_lines_are_not_columns(self):
+        kb = parse_kanban(
+            "kanban\n"
+            "  accTitle: Board\n"
+            "  accDescr: Work in flight\n"
+            "  accDescr {\n"
+            "    Many lines\n"
+            "  }\n"
+            "  todo[Todo]\n"
+            "    t1[Write docs]\n"
+        )
+        assert [c.title for c in kb.columns] == ["Todo"]
+
+    def test_br_tags_do_not_print(self):
+        out = render("kanban\n  todo[To<br/>do]\n    t1[Write<br>docs]\n")
+        assert "<br" not in out and "Write docs" in out

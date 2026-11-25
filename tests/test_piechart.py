@@ -338,3 +338,10 @@ class TestManySlicesAndHugeValues:
         output = render('pie\n    "Huge" : ' + "9" * 400 + '\n    "A" : 1')
         assert "A┃" in output
         assert "Huge" not in output
+
+
+def test_br_tags_do_not_print():
+    from termaid import render
+
+    out = render('pie title Pets<br/>owned\n    "Dogs<br>big" : 3\n    "Cats" : 1\n    accTitle: Pets\n')
+    assert "<br" not in out and "Pets owned" in out and "Dogs big" in out
