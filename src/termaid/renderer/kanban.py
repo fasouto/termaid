@@ -34,7 +34,9 @@ def render_kanban(
     # Compute column widths (based on widest card or column title).
     # Card text sits inside card borders, inset _COL_PAD from each column
     # edge; the centered title needs the column borders plus a space each
-    # side. padding_x beyond the default adds extra slack.
+    # side. padding_x beyond the default adds extra slack; below it, card
+    # text would be cut short.
+    padding_x = max(padding_x, _CARD_PAD)
     col_widths: list[int] = []
     for col in diagram.columns:
         title_w = display_width(col.title)
