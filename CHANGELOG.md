@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Fixes
+- State: `direction` inside a composite state sets the direction of that state. It changed the whole diagram, and the composite kept the old one
+- State: a description, `s1 : Waiting for payment`, is the state's label. It was dropped, and a diagram made only of descriptions drew nothing
+- State: a note keeps off the states beside it. The layout leaves room on the note's side, so `note right of B` no longer covers the next state. A note written over several lines, ending in `end note`, is a note and no longer a state
+- Flowchart: circle and cross ends on thick and dotted links (`==x`, `-.-o`, `x-.-x`) and without a space (`A --oB`) are links. `A ==x B` was drawn as one box
+- Flowchart: Markdown strings drop their marks in link text and subgraph titles too, and `_italic_` and `__bold__` are read
+- State: `--ascii` draws the start and end states as `*` and `@`
 - Mindmap: a node written with an id and a shape, such as `root((Project))` or `id[Text]`, shows only its text. The id and brackets were drawn, and `((Text))` kept one pair of brackets. `::icon(...)` and `:::class` lines are no longer drawn as nodes
 
 ## 0.14.1 (2026-11-25)
