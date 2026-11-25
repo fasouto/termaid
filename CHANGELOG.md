@@ -2,7 +2,37 @@
 
 ## Unreleased
 
+### Behavior changes
+- Class and ER diagrams have a new layout. Boxes are placed in rows by their longest chain of links, so every link runs down to a later row, as in Mermaid. Diagrams that drew a chain as boxes side by side joined by a level line now stack it, and come out taller and narrower
+- Class: a note is a box of its own, joined to its class by a dashed line
+
 ### Fixes
+- State: `direction` inside a composite state sets the direction of that state. It changed the whole diagram, and the composite kept the old one
+- State: a description, `s1 : Waiting for payment`, is the state's label. It was dropped, and a diagram made only of descriptions drew nothing
+- State: a note keeps off the states beside it. The layout leaves room on the note's side, so `note right of B` no longer covers the next state. A note written over several lines, ending in `end note`, is a note and no longer a state
+- Flowchart: circle and cross ends on thick and dotted links (`==x`, `-.-o`, `x-.-x`) and without a space (`A --oB`) are links. `A ==x B` was drawn as one box
+- Flowchart: Markdown strings drop their marks in link text and subgraph titles too, and `_italic_` and `__bold__` are read
+- State: `--ascii` draws the start and end states as `*` and `@`
+- Gantt: a task with no start date starts when the task written before it ends, also after an `after` task and across sections. Such tasks had no bar. `until <id>` is read, and `after` may name a task written later
+- Gantt: `excludes weekends`, `excludes <dates>`, `includes` and `weekend friday` are applied. Later dates came out early
+- Gantt: `--width` is honoured down to about 40 columns, with clipped names below that. A gantt was always 81 columns, so narrow Claude Code panes showed it as source. The default drawing is one column narrower
+- Timeline: a line starting with `:` adds an event to the period above, `a : b : c` is three parts, and a comma is plain text. `: Google` was drawn as a period and `YouTube, then Vimeo` as two events
+- Treemap: a value shows whole with thousands separators, or in a short form (`1.5M`, `120k`), or not at all. `120000` was cut to `12`
+- Architecture: every service joined at a junction is connected, and a `--` edge through a junction has no arrowhead. An edge runs the way its `L`/`R`/`T`/`B` sides say, whichever end is written first. `--ascii` drops the emoji icons
+- Block: a link label wider than the gap between two blocks goes on the row above them, and a block is never narrower than its label
+- Gantt, timeline and block: `accTitle`, `accDescr` and `click` lines are no longer drawn as content, and `<br/>` in their labels is a break or a space
+- Sequence: `Note left of` the first participant stays left of its lifeline, and the diagram makes room for it. It slid right over the other lifelines and read as a note over several participants
+- Sequence: fitting to a width wraps a note beside the first or last participant before it squeezes participant names and message text
+- Sequence: `box ... end` draws a frame with its title around its participants; `create participant` draws the participant at the message that creates it; `rect rgb(...)` is an untitled frame; entity codes such as `#9829;` are decoded; `autonumber off` and `autonumber` in mid-diagram work; a `title` line is drawn above the diagram
+- Sequence: the corners of a `collections` participant
+- gitGraph: a branch or merge point is drawn with a tee or a corner, and `┼` only where a line crosses another branch. In TB and BT a commit label is no longer cut by the branch line
+- Class and ER: a link between two boxes in one row was drawn through the box between them; a link going up joined another link and lost its arrowhead or overprinted a cardinality; two links between the same boxes, and links in a cycle, lost one line. Each link is now drawn whole, with its own label
+- Class and ER: a class or entity related to itself draws a small loop beside its box, with its label and cardinalities
+- Class and ER: labels on neighbouring links no longer overwrite each other, and lines leaving one box are ordered by where they go, so they do not cross
+- Class and ER: `direction LR` keeps labels and cardinalities whole, and `RL` and `BT` are honoured
+- Class: `note for X` no longer covers the class beside X, and a free-standing note no longer sends lines through a box
+- Class: `class Car["Fast car"]` and backtick names are read, generics show as `Box<T>` and `List<T>`, `<br/>` breaks a note's line, and a `namespace` gets a frame when its classes sit together
+- Class with `--ascii`: lines have `+` corners, and inheritance is drawn `A`/`V`, apart from an association's `^`/`v`
 - Mindmap: a node written with an id and a shape, such as `root((Project))` or `id[Text]`, shows only its text. The id and brackets were drawn, and `((Text))` kept one pair of brackets. `::icon(...)` and `:::class` lines are no longer drawn as nodes
 
 ## 0.14.1 (2026-11-25)

@@ -70,12 +70,8 @@ class GanttTask:
     is_active: bool = False
     is_crit: bool = False
     is_milestone: bool = False
-    after: str = ""  # task ID dependency
-
-    def start_at(self, start: datetime) -> None:
-        self.start = start
-        if self.end is None and self.duration is not None:
-            self.end = self.duration.end_from(start)
+    after: str = ""  # ids of the tasks this one starts after
+    until: str = ""  # ids of the tasks this one ends at the start of
 
 
 @dataclass

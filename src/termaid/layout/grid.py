@@ -255,6 +255,11 @@ def compute_layout(
     # Step 5: Expand gaps for subgraph borders and labels
     expand_gaps_for_subgraphs(graph, layout, direction)
 
+    # Step 5b: Make room beside boxes for their notes
+    if graph.notes:
+        from .notes import reserve_note_room
+        reserve_note_room(graph, layout)
+
     # Step 6: Compute drawing coordinates
     compute_draw_coords(layout)
 

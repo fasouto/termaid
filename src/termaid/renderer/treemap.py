@@ -46,6 +46,23 @@ def render_treemap(
     return canvas
 
 
+_SHORT_UNITS = ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "k"))
+
+
+def _value_text(value: float, width: int) -> str:
+    """``value`` with thousands separators (Mermaid's default ``,`` format),
+    else a short form such as 1.5M, else nothing: a cut number would lie."""
+    whole = f"{int(value):,}" if value == int(value) else f"{value:,.6g}"
+    if len(whole) <= width:
+        return whole
+    for size, unit in _SHORT_UNITS:
+        if value >= size:
+            scaled = value / size
+            short = (f"{scaled:.1f}".rstrip("0").rstrip(".") if scaled < 100 else f"{scaled:.0f}") + unit
+            return short if len(short) <= width else ""
+    return ""
+
+
 def _compute_height(nodes: list[TreemapNode]) -> int:
     """Compute the minimum height needed to render a list of nodes."""
     max_h = 0
@@ -228,9 +245,7 @@ def _draw_node(
 
     # Value (for leaves only)
     if not node.children and node.value > 0 and h >= 4:
-        val_str = f"{node.value:g}"
-        if len(val_str) > inner_w:
-            val_str = val_str[:inner_w]
+        val_str = _value_text(node.value, inner_w)
         val_col = x + 1 + max(0, (inner_w - len(val_str)) // 2)
         canvas.put_text(y + 2, val_col, val_str, style="edge_label")
 

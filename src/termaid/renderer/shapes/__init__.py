@@ -412,20 +412,16 @@ def draw_start_state(
     canvas: Canvas, x: int, y: int, width: int, height: int,
     label: str, cs: CharSet, style: str = "",
 ) -> None:
-    """Draw a start state: filled circle (●)."""
-    cy = y + height // 2
-    cx = x + width // 2
-    canvas.put(cy, cx, "●" if cs.horizontal == "─" else "*", style=style)
+    """Draw a start state: a circle around a filled dot (● or *)."""
+    draw_circle(canvas, x, y, width, height, "●" if cs.horizontal == "─" else "*", cs, style=style)
 
 
 def draw_end_state(
     canvas: Canvas, x: int, y: int, width: int, height: int,
     label: str, cs: CharSet, style: str = "",
 ) -> None:
-    """Draw an end state: bullseye (◉)."""
-    cy = y + height // 2
-    cx = x + width // 2
-    canvas.put(cy, cx, "◉" if cs.horizontal == "─" else "@", style=style)
+    """Draw an end state: a circle around a bullseye (◉ or @)."""
+    draw_circle(canvas, x, y, width, height, "◉" if cs.horizontal == "─" else "@", cs, style=style)
 
 
 def draw_fork_join(

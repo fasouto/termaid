@@ -1,21 +1,32 @@
 
 
-          ┌──────────────────┐    ┌──────────────┐
-          │     CUSTOMER     │    │   PRODUCT    │
-          ├──────────────────┤    ├──────────────┤
-          │ int id  PK       │    │ int id  PK   │
-          │ string name      │    │ string name  │
-          │ string email  UK │    │ float price  │
-          └──────────────────┘    └──────────────┘
-                    │1                    │1
-             ┌──────┘                     └─────┐
-             │ places                           │ includes
-             │0..*                              │0..*
-  ┌─────────────────────┐            ┌────────────────────┐
-  │        ORDER        │            │     LINE_ITEM      │
-  ├─────────────────────┤ 1     1..* ├────────────────────┤
-  │ int id  PK          │────────────│ int id  PK         │
-  │ date created        │ contains   │ int order_id  FK   │
-  │ int customer_id  FK │            │ int product_id  FK │
-  └─────────────────────┘            │ int quantity       │
-                                     └────────────────────┘
+             ┌──────────────────┐
+             │     CUSTOMER     │
+             ├──────────────────┤
+             │ int id  PK       │
+             │ string name      │
+             │ string email  UK │
+             └──────────────────┘
+                       │1
+                       └─places──┐
+                                 │
+                                 │0..*
+  ┌──────────────┐    ┌─────────────────────┐
+  │   PRODUCT    │    │        ORDER        │
+  ├──────────────┤    ├─────────────────────┤
+  │ int id  PK   │    │ int id  PK          │
+  │ string name  │    │ date created        │
+  │ float price  │    │ int customer_id  FK │
+  └──────────────┘    └─────────────────────┘
+          │1                     │1
+          └─────────┐     ┌──────┘
+           includes │     │ contains
+                    │0..* │1..*
+            ┌────────────────────┐
+            │     LINE_ITEM      │
+            ├────────────────────┤
+            │ int id  PK         │
+            │ int order_id  FK   │
+            │ int product_id  FK │
+            │ int quantity       │
+            └────────────────────┘

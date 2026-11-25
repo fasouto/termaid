@@ -48,3 +48,39 @@ class TestTimelineRendering:
         assert "March" in output
         assert "v1.0" in output
         assert "●" in output  # timeline marker
+
+
+class TestEvents:
+    """As in Mermaid, ``:`` separates events and a line starting with ``:`` adds to the period above."""
+
+    def _events(self, body: str) -> dict[str, list[str]]:
+        d = parse_timeline("timeline\n" + body)
+        return {e.title: e.details for s in d.sections for e in s.events}
+
+    def test_a_line_starting_with_a_colon_continues_the_period_above(self):
+        events = self._events("    2004 : Facebook\n         : Google\n")
+        assert events == {"2004": ["Facebook", "Google"]}
+
+    def test_colons_separate_events_and_commas_are_text(self):
+        events = self._events("    2005 : YouTube, then Vimeo\n    2006 : Twitter : Tumblr\n")
+        assert events == {"2005": ["YouTube, then Vimeo"], "2006": ["Twitter", "Tumblr"]}
+
+    def test_a_colon_inside_a_word_is_text(self):
+        assert self._events("    Launch : at 10:30\n") == {"Launch": ["at 10:30"]}
+
+
+def test_accessibility_lines_are_not_drawn():
+    out = render(
+        "timeline\n    accTitle: Hidden title\n    accDescr: Hidden description\n"
+        "    accDescr {\n      Hidden\n      block\n    }\n    2023 : v1\n"
+    )
+    assert "2023" in out
+    for word in ("acc", "Hidden", "block"):
+        assert word not in out
+
+
+def test_br_tags_break_or_join_lines():
+    out = render('timeline\n  title Story<br/>so far\n  section Early<br>days\n  2004<br/>Q1 : Facebook<br/>launch\n')
+    assert "<br" not in out.lower()
+    for words in ['Story so far', 'Early days', '2004 Q1', 'Facebook', 'launch']:
+        assert words in out, words

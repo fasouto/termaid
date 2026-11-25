@@ -16,33 +16,14 @@ from ..graph.shapes import NodeShape
 from ..utils import line_breaks
 
 
-# Arrow patterns ordered by specificity (longest match first)
-_ARROW_PATTERNS: list[tuple[str, EdgeStyle, bool, bool]] = [
-    # (pattern, style, has_arrow_start, has_arrow_end)
-    # Bidirectional
-    (r"<-\.->", EdgeStyle.DOTTED, True, True),
-    (r"<==>", EdgeStyle.THICK, True, True),
-    (r"<-->", EdgeStyle.SOLID, True, True),
-    (r"<-+->", EdgeStyle.SOLID, True, True),
-    (r"o--o", EdgeStyle.SOLID, True, True),
-    (r"x--x", EdgeStyle.SOLID, True, True),
-    # Dotted with arrow
-    (r"-\.+->\|", EdgeStyle.DOTTED, False, True),  # will be handled separately
-    (r"-\.+->", EdgeStyle.DOTTED, False, True),
-    # Thick with arrow
-    (r"=+=>", EdgeStyle.THICK, False, True),
-    # Solid with arrow
-    (r"-+->", EdgeStyle.SOLID, False, True),
-    # Cross/circle endpoints
-    (r"-+x", EdgeStyle.SOLID, False, True),
-    (r"-+o", EdgeStyle.SOLID, False, True),
-    # Open (no arrow)
-    (r"-\.-", EdgeStyle.DOTTED, False, False),
-    (r"=+", EdgeStyle.THICK, False, False),
-    (r"-{3,}", EdgeStyle.SOLID, False, False),
-    # Invisible
-    (r"~~~", EdgeStyle.INVISIBLE, False, False),
-]
+# A link without text, read the way Mermaid's lexer reads one: solid
+# `--+` then `-`, `>`, `o` or `x`; thick `==+` then `=`, `>`, `o` or `x`;
+# dotted `-.+-` with an optional head; invisible `~~~`. The end mark needs
+# no space after it, so `A---oB` is a circle link to B. A start mark is `<`,
+# or an `o` or `x` after a space, so `go-->B` keeps its `o`.
+_PLAIN_LINK = re.compile(
+    r"(?:<|(?<=\s)[ox])?(?:--+[-xo>]|==+[=xo>]|-\.+-[xo>]?)|~~~+"
+)
 
 # Node shape patterns: (open_delim, close_delim, shape)
 # Order matters: most specific first
@@ -120,7 +101,7 @@ def _compute_arrow_length(arrow_text: str, style: EdgeStyle) -> int:
     Base forms (length 1): -->, ==>, -.->, ---, ===, -.-
     Each extra repeating character adds 1 to the length.
     """
-    has_head = arrow_text.rstrip().endswith(">") or arrow_text.lstrip().startswith("<")
+    has_head = arrow_text.rstrip().endswith((">", "o", "x")) or arrow_text.lstrip().startswith("<")
     # Strip directional markers for counting
     s = arrow_text.lstrip("<ox").rstrip(">ox")
     if style == EdgeStyle.DOTTED:
@@ -184,42 +165,44 @@ def _strip_comments(line: str) -> str:
     return line
 
 
+_MARKDOWN_STRING = re.compile(r'\s*"\s*`(.*)`\s*"\s*$', re.DOTALL)
+
+
+def _markdown_plain(text: str, sep: str) -> str | None:
+    """The text of a Markdown string without its marks, lines joined by *sep*; None if *text* isn't one."""
+    md = _parse_markdown_label(text)
+    return md[0].replace("\\n", sep) if md else None
+
+
 def _parse_markdown_label(text: str) -> tuple[str, list[LabelSegment]] | None:
     """Detect and parse a markdown label: "`**bold** and *italic*`".
 
     Returns (plain_text, segments) or None if not a markdown label.
     """
-    # Check for backtick-quoted markdown: "`...`"
-    stripped = text.strip()
-    if not (stripped.startswith('"`') and stripped.endswith('`"')):
+    found = _MARKDOWN_STRING.match(text)
+    if not found:
         return None
 
-    md = _line_breaks(stripped[2:-2])  # strip "` and `"
+    md = _line_breaks(found.group(1))
     segments: list[LabelSegment] = []
     i = 0
     while i < len(md):
-        # Bold: **text**
-        if md[i:i+2] == "**":
-            end = md.find("**", i + 2)
-            if end != -1:
-                inner = md[i+2:end]
-                segments.append(LabelSegment(text=inner, bold=True))
-                i = end + 2
+        # **bold**, __bold__, *italic*, _italic_; an underscore inside a word is text
+        for mark in ("**", "__", "*", "_"):
+            if not md.startswith(mark, i) or (mark[0] == "_" and i > 0 and md[i - 1].isalnum()):
                 continue
-        # Italic: *text*
-        if md[i] == "*":
-            end = md.find("*", i + 1)
-            if end != -1:
-                inner = md[i+1:end]
-                segments.append(LabelSegment(text=inner, italic=True))
-                i = end + 1
-                continue
-        # Plain text: collect until next *
-        j = i + 1
-        while j < len(md) and md[j] != "*":
-            j += 1
-        segments.append(LabelSegment(text=md[i:j]))
-        i = j
+            end = md.find(mark, i + len(mark))
+            if end > i + len(mark):
+                inner = md[i + len(mark):end]
+                segments.append(LabelSegment(text=inner, bold=len(mark) == 2, italic=len(mark) == 1))
+                i = end + len(mark)
+                break
+        else:
+            j = i + 1
+            while j < len(md) and md[j] not in "*_":
+                j += 1
+            segments.append(LabelSegment(text=md[i:j]))
+            i = j
 
     segments = [replace(s, text=_decode_entities(s.text)) for s in segments]
     return "".join(s.text for s in segments), segments
@@ -296,6 +279,14 @@ def _decode_entities(text: str) -> str:
 def _line_breaks(label: str) -> str:
     """<br> in a node label: the \n line breaks node labels use."""
     return line_breaks(label, "\\n")
+
+
+def _link_text(raw: str) -> str:
+    """The text on a link as drawn, from what is written between its parts."""
+    plain = _markdown_plain(raw, "\n")
+    if plain is not None:
+        return plain
+    return _decode_entities(line_breaks(_strip_quotes(raw.strip())))
 
 
 def _strip_quotes(text: str) -> str:
@@ -510,7 +501,8 @@ class _FlowchartParser:
             sg_label = rest
 
         sg_id = _strip_quotes(sg_id)
-        sg_label = _decode_entities(line_breaks(_strip_quotes(sg_label), " "))  # a title has one row
+        # a title has one row
+        sg_label = _markdown_plain(sg_label, " ") or _decode_entities(line_breaks(_strip_quotes(sg_label), " "))
 
         sg = Subgraph(
             id=sg_id,
@@ -765,13 +757,12 @@ class _FlowchartParser:
                 pipe_start = original_span.find("|")
                 pipe_end = original_span.rfind("|")
                 if pipe_start >= 0 and pipe_end > pipe_start:
-                    label = original_span[pipe_start + 1:pipe_end].strip()
-                    label = _strip_quotes(label)
+                    label = _link_text(original_span[pipe_start + 1:pipe_end])
                 else:
                     # `-- text -->`: the masked text keeps every index, so the
                     # label sits at the same place in the original.
                     at = masked.find(_masked_label, pos, end)
-                    label = _strip_quotes(remaining[at:at + len(_masked_label)])
+                    label = _link_text(remaining[at:at + len(_masked_label)])
                 if best_match is None or pos < best_match[0]:
                     best_match = (pos, end, style, arr_start, arr_end, label, length, type_start, type_end)
 
@@ -805,7 +796,7 @@ class _FlowchartParser:
                 has_arrow_end=arr_end,
                 arrow_type_start=type_start,
                 arrow_type_end=type_end,
-                label=_decode_entities(line_breaks(label)),
+                label=label,
                 min_length=length,
             ))
 
@@ -861,35 +852,12 @@ class _FlowchartParser:
 
     def _find_plain_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, int, ArrowType, ArrowType] | None:
         """Find the first plain arrow in text. Returns (start, end, style, arr_start, arr_end, min_length, type_start, type_end)."""
-        # Try patterns in order of specificity
-        # (pattern, style, arr_start, arr_end, type_start, type_end)
-        patterns: list[tuple[str, EdgeStyle, bool, bool, ArrowType, ArrowType]] = [
-            (r'<-\.+->',  EdgeStyle.DOTTED, True, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'<=+=>',     EdgeStyle.THICK, True, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'<-+->',     EdgeStyle.SOLID, True, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'o--+o',     EdgeStyle.SOLID, True, True, ArrowType.CIRCLE, ArrowType.CIRCLE),
-            (r'x--+x',     EdgeStyle.SOLID, True, True, ArrowType.CROSS, ArrowType.CROSS),
-            (r'-\.+->',    EdgeStyle.DOTTED, False, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'=+=>',      EdgeStyle.THICK, False, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'-+->',      EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'--+o(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CIRCLE),
-            (r'--+x(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CROSS),
-            (r'~~~',       EdgeStyle.INVISIBLE, False, False, ArrowType.ARROW, ArrowType.ARROW),
-            (r'-\.+-',     EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
-            (r'={3,}',     EdgeStyle.THICK, False, False, ArrowType.ARROW, ArrowType.ARROW),
-            (r'-{3,}',     EdgeStyle.SOLID, False, False, ArrowType.ARROW, ArrowType.ARROW),
-        ]
-        best: tuple[int, int, EdgeStyle, bool, bool, ArrowType, ArrowType] | None = None
-        for pat, style, arr_start, arr_end, type_start, type_end in patterns:
-            m = re.search(pat, text)
-            if m and (best is None or m.start() < best[0]):
-                best = (m.start(), m.end(), style, arr_start, arr_end, type_start, type_end)
-        if best is None:
+        m = _PLAIN_LINK.search(text)
+        if m is None:
             return None
-        pos, end, style, arr_start, arr_end, type_start, type_end = best
-        arrow_text = text[pos:end]
-        length = _compute_arrow_length(arrow_text, style)
-        return (pos, end, style, arr_start, arr_end, length, type_start, type_end)
+        style, arr_start, arr_end, type_start, type_end = self._classify_arrow(m.group())
+        length = _compute_arrow_length(m.group(), style)
+        return (m.start(), m.end(), style, arr_start, arr_end, length, type_start, type_end)
 
     def _classify_arrow(self, arrow: str) -> tuple[EdgeStyle, bool, bool, ArrowType, ArrowType]:
         """Classify an arrow string into style, direction, and endpoint types."""

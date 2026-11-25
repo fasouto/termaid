@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from ..graph.model import ArrowType, EdgeStyle, Graph, GraphNote, Node
 from ..graph.shapes import NodeShape
 from ..layout.grid import GridLayout, NodePlacement, SubgraphBounds, compute_layout
+from ..layout.notes import NOTE_GAP, note_on_right, note_size
 from ..routing.router import AttachDir, RoutedEdge, layout_and_route
 from .canvas import Canvas
 from ..utils import display_width, truncate_to_width
@@ -79,7 +80,7 @@ def render_graph_canvas(
     cs = cs or default_charset(use_ascii)
 
     layout, routed = layout_and_route(graph, padding_x, padding_y, gap, max_label_width)
-    notes = _place_notes(graph, layout)
+    notes = _place_notes(graph, layout, routed)
     if graph.direction.is_reversed:
         _mirror(layout, routed, notes, vertical=graph.direction.is_vertical)
 
@@ -973,27 +974,82 @@ class _NoteBox:
     height: int
 
 
-def _place_notes(graph: Graph, layout: GridLayout) -> list[_NoteBox]:
-    """Place each note box next to its target node."""
-    boxes: list[_NoteBox] = []
+def _place_notes(graph: Graph, layout: GridLayout, routed: list[RoutedEdge]) -> list[_NoteBox]:
+    """Place each note beside its box, in the room the layout kept for it.
+
+    A note never covers a box, another note or a subgraph border. It moves
+    up or down to keep off edges where it can, and when the room beside its
+    box is taken it goes past everything on its rows.
+    """
+    if not graph.notes:
+        return []
+    boxes = [(p.draw_x, p.draw_y, p.draw_width, p.draw_height) for p in layout.placements.values()]
+    edge_cells = {cell for re in routed for cell in _path_cells(re.draw_path)}
+    placed: list[_NoteBox] = []
+
+    def clear(x: int, y: int, w: int, h: int, avoid_edges: bool) -> bool:
+        if x < 0 or y < 0:
+            return False
+        if any(_overlaps(x, y, w, h, *box) for box in boxes):
+            return False
+        if any(_overlaps(x - 1, y, w + 2, h, b.x, b.y, b.width, b.height) for b in placed):
+            return False
+        for sb in layout.subgraph_bounds:
+            inside = sb.x < x and x + w < sb.x + sb.width - 1 and sb.y < y and y + h < sb.y + sb.height - 1
+            if not inside and _overlaps(x, y, w, h, sb.x, sb.y, sb.width, sb.height):
+                return False
+        return not avoid_edges or not any(
+            (c, r) in edge_cells for r in range(y, y + h) for c in range(x, x + w)
+        )
+
     for note in graph.notes:
-        if note.target not in layout.placements:
+        p = layout.placements.get(note.target)
+        if p is None:
             continue
-        p = layout.placements[note.target]
+        w, h = note_size(note)
+        right = note_on_right(graph, note)
+        x = p.draw_x + p.draw_width + NOTE_GAP if right else p.draw_x - w - NOTE_GAP
+        y = p.draw_y + (p.draw_height - h) // 2
+        # Shifts that keep the note level with part of its box
+        shifts = [0] + [s for d in range(1, (p.draw_height + h + 1) // 2) for s in (-d, d)]
+        spot = next((
+            (x, y + s) for avoid_edges in (True, False) for s in shifts
+            if clear(x, y + s, w, h, avoid_edges)
+        ), None)
+        if spot is None:
+            # Past every box, note and subgraph on the note's rows
+            rects = [
+                *boxes, *((b.x, b.y, b.width, b.height) for b in placed),
+                *((sb.x, sb.y, sb.width, sb.height) for sb in layout.subgraph_bounds),
+            ]
+            spans = [(bx, bx + bw) for bx, by, bw, bh in rects if by < y + h and y < by + bh]
+            if right:
+                x = max(end for _, end in spans) + NOTE_GAP
+            else:
+                x = min(start for start, _ in spans) - w - NOTE_GAP
+            spot = (max(x, 0), max(y, 0))
+        placed.append(_NoteBox(note, spot[0], spot[1], w, h))
+    return placed
 
-        lines = note.text.split("\n")
-        note_width = max(display_width(line) for line in lines) + 4
-        note_height = len(lines) + 2
 
-        if note.position == "rightof":
-            note_x = p.draw_x + p.draw_width + 2
-        else:  # leftof
-            note_x = p.draw_x - note_width - 2
-            note_x = max(0, note_x)
+def _overlaps(x: int, y: int, w: int, h: int, bx: int, by: int, bw: int, bh: int) -> bool:
+    return x < bx + bw and bx < x + w and y < by + bh and by < y + h
 
-        note_y = p.draw_y + (p.draw_height - note_height) // 2
-        boxes.append(_NoteBox(note, note_x, note_y, note_width, note_height))
-    return boxes
+
+def _path_cells(path: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Every cell an edge's drawn path runs through."""
+    cells = path[:1]
+    for (x1, y1), (x2, y2) in zip(path, path[1:]):
+        dx = (x2 > x1) - (x2 < x1)
+        dy = (y2 > y1) - (y2 < y1)
+        x, y = x1, y1
+        while x != x2:
+            x += dx
+            cells.append((x, y))
+        while y != y2:
+            y += dy
+            cells.append((x, y))
+    return cells
 
 
 def _draw_notes(canvas: Canvas, notes: list[_NoteBox], cs: CharSet) -> None:

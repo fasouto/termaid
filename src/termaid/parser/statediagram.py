@@ -29,6 +29,8 @@ class _StateDiagramParser:
         self.graph = Graph()
         self._aliases: dict[str, str] = {}  # alias -> display label
         self._subgraph_stack: list[Subgraph] = []
+        self._descriptions: dict[str, list[str]] = {}  # state id -> `id : text` lines
+        self._open_note: GraphNote | None = None  # a note whose `end note` hasn't come
         self._start_count = 0
         self._end_count = 0
 
@@ -44,8 +46,12 @@ class _StateDiagramParser:
         lines = lines[1:]
 
         for line in lines:
-            self._parse_line(line)
+            if self._open_note is not None:
+                self._note_line(self._open_note, line)
+            else:
+                self._parse_line(line)
 
+        self._apply_descriptions()
         self._resolve_composite_edges()
         return self.graph
 
@@ -62,17 +68,27 @@ class _StateDiagramParser:
                 result.append(stripped)
         return result
 
+    def _note_line(self, note: GraphNote, line: str) -> None:
+        if line.lower() == "end note":
+            self._open_note = None
+        else:
+            note.text = "\n".join(filter(None, [note.text, line_breaks(line)]))
+
     def _parse_line(self, line: str) -> None:
         lower = line.strip().lower()
 
-        # direction override
+        # direction override: inside `{ }` it is the composite's own direction
         if lower.startswith("direction "):
             parts = line.split()
             if len(parts) >= 2:
                 try:
-                    self.graph.direction = Direction(parts[1].upper())
+                    direction = Direction(parts[1].upper())
                 except ValueError:
-                    pass
+                    return
+                if self._subgraph_stack:
+                    self._subgraph_stack[-1].direction = direction
+                else:
+                    self.graph.direction = direction
             return
 
         # End of composite state
@@ -81,18 +97,24 @@ class _StateDiagramParser:
                 self._subgraph_stack.pop()
             return
 
-        # Note: note right of A : text  OR  note left of A : text
+        # Note: `note right of A : text`, or `note left of A` with its text
+        # on the lines up to `end note`
         note_match = re.match(
-            r'note\s+(right\s+of|left\s+of)\s+(\S+)\s*:\s*(.*)',
+            r'note\s+(right|left)\s+of\s+([^\s:]+)\s*(?::\s*(.*))?$',
             line, re.IGNORECASE
         )
         if note_match:
-            position = note_match.group(1).lower().replace(" ", "")  # "rightof"/"leftof"
             target = note_match.group(2)
-            text = line_breaks(note_match.group(3).strip())
             if target not in self.graph.nodes:
                 self._ensure_node(target, self._aliases.get(target, target), NodeShape.ROUNDED)
-            self.graph.notes.append(GraphNote(text=text, position=position, target=target))
+            note = GraphNote(
+                text=line_breaks((note_match.group(3) or "").strip()),
+                position=note_match.group(1).lower() + "of",
+                target=target,
+            )
+            self.graph.notes.append(note)
+            if note_match.group(3) is None:
+                self._open_note = note
             return
         # Skip other note variants we don't handle yet
         if lower.startswith("note "):
@@ -157,6 +179,17 @@ class _StateDiagramParser:
             ))
             return
 
+        # State description: `s1 : text`
+        # (`s1:::cls` is a style, not a description)
+        desc_match = re.match(r'([^\s:\[]+)\s*:(?!:)\s*(.+)$', line)
+        if desc_match:
+            state_id = desc_match.group(1)
+            self._resolve_state(state_id, is_source=True)
+            self._descriptions.setdefault(state_id, []).append(
+                line_breaks(desc_match.group(2).strip(), "\\n")  # node labels break on a backslash-n
+            )
+            return
+
         # Plain state declaration (just a name on a line)
         if re.match(r'^[a-zA-Z_]\w*$', line.strip()):
             state_id = line.strip()
@@ -175,13 +208,42 @@ class _StateDiagramParser:
             self.graph.subgraphs.append(sg)
         self._subgraph_stack.append(sg)
 
+    def _apply_descriptions(self) -> None:
+        """Label each described state, as Mermaid does.
+
+        One description replaces the name; with more, the name stays as a
+        title over them. On a composite state it is the title.
+        """
+        titles: dict[str, str] = {}
+        for state_id, descriptions in self._descriptions.items():
+            alias = self._aliases.get(state_id)
+            if alias is not None:
+                descriptions = [alias, *descriptions]
+            if len(descriptions) == 1:
+                titles[state_id] = descriptions[0]
+            else:
+                titles[state_id] = "\\n".join([state_id, *descriptions])
+            node = self.graph.nodes.get(state_id)
+            if node is not None:
+                node.label = titles[state_id]
+
+        def _title(subs: list[Subgraph]) -> None:
+            for sg in subs:
+                if sg.id in titles:
+                    sg.label = titles[sg.id].replace("\\n", " ")
+                _title(sg.children)
+
+        if titles:
+            _title(self.graph.subgraphs)
+
     def _resolve_composite_edges(self) -> None:
         """Point transitions at composite states to the subgraph itself.
 
         A transition like `Idle --> Processing` may be parsed before or after
         `state Processing { ... }`, so `_resolve_state` creates a plain node for
-        it. Once parsing is done, swap those nodes for the subgraph so the edge
-        attaches to the composite's border instead of a duplicate box.
+        it, as does a description line. Once parsing is done, swap those nodes
+        for the subgraph so the edge attaches to the composite's border instead
+        of a duplicate box.
         """
         sg_ids: set[str] = set()
         all_subgraphs: list[Subgraph] = []
@@ -196,16 +258,13 @@ class _StateDiagramParser:
         if not sg_ids:
             return
 
-        to_remove: set[str] = set()
         for edge in self.graph.edges:
             if edge.source in sg_ids:
                 edge.source_is_subgraph = True
-                to_remove.add(edge.source)
             if edge.target in sg_ids:
                 edge.target_is_subgraph = True
-                to_remove.add(edge.target)
 
-        for nid in to_remove:
+        for nid in sg_ids & self.graph.nodes.keys():
             self.graph.nodes.pop(nid, None)
             if nid in self.graph.node_order:
                 self.graph.node_order.remove(nid)
@@ -219,12 +278,12 @@ class _StateDiagramParser:
             if is_source:
                 self._start_count += 1
                 node_id = f"{_START_ID}_{self._start_count}"
-                self._ensure_node(node_id, "●", NodeShape.CIRCLE)
+                self._ensure_node(node_id, "●", NodeShape.START_STATE)
                 return node_id
             else:
                 self._end_count += 1
                 node_id = f"{_END_ID}_{self._end_count}"
-                self._ensure_node(node_id, "◉", NodeShape.CIRCLE)
+                self._ensure_node(node_id, "◉", NodeShape.END_STATE)
                 return node_id
 
         # Only set shape if node is new (don't override stereotype shapes)

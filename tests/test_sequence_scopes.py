@@ -104,7 +104,7 @@ def test_autonumbered_self_message_fits_inside_frame():
 
 
 
-@pytest.mark.parametrize("kind", ["par", "alt", "opt", "loop", "critical", "break", "rect"])
+@pytest.mark.parametrize("kind", ["par", "alt", "opt", "loop", "critical", "break"])
 def test_empty_scope_keeps_complete_label_and_borders(kind: str):
     output = render(f"sequenceDiagram\nparticipant A\n{kind} empty scope\nend")
     assert f"[{kind}] empty scope" in output

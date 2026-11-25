@@ -323,3 +323,118 @@ class TestInputsThatOnceRaised:
     def test_a_timestamp_past_year_9999_does_not_raise(self):
         out = render("gantt\n  dateFormat x\n  section A\n  Near :n1, 1700000000000, 5d\n  Far :f1, 999999999999999999, 1d\n")
         assert "Near" in out
+
+
+def _schedule(source: str) -> dict[str, tuple[datetime | None, datetime | None]]:
+    d = parse_gantt("gantt\n  dateFormat YYYY-MM-DD\n" + source)
+    return {t.title: (t.start, t.end) for s in d.sections for t in s.tasks}
+
+
+class TestImplicitStart:
+    """A task with no start begins when the task written before it ends, as in Mermaid."""
+
+    def test_a_task_after_an_after_task_and_across_sections(self):
+        s = _schedule(
+            "  section Build\n"
+            "    Design :des, 2024-01-01, 5d\n"
+            "    Implement :impl, after des, 5d\n"
+            "    Review :3d\n"
+            "  section Ship\n"
+            "    Release :2d\n"
+        )
+        assert s["Review"] == (datetime(2024, 1, 11), datetime(2024, 1, 14))
+        assert s["Release"] == (datetime(2024, 1, 14), datetime(2024, 1, 16))
+
+    def test_every_task_gets_a_bar(self):
+        out = render(
+            "gantt\n  dateFormat YYYY-MM-DD\n  section Build\n    Design :des, 2024-01-01, 5d\n"
+            "    Implement :impl, after des, 5d\n    Review :3d\n  section Ship\n    Release :2d\n"
+        )
+        rows = {line.split("│")[0].strip(): line for line in out.splitlines() if "│" in line}
+        assert "█" in rows["Review"] and "█" in rows["Release"]
+
+    def test_until_ends_at_the_start_of_a_later_task(self):
+        s = _schedule(
+            "  section S\n"
+            "    A :a, 2024-01-01, 2d\n"
+            "    Wait :until m\n"
+            "    Done :milestone, m, 2024-01-10, 0d\n"
+        )
+        assert s["Wait"] == (datetime(2024, 1, 3), datetime(2024, 1, 10))
+
+
+class TestFitsTheWidth:
+    SOURCE = (
+        "gantt\n  dateFormat YYYY-MM-DD\n  section Build\n    Design the whole system :des, 2024-01-01, 5d\n"
+        "    Implement :impl, after des, 5d\n"
+    )
+
+    @pytest.mark.parametrize("width", [40, 50, 60, 70])
+    def test_the_cli_fits_the_requested_width(self, width, tmp_path, capsys):
+        from termaid.cli import main
+        from termaid.utils import max_line_width
+
+        mmd = tmp_path / "g.mmd"
+        mmd.write_text(self.SOURCE)
+        main([str(mmd), "--width", str(width)])
+        out = capsys.readouterr().out
+        assert "█" in out
+        assert max_line_width(out) <= width
+
+    def test_short_names_are_kept_whole_when_they_fit(self, tmp_path, capsys):
+        from termaid.cli import main
+
+        mmd = tmp_path / "g.mmd"
+        mmd.write_text(self.SOURCE)
+        main([str(mmd), "--width", "50"])
+        assert "Implement" in capsys.readouterr().out
+
+
+class TestExcludes:
+    """Excluded days stretch a task's duration, as Mermaid's checkTaskDates does."""
+
+    def test_weekends_push_later_tasks_back(self):
+        s = _schedule("  excludes weekends\n  section S\n    A :a, 2024-01-05, 3d\n    B :after a, 1d\n")
+        assert s["A"] == (datetime(2024, 1, 5), datetime(2024, 1, 10))
+        assert s["B"] == (datetime(2024, 1, 10), datetime(2024, 1, 11))
+
+    def test_a_listed_date_and_a_day_name(self):
+        s = _schedule("  excludes 2024-01-08, tuesday\n  section S\n    A :a, 2024-01-05, 3d\n")
+        assert s["A"][1] == datetime(2024, 1, 10)
+
+    def test_weekend_friday_makes_friday_and_saturday_the_weekend(self):
+        s = _schedule("  excludes weekends\n  weekend friday\n  section S\n    A :a, 2024-01-04, 2d\n")
+        assert s["A"][1] == datetime(2024, 1, 8)
+
+    def test_a_written_end_date_is_kept(self):
+        s = _schedule("  excludes weekends\n  section S\n    A :a, 2024-01-05, 2024-01-08\n")
+        assert s["A"][1] == datetime(2024, 1, 8)
+
+    def test_every_day_excluded_does_not_hang(self):
+        days = "monday tuesday wednesday thursday friday saturday sunday"
+        s = _schedule(f"  excludes {days}\n  section S\n    A :a, 2024-01-05, 3d\n")
+        assert s["A"][0] == datetime(2024, 1, 5)
+
+
+META_LINES = (
+    "    accTitle: Hidden title\n"
+    "    accDescr: Hidden description\n"
+    "    accDescr {\n      Hidden\n      block\n    }\n"
+)
+
+
+def test_accessibility_and_click_lines_are_not_drawn():
+    out = render(
+        "gantt\n" + META_LINES + "    dateFormat YYYY-MM-DD\n    Build :b, 2024-01-01, 3d\n"
+        '    click b href "https://example.com"\n    click b call cb()\n'
+    )
+    assert "Build" in out
+    for word in ("acc", "Hidden", "block", "click", "http"):
+        assert word not in out
+
+
+def test_br_tags_break_or_join_lines():
+    out = render('gantt\n  title Plan<br/>2024\n  dateFormat YYYY-MM-DD\n  section Phase<br>one\n    Build<br/>it :b, 2024-01-01, 3d\n')
+    assert "<br" not in out.lower()
+    for words in ['Plan 2024', 'Phase one', 'Build it']:
+        assert words in out, words

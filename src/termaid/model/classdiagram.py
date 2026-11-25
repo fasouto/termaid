@@ -18,6 +18,11 @@ class ClassDef:
     name: str
     annotation: str = ""               # "interface", "abstract", "enumeration", "service"
     members: list[Member] = field(default_factory=list)
+    label: str = ""                    # shown instead of the name: Car["Fast car"], Box~T~
+
+    @property
+    def display_name(self) -> str:
+        return self.label or self.name
 
 
 @dataclass
@@ -43,5 +48,6 @@ class ClassDiagram:
     classes: dict[str, ClassDef] = field(default_factory=dict)
     relationships: list[Relationship] = field(default_factory=list)
     notes: list[Note] = field(default_factory=list)
+    namespaces: dict[str, list[str]] = field(default_factory=dict)  # name -> its classes
     direction: str = "TB"              # "TB" or "LR"
     warnings: list[str] = field(default_factory=list)

@@ -265,7 +265,9 @@ def _render_canvas(
     if text.startswith("gantt"):
         from .parser.gantt import parse_gantt
         from .renderer.gantt import render_gantt
-        return _Rendered(render_gantt(parse_gantt(text), use_ascii=use_ascii))
+        return _Rendered(render_gantt(
+            parse_gantt(text), use_ascii=use_ascii, padding_x=padding_x, max_label_width=max_label_width,
+        ))
 
     if text.startswith("pie"):
         from .parser.piechart import parse_pie_chart
@@ -317,6 +319,9 @@ def _render_canvas(
     graph = _parse_graph(text)
     if text.startswith("architecture"):
         inline_edge_labels = False
+        if use_ascii:
+            from .parser.architecture import drop_icons
+            drop_icons(graph)
     canvas = draw.render_graph_canvas(
         graph,
         cs=cs,

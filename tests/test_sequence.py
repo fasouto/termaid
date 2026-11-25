@@ -84,13 +84,6 @@ class TestSequenceParser:
         )
         assert len(d.events) == 1
 
-    def test_autonumber(self):
-        d = parse_sequence_diagram(
-            "sequenceDiagram\n"
-            "  autonumber\n"
-            "  A->>B: msg"
-        )
-        assert d.autonumber is True
 
     def test_comments_ignored(self):
         d = parse_sequence_diagram(
@@ -585,7 +578,11 @@ class TestSequenceDestroyAndRect:
             "  Bob-->>Alice: Hi\n"
             "  end"
         )
-        assert "[rect]" in output
+        # Mermaid shades the rect's background and prints none of its colour.
+        assert "rect" not in output and "rgb" not in output and "200" not in output
+        lines = output.splitlines()
+        top = next(i for i, line in enumerate(lines) if line.lstrip().startswith("┌") and "Alice" not in lines[i + 1])
+        assert "Hello" in lines[top + 1], "an untitled frame has no title row"
 
     def test_destroy_no_warning(self):
         d = parse_sequence_diagram(
@@ -749,3 +746,146 @@ class TestSelfMessageLayout:
             "  A->>B: 这是一个很长的中文标签测试"
         )
         assert "这是一个很长的中文标签测试" in output
+
+
+def _lifeline_column(output: str, name: str) -> int:
+    """Column of a participant's lifeline: the centre of its header label."""
+    header = next(line for line in output.splitlines() if name in line)
+    return header.index(name) + len(name) // 2
+
+
+def _note_row(output: str, text: str) -> str:
+    return next(line for line in output.splitlines() if text in line)
+
+
+class TestNotesBesideTheFirstParticipant:
+    def test_left_note_stays_left_of_the_lifeline(self):
+        output = render(
+            "sequenceDiagram\n  Alice->>Bob: Hi\n  Note left of Alice: Alice waits for a reply"
+        )
+        row = _note_row(output, "Alice waits for a reply")
+        assert row.index("│", row.index("reply")) < _lifeline_column(output, "Alice")
+
+    def test_wide_note_over_stays_centred_on_its_lifeline(self):
+        output = render(
+            "sequenceDiagram\n  Alice->>Bob: Hi\n  Note over Alice: Alice waits for a reply here"
+        )
+        row = _note_row(output, "Alice waits for a reply here")
+        left, right = row.index("│"), row.index("│", row.index("here"))
+        assert abs((left + right) // 2 - _lifeline_column(output, "Alice")) <= 1
+
+
+class TestSequenceLabelText:
+    def test_entity_codes_are_decoded_everywhere(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  participant A as Caf#233;\n"
+            "  A->>B: I #9829; you!\n"
+            "  Note over A: #quot;hi#quot;\n"
+            "  loop #35;1 first\n"
+            "  B-->>A: ok\n"
+            "  end"
+        )
+        assert "Café" in output and "I ♥ you!" in output and '"hi"' in output and "#1 first" in output
+        assert "#9829;" not in output and "#quot;" not in output
+
+    def test_br_breaks_frame_titles_and_section_labels(self):
+        output = render(
+            "sequenceDiagram\n"
+            "  alt every<br/>minute\n"
+            "  A->>B: one\n"
+            "  else when<br>idle\n"
+            "  B->>A: two\n"
+            "  end"
+        )
+        assert "<br" not in output
+        lines = output.splitlines()
+        assert any(line.rstrip(" │").endswith("every") for line in lines)
+        assert any("minute" in line and "every" not in line for line in lines)
+        assert any("idle" in line and "when" not in line for line in lines)
+
+
+class TestAutonumberToggles:
+    def test_autonumber_off_stops_the_numbers(self):
+        output = render("sequenceDiagram\n  autonumber\n  A->>B: one\n  autonumber off\n  A->>B: two")
+        assert "1: one" in output
+        assert "two" in output and "2: two" not in output
+
+    def test_numbers_start_where_autonumber_appears_and_count_every_message(self):
+        # Mermaid counts every message and shows the count from the autonumber statement on.
+        output = render("sequenceDiagram\n  A->>B: zero\n  autonumber\n  A->>B: one\n  B->>A: two")
+        assert "zero" in output and "1: zero" not in output
+        assert "2: one" in output and "3: two" in output
+
+
+class TestParticipantBoxes:
+    SOURCE = "sequenceDiagram\n  box Frontend\n  participant UI\n  end\n  participant API\n  UI->>API: GET /me"
+
+    def test_box_frames_its_participants_under_its_title(self):
+        lines = render(self.SOURCE).splitlines()
+        title_row = next(i for i, line in enumerate(lines) if "Frontend" in line)
+        title = lines[title_row]
+        left, right = title.index("┌"), title.index("┐")
+        ui_row = next(line for line in lines if "UI" in line)
+        assert left < ui_row.index("UI") < right < ui_row.index("API")
+        bottom = max(i for i, line in enumerate(lines) if len(line) > left and line[left] == "└")
+        assert lines[bottom][right] == "┘"
+        assert all(line[left] == "│" for line in lines[title_row + 1:bottom])
+
+    def test_box_is_parsed_without_warnings(self):
+        d = parse_sequence_diagram(self.SOURCE)
+        assert d.warnings == []
+        assert [m.source for m in d.events] == ["UI"]
+
+    def test_a_leading_colour_is_not_part_of_the_title(self):
+        output = render("sequenceDiagram\n  box rgb(33,66,99) Team\n  participant A\n  end\n  box Aqua\n  participant B\n  end\n  A->>B: hi")
+        assert "Team" in output
+        assert "rgb" not in output and "Aqua" not in output
+
+    def test_a_title_that_is_not_a_colour_is_kept_whole(self):
+        assert "Another Group" in render("sequenceDiagram\n  box Another Group\n  participant A\n  end")
+        assert "My-Team" in render("sequenceDiagram\n  box My-Team\n  participant A\n  end")
+
+
+class TestCreatedParticipants:
+    SOURCE = "sequenceDiagram\n  Alice->>Bob: Hi\n  create participant Carl\n  Bob->>Carl: Hi Carl\n  Carl-->>Bob: hello"
+
+    def test_created_participant_appears_where_it_is_created(self):
+        lines = render(self.SOURCE).splitlines()
+        carl = next(i for i, line in enumerate(lines) if "Carl" in line and "Hi Carl" not in line)
+        first_message = next(i for i, line in enumerate(lines) if "►" in line)
+        assert "Alice" not in lines[carl]
+        assert carl > first_message
+        creating = next(i for i, line in enumerate(lines) if "Hi Carl" in line)
+        assert creating > carl
+        column = lines[carl].index("Carl") + 2
+        assert all(len(line) <= column or line[column] == " " for line in lines[:carl - 1])
+
+    def test_create_is_parsed_without_warnings(self):
+        assert parse_sequence_diagram(self.SOURCE).warnings == []
+
+
+def test_collections_draws_a_rectangle_stacked_behind_another():
+    header = render("sequenceDiagram\n  collections Orders").splitlines()[:5]
+    front_left = header[1].index("┌")
+    assert header[0].strip() == "┌" + "─" * (len(header[1].strip()) - 3) + "┐"
+    assert header[0].index("┌") == front_left + 1
+    assert header[1].rstrip().endswith("┐│")
+    assert header[2][front_left:].split()[-1].endswith("├┘")
+
+
+class TestSequenceTitle:
+    def test_title_statement_is_drawn_above_the_diagram(self):
+        lines = render("sequenceDiagram\n  title Checkout flow\n  A->>B: hi").splitlines()
+        assert lines[0].strip() == "Checkout flow"
+        assert "A" in lines[3]
+
+    def test_title_sits_above_a_box(self):
+        lines = render("sequenceDiagram\n  title: Checkout\n  box Shop\n  participant A\n  end\n  A->>B: hi").splitlines()
+        assert lines[0].strip() == "Checkout"
+        assert "Shop" in lines[2]
+
+    def test_accessibility_lines_are_not_drawn_or_warned_about(self):
+        source = "sequenceDiagram\n  accTitle: Login\n  accDescr: How a user logs in\n  A->>B: hi"
+        assert parse_sequence_diagram(source).warnings == []
+        assert "Login" not in render(source)

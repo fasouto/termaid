@@ -4,47 +4,48 @@ from __future__ import annotations
 import re
 
 from ..model.classdiagram import ClassDef, ClassDiagram, Member, Note, Relationship
+from ..utils import line_breaks
+
+# A class name: a word, or any text in backticks (`User Account`)
+_NAME = r"(\w+|`[^`]+`)"
 
 # Direction line
 _DIRECTION_RE = re.compile(r"^\s*direction\s+(TB|LR|BT|RL|TD)\s*$", re.IGNORECASE)
 
-# Class definition with brace body
-_CLASS_BRACE_RE = re.compile(
-    r"^\s*class\s+(\w+)(?:\s*~[^~]+~)?(?:\s*(<<\w+>>))?\s*\{\s*$"
-)
-
-# Class definition without brace body
-_CLASS_SIMPLE_RE = re.compile(
-    r"^\s*class\s+(\w+)(?:\s*~[^~]+~)?(?:\s*(<<\w+>>))?\s*$"
+# Class definition: name, generic (~T~), label (["Fast car"]), annotation,
+# then an optional opening brace for a body
+_CLASS_RE = re.compile(
+    r'^\s*class\s+' + _NAME + r'(?:\s*~(.+?)~(?=[\s\[<{]|$))?'
+    r'(?:\s*\["([^"]*)"\])?(?:\s*(<<\w+>>))?\s*(\{)?\s*$'
 )
 
 # Annotation inside brace body: <<interface>>
 _ANNOTATION_RE = re.compile(r"^\s*<<(\w+)>>\s*$")
 
 # Annotation on separate line: <<interface>> ClassName
-_ANNOTATION_LINE_RE = re.compile(r"^\s*<<(\w+)>>\s+(\w+)\s*$")
+_ANNOTATION_LINE_RE = re.compile(r"^\s*<<(\w+)>>\s+" + _NAME + r"\s*$")
 
 # Colon member outside of brace body: ClassName : +memberName
-_COLON_MEMBER_RE = re.compile(r"^\s*(\w+)\s*:\s*(.+?)\s*$")
+_COLON_MEMBER_RE = re.compile(r"^\s*" + _NAME + r"\s*:\s*(.+?)\s*$")
 
 # Relationship regex
 # Left markers: <|, <, *, o  (longest first)
 # Line types: --, ..
 # Right markers: |>, >, *, o  (longest first)
 _REL_RE = re.compile(
-    r'^\s*(\w+)\s*'                          # source
+    r'^\s*' + _NAME + r'\s*'                  # source
     r'(?:"([^"]*)")?\s*'                     # optional source cardinality
     r'((?:<\||[<*o])?)'                      # left marker
     r'(--|\.\.|--\*|\.\.)'                   # line style
     r'((?:\|>|[>*o])?)'                      # right marker
     r'\s*(?:"([^"]*)")?\s*'                  # optional target cardinality
-    r'(\w+)'                                 # target
+    + _NAME +                                # target
     r'(?:\s*:\s*(.+?))?\s*$'                 # optional label
 )
 
 # Note for a specific class: note for Duck "can fly\ncan swim"
 _NOTE_FOR_RE = re.compile(
-    r'^\s*note\s+for\s+(\w+)\s+"([^"]*)"\s*$', re.IGNORECASE
+    r'^\s*note\s+for\s+' + _NAME + r'\s+"([^"]*)"\s*$', re.IGNORECASE
 )
 
 # Floating note: note "From Duck till Zebra"
@@ -52,11 +53,33 @@ _NOTE_RE = re.compile(
     r'^\s*note\s+"([^"]*)"\s*$', re.IGNORECASE
 )
 
+# Namespace block opener: namespace BaseShapes {
+_NAMESPACE_RE = re.compile(r"^\s*namespace\s+(\S+?)\s*\{\s*$")
+
 # Lines to skip silently
 _SKIP_RE = re.compile(
     r"^\s*(?:namespace\s|style\s|classDef\s|cssClass\s|click\s|callback\s|link\s)",
     re.IGNORECASE,
 )
+
+
+def _generics(text: str) -> str:
+    """Write Mermaid's ``~T~`` generics as ``<T>``: ``List~List~int~~`` is
+    ``List<List<int>>``. A tilde between a name and more of it opens."""
+    out = []
+    for i, ch in enumerate(text):
+        if ch == "~":
+            before = text[i - 1] if i else ""
+            after = text[i + 1] if i + 1 < len(text) else ""
+            opens = (before.isalnum() or before == "_") and after != "" and (after.isalnum() or after in "_?(")
+            out.append("<" if opens else ">")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _name(token: str) -> str:
+    return token[1:-1] if token.startswith("`") else token
 
 
 def _parse_member_text(text: str) -> Member:
@@ -75,7 +98,7 @@ def _parse_member_text(text: str) -> Member:
         classifier = text[-1]
         text = text[:-1]
 
-    text = text.strip()
+    text = _generics(text.strip())
 
     # Detect method (contains parentheses)
     is_method = "(" in text and ")" in text
@@ -123,6 +146,7 @@ def parse_class_diagram(text: str) -> ClassDiagram:
     diagram = ClassDiagram()
     lines = text.split("\n")
     i = 0
+    namespaces: list[str] = []
 
     while i < len(lines):
         stripped = lines[i].strip()
@@ -132,27 +156,35 @@ def parse_class_diagram(text: str) -> ClassDiagram:
         if not stripped or stripped.startswith("classDiagram") or stripped.startswith("%%") or stripped == "---":
             continue
 
+        m = _NAMESPACE_RE.match(stripped)
+        if m:
+            namespaces.append(m.group(1))
+            diagram.namespaces.setdefault(m.group(1), [])
+            continue
+
         # Skip unsupported constructs (with warning)
         if _SKIP_RE.match(stripped):
             diagram.warnings.append(f"Unsupported directive (ignored): {stripped!r}")
             continue
 
-        # Closing brace (stray)
+        # Closing brace: the end of a namespace, or stray
         if stripped == "}":
+            if namespaces:
+                namespaces.pop()
             continue
 
         # Note for a specific class
         m = _NOTE_FOR_RE.match(stripped)
         if m:
-            target_cls = m.group(1)
-            note_text = m.group(2)
+            target_cls = _name(m.group(1))
+            note_text = line_breaks(m.group(2), "\\n")
             diagram.notes.append(Note(text=note_text, target=target_cls))
             continue
 
         # Floating note
         m = _NOTE_RE.match(stripped)
         if m:
-            note_text = m.group(1)
+            note_text = line_breaks(m.group(1), "\\n")
             diagram.notes.append(Note(text=note_text))
             continue
 
@@ -160,7 +192,7 @@ def parse_class_diagram(text: str) -> ClassDiagram:
         m = _ANNOTATION_LINE_RE.match(stripped)
         if m:
             annotation = m.group(1)
-            class_name = m.group(2)
+            class_name = _name(m.group(2))
             _ensure_class(diagram, class_name)
             diagram.classes[class_name].annotation = annotation
             continue
@@ -174,54 +206,49 @@ def parse_class_diagram(text: str) -> ClassDiagram:
             diagram.direction = d
             continue
 
-        # Class with brace body
-        m = _CLASS_BRACE_RE.match(stripped)
+        # Class definition, with or without a body
+        m = _CLASS_RE.match(stripped)
         if m:
-            class_name = m.group(1)
-            annotation = m.group(2)
+            class_name = _name(m.group(1))
             _ensure_class(diagram, class_name)
             cls = diagram.classes[class_name]
-            if annotation:
-                cls.annotation = annotation.strip("<>")
+            if namespaces and class_name not in diagram.namespaces[namespaces[-1]]:
+                diagram.namespaces[namespaces[-1]].append(class_name)
+            if m.group(3) is not None:
+                cls.label = m.group(3)
+            elif m.group(2):
+                cls.label = class_name + "<" + _generics(m.group(2)) + ">"
+            if m.group(4):
+                cls.annotation = m.group(4).strip("<>")
+            if not m.group(5):
+                continue
 
             # Read body lines until closing brace
             while i < len(lines):
                 body_line = lines[i].strip()
                 i += 1
-                if body_line == "}" or body_line == "}\n":
+                if body_line == "}":
                     break
                 if not body_line or body_line.startswith("%%"):
                     continue
-                # Check for annotation inside body
                 am = _ANNOTATION_RE.match(body_line)
                 if am:
                     cls.annotation = am.group(1)
                     continue
-                # Parse as member
                 cls.members.append(_parse_member_text(body_line))
-            continue
-
-        # Class without brace body
-        m = _CLASS_SIMPLE_RE.match(stripped)
-        if m:
-            class_name = m.group(1)
-            annotation = m.group(2)
-            _ensure_class(diagram, class_name)
-            if annotation:
-                diagram.classes[class_name].annotation = annotation.strip("<>")
             continue
 
         # Relationship
         m = _REL_RE.match(stripped)
         if m:
-            source = m.group(1)
+            source = _name(m.group(1))
             source_card = m.group(2) or ""
             left_marker = m.group(3) or ""
             line = m.group(4)
             right_marker = m.group(5) or ""
             target_card = m.group(6) or ""
-            target = m.group(7)
-            label = (m.group(8) or "").strip()
+            target = _name(m.group(7))
+            label = line_breaks((m.group(8) or "").strip(), " ")
 
             _ensure_class(diagram, source)
             _ensure_class(diagram, target)
@@ -243,7 +270,7 @@ def parse_class_diagram(text: str) -> ClassDiagram:
         # Colon member: ClassName : member
         m = _COLON_MEMBER_RE.match(stripped)
         if m:
-            class_name = m.group(1)
+            class_name = _name(m.group(1))
             member_text = m.group(2)
             _ensure_class(diagram, class_name)
             diagram.classes[class_name].members.append(_parse_member_text(member_text))
