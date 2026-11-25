@@ -862,3 +862,12 @@ class TestCreatedParticipants:
 
     def test_create_is_parsed_without_warnings(self):
         assert parse_sequence_diagram(self.SOURCE).warnings == []
+
+
+def test_collections_draws_a_rectangle_stacked_behind_another():
+    header = render("sequenceDiagram\n  collections Orders").splitlines()[:5]
+    front_left = header[1].index("┌")
+    assert header[0].strip() == "┌" + "─" * (len(header[1].strip()) - 3) + "┐"
+    assert header[0].index("┌") == front_left + 1
+    assert header[1].rstrip().endswith("┐│")
+    assert header[2][front_left:].split()[-1].endswith("├┘")
