@@ -111,6 +111,11 @@ def _self_loop_width(lines: list[str]) -> int:
     return max(_lines_width(lines) + 4, 8)
 
 
+def _title_rows(diagram: SequenceDiagram) -> int:
+    """Rows the diagram's title takes above the participants: its line and a blank one."""
+    return 2 if diagram.title else 0
+
+
 def _participant_height(participant, lines: list[str]) -> int:
     return _KIND_HEIGHT.get(participant.kind, 3) + len(lines) - 1
 
@@ -177,7 +182,7 @@ def _compute_layout(
 
     header_height = max(
         _participant_height(p, lines) for p, lines in zip(diagram.participants, labels.participants)
-    ) + (1 if diagram.boxes else 0)  # a box's top border runs above the participants
+    ) + (1 if diagram.boxes else 0) + _title_rows(diagram)  # a box's top border runs above the participants
 
     # Compute per-gap minimum widths based on message labels between adjacent pairs
     gap_mins = [min_gap] * (n - 1) if n > 1 else []
@@ -240,7 +245,10 @@ def _compute_layout(
         _wrap_edge_notes(diagram, flat_events, labels, col_centers, right_edge, max_label_width)
 
     # Account for self-messages and notes extending beyond participant headers.
-    max_right = max([col_centers[-1] + box_widths[-1] // 2 + 2, *(frame.right + 1 for frame in box_frames)])
+    max_right = max([
+        col_centers[-1] + box_widths[-1] // 2 + 2, display_width(diagram.title),
+        *(frame.right + 1 for frame in box_frames),
+    ])
     min_left = min([0, *(frame.left for frame in box_frames)])
     for event_index, event in enumerate(flat_events):
         if isinstance(event, Message) and event.source == event.target:
@@ -649,8 +657,10 @@ def render_sequence(
     # Compute activation ranges
     activation_ranges = _compute_activation_ranges(flat_events, row_offsets, labels)
 
+    if diagram.title:
+        canvas.put_text(0, (width - display_width(diagram.title)) // 2, diagram.title, style="label")
     for frame in box_frames:
-        _draw_box_frame(canvas, frame, cs)
+        _draw_box_frame(canvas, frame, _title_rows(diagram), cs)
 
     # ── 1. Draw participant headers, bottom-aligned at the top or where they are created ──
     lifeline_start = _TOP_MARGIN + header_height
@@ -748,19 +758,19 @@ def render_sequence(
 
 # ── Block frame drawing ──────────────────────────────────────────
 
-def _draw_box_frame(canvas: Canvas, frame: _BoxFrame, cs: CharSet) -> None:
-    """Draw a box around its participants' columns, its title in the top border."""
+def _draw_box_frame(canvas: Canvas, frame: _BoxFrame, top: int, cs: CharSet) -> None:
+    """Draw a box around its participants' columns from row ``top``, its title in the top border."""
     bottom = canvas.height - 1
-    for row in range(1, bottom):
+    for row in range(top + 1, bottom):
         canvas.put(row, frame.left, cs.vertical, merge=False, style="node")
         canvas.put(row, frame.right, cs.vertical, merge=False, style="node")
-    for row, left_corner, right_corner in ((0, cs.top_left, cs.top_right), (bottom, cs.bottom_left, cs.bottom_right)):
+    for row, left_corner, right_corner in ((top, cs.top_left, cs.top_right), (bottom, cs.bottom_left, cs.bottom_right)):
         canvas.put(row, frame.left, left_corner, merge=False, style="node")
         for col in range(frame.left + 1, frame.right):
             canvas.put(row, col, cs.horizontal, merge=False, style="node")
         canvas.put(row, frame.right, right_corner, merge=False, style="node")
     if frame.title:
-        canvas.put_text(0, frame.left + 1, f" {frame.title} ", style="edge_label", overwrite_spaces=True)
+        canvas.put_text(top, frame.left + 1, f" {frame.title} ", style="edge_label", overwrite_spaces=True)
 
 
 def _compute_block_bounds(

@@ -84,4 +84,5 @@ class SequenceDiagram:
     participants: list[Participant] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
     boxes: list[ParticipantBox] = field(default_factory=list)
+    title: str = ""
     warnings: list[str] = field(default_factory=list)

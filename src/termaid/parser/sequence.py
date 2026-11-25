@@ -130,6 +130,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
     event_stack: list[list] = [diagram.events]
     block_stack: list[Block] = []
     open_box: ParticipantBox | None = None
+    in_acc_descr = False
 
     lines = text.split("\n")
     for line in lines:
@@ -137,6 +138,18 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
 
         # Skip empty lines, header, and comments
         if not stripped or stripped.startswith("sequenceDiagram") or stripped.startswith("%%"):
+            continue
+
+        # accDescr { ... } spans lines; accessibility text is not drawn
+        if in_acc_descr:
+            in_acc_descr = "}" not in stripped
+            continue
+        m = re.match(r"^(title|accTitle|accDescr)\b\s*:?\s*(.*)$", stripped)
+        if m and not _MESSAGE_RE.match(stripped):
+            if m.group(1) == "title":
+                diagram.title = _label_text(m.group(2)).replace("\n", " ")
+            elif m.group(1) == "accDescr" and m.group(2).startswith("{"):
+                in_acc_descr = "}" not in m.group(2)
             continue
 
         # Autonumber keyword, with an optional start value and increment, or off
