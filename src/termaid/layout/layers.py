@@ -6,6 +6,7 @@ each layer to minimize edge crossings using a barycenter heuristic.
 from __future__ import annotations
 
 from collections import Counter, deque
+from typing import NamedTuple
 
 from ..graph.model import Edge, Graph, Subgraph
 from .grid import STRIDE, GridLayout
@@ -476,13 +477,34 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
     return layer_lists
 
 
-def bus_edges(graph: Graph) -> dict[str, list[int]]:
+class BusKey(NamedTuple):
+    """Names one bus: the node its edges share and which end that is. A
+    fan-in also names how its edges look where they meet the target."""
+    fan_in: bool
+    hub: str
+    look: tuple = ()
+
+
+def bus_edges(graph: Graph) -> dict[BusKey, list[int]]:
+    """Groups of unlabelled edges drawn as one shared line.
+
+    A fan-out joins the edges of one source whose targets have no other
+    incoming edge. A fan-in joins the edges into one target whose sources
+    have no other outgoing edge, and only edges that look alike where
+    they meet the target, so a dotted and a solid edge never share a line.
+    """
     in_degree = Counter(e.target for e in graph.edges)
-    by_source: dict[str, list[int]] = {}
+    out_degree = Counter(e.source for e in graph.edges)
+    groups: dict[BusKey, list[int]] = {}
     for i, e in enumerate(graph.edges):
-        if not e.label and not e.is_self_reference and in_degree[e.target] == 1:
-            by_source.setdefault(e.source, []).append(i)
-    return {src: idxs for src, idxs in by_source.items() if len(idxs) > 1}
+        if e.label or e.is_self_reference:
+            continue
+        if in_degree[e.target] == 1:
+            groups.setdefault(BusKey(False, e.source), []).append(i)
+        elif out_degree[e.source] == 1 and not (e.source_is_subgraph or e.target_is_subgraph):
+            look = (e.style, e.has_arrow_end, e.arrow_type_end)
+            groups.setdefault(BusKey(True, e.target, look), []).append(i)
+    return {key: idxs for key, idxs in groups.items() if len(idxs) > 1}
 
 
 def compute_gap_expansions(
@@ -507,8 +529,8 @@ def compute_gap_expansions(
             node_layer[nid] = layer_idx
             node_pos[nid] = pos_idx
 
-    on_bus = {i for idxs in bus_edges(graph).values() for i in idxs}
-    lanes_per_gap: dict[int, set[tuple[str, str | int]]] = {}
+    bus_of = {i: key for key, idxs in bus_edges(graph).items() for i in idxs}
+    lanes_per_gap: dict[int, set[BusKey | int]] = {}
     for i, edge in enumerate(graph.edges):
         if edge.is_self_reference:
             continue
@@ -524,7 +546,7 @@ def compute_gap_expansions(
         # Count this edge for each gap it crosses
         lo, hi = min(src_layer, tgt_layer), max(src_layer, tgt_layer)
         for gap_idx in range(lo, hi):
-            lane = ("bus", edge.source) if i in on_bus and tgt_layer == src_layer + 1 else ("edge", i)
+            lane = bus_of[i] if i in bus_of and tgt_layer == src_layer + 1 else i
             lanes_per_gap.setdefault(gap_idx, set()).add(lane)
 
     return {gap: max(0, len(lanes) - 1) for gap, lanes in lanes_per_gap.items()}

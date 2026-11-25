@@ -370,7 +370,7 @@ class TestUnrelatedEdgesStayApart:
         lines = self._pipeline_lines()
         top, bottom, left, right = find_box(lines, "Delivery")
         side_crossings = sum(lines[r][c] == "┼" for r in range(top, bottom + 1) for c in (left, right))
-        assert (lines[top].count("┼"), side_crossings) == (3, 0)
+        assert (lines[top].count("┼"), side_crossings) == (2, 0)
 
     def test_edges_without_subgraphs_reach_only_their_targets(self):
         reached = self._targets("unrelated_edges.mmd", ["A", "B", "C", "D", "E"])
