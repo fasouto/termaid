@@ -116,8 +116,13 @@ def expand_gaps_for_subgraphs(
 def compute_subgraph_bounds(
     graph: Graph,
     layout: GridLayout,
+    title_caps: dict[str, int] | None = None,
 ) -> None:
-    """Compute bounding boxes for subgraphs."""
+    """Compute bounding boxes for subgraphs.
+
+    *title_caps* maps a subgraph id to the widest its title may make its box.
+    """
+    title_caps = title_caps or {}
     def _compute(sg: Subgraph) -> SubgraphBounds | None:
         # Recursively compute children first
         child_bounds: list[SubgraphBounds] = []
@@ -174,7 +179,7 @@ def compute_subgraph_bounds(
 
         content_width = int(max_x - min_x) + SG_BORDER_PAD * 2
         label_width = display_width(sg.label) + 4
-        final_width = max(content_width, label_width)
+        final_width = max(content_width, min(label_width, title_caps.get(sg.id, label_width)))
 
         bounds = SubgraphBounds(
             subgraph=sg,
@@ -182,6 +187,7 @@ def compute_subgraph_bounds(
             y=int(min_y) - SG_BORDER_PAD - SG_LABEL_HEIGHT,
             width=final_width,
             height=int(max_y - min_y) + SG_BORDER_PAD * 2 + SG_LABEL_HEIGHT,
+            content_width=content_width,
         )
         return bounds
 
@@ -189,6 +195,60 @@ def compute_subgraph_bounds(
         bounds = _compute(sg)
         if bounds:
             layout.subgraph_bounds.append(bounds)
+
+
+_TITLE_CLEARANCE = 3  # cells between a box's side and a neighbour, room for `─►`
+
+
+def fit_titles(graph: Graph, layout: GridLayout) -> None:
+    """Narrow a subgraph box that its title stretched onto a neighbour.
+
+    A box grows rightwards to fit a title wider than its nodes. Where that
+    would cover a node or box outside the subgraph, the box stops short of
+    that neighbour, never narrower than its nodes need, and the title is
+    clipped when drawn. A nested box that narrows lets its parent narrow
+    too, so this repeats, at most once per subgraph.
+    """
+    caps: dict[str, int] = {}
+    for _ in range(len(layout.subgraph_bounds)):
+        changed = False
+        for sb in layout.subgraph_bounds:
+            if sb.width <= sb.content_width:
+                continue
+            members: set[str] = set()
+            _gather_all_nodes(sb.subgraph, members)
+            content_side = sb.x + sb.content_width - 1
+            reach = sb.x + sb.width + 1  # a neighbour may sit one cell off the side
+            lefts = [
+                p.draw_x for nid, p in layout.placements.items()
+                if nid not in members
+                and p.draw_y < sb.y + sb.height and sb.y < p.draw_y + p.draw_height
+                and content_side < p.draw_x < reach
+            ]
+            lefts += [
+                other.x for other in layout.subgraph_bounds
+                if not _nested(sb.subgraph, other.subgraph)
+                and other.y < sb.y + sb.height and sb.y < other.y + other.height
+                and content_side < other.x < reach
+            ]
+            if lefts:
+                caps[sb.subgraph.id] = max(sb.content_width, min(lefts) - _TITLE_CLEARANCE - sb.x)
+                changed = True
+        if not changed:
+            return
+        layout.subgraph_bounds.clear()
+        compute_subgraph_bounds(graph, layout, caps)
+
+
+def _nested(a: Subgraph, b: Subgraph) -> bool:
+    """Whether one of the two subgraphs holds the other, or they are one."""
+    for inner, outer in ((a, b), (b, a)):
+        sg: Subgraph | None = inner
+        while sg:
+            if sg is outer:
+                return True
+            sg = sg.parent
+    return False
 
 
 def _gather_all_nodes(sg: Subgraph, result: set[str]) -> None:

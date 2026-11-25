@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 def _get_widget_class():
     """Get the MermaidWidget class, importing Textual lazily."""
     try:
+        from rich.text import Text
         from textual.widget import Widget
         from textual.reactive import reactive
     except ImportError:
@@ -35,12 +36,13 @@ def _get_widget_class():
             self._use_ascii = use_ascii
             self._arrow_style = arrow_style
 
-        def render(self) -> str:
+        def render(self) -> Text:
             if not self.source:
-                return ""
+                return Text("")
             from .. import render as _render
-            return _render(
+            # Text, not str: Textual reads a str as markup, so "[b]" in a label would vanish.
+            return Text(_render(
                 self.source, use_ascii=self._use_ascii, arrow_style=self._arrow_style
-            )
+            ))
 
     return MermaidWidget

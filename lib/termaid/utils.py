@@ -9,6 +9,20 @@ from typing import Iterator
 # unclosed one is not rescanned to the end of the source from every later %%{.
 DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
 
+# An opening Markdown fence: three or more backticks or tildes, then an info
+# string. Any indentation is accepted so that diagrams nested in list items
+# are found; the indent is removed from the diagram's lines.
+OPEN_FENCE = re.compile(r"^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+
+
+def dedent_line(line: str, width: int) -> str:
+    """Remove up to ``width`` leading whitespace characters from a line."""
+    n = 0
+    while n < width and n < len(line) and line[n] in " \t":
+        n += 1
+    return line[n:]
+
+
 _BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 
@@ -116,7 +130,8 @@ def fit_to_width(
     *plain* gives a drawing's text, for drawings that are not strings.
     *measure*, when given, takes the same overrides and returns a width the
     drawing cannot be narrower than, without drawing it. A candidate it
-    already puts over the target is not drawn.
+    already puts over the target is not drawn, and it picks the label width
+    to draw. A measure of 0 says nothing about the drawing.
     """
     def fitting(**overrides):
         """The drawing with *overrides* when it fits, else None."""
@@ -135,12 +150,40 @@ def fit_to_width(
         if candidate is not None:
             return candidate
 
-    # Spacing alone was not enough: wrap labels and keep the widest label
-    # width that fits. Width 1 goes first: if it still overflows, nothing
-    # will fit, and it comes back.
+    # Spacing alone was not enough: wrap labels at the widest label width
+    # that fits.
+    widest = min(target_width, 64)
+
+    def bound(label_width):
+        return measure(gap=1, padding_x=0, max_label_width=label_width)
+
+    narrowest = bound(1) if measure is not None else 0
+    if narrowest > 0:
+        # Search on the measure, which costs no drawing. A drawing can come
+        # out a few columns wider than its measure, so the next narrower
+        # width is drawn too before searching on drawings below it.
+        label_width, low, high = 1, 2, widest
+        if narrowest > target_width:
+            high = 1
+        elif bound(widest) <= target_width:
+            label_width, high = widest, 1
+        while low <= high:
+            middle = (low + high) // 2
+            if bound(middle) <= target_width:
+                label_width, low = middle, middle + 1
+            else:
+                high = middle - 1
+        for label_width in (label_width, label_width - 1):
+            candidate = render(gap=1, padding_x=0, max_label_width=label_width)
+            if label_width == 1 or max_line_width(plain(candidate)) <= target_width:
+                return candidate
+        widest = label_width - 1
+
+    # Width 1 goes first: if it still overflows, nothing will fit, and it
+    # comes back.
     result = render(gap=1, padding_x=0, max_label_width=1)
     if max_line_width(plain(result)) <= target_width:
-        low, high = 2, min(target_width, 64)
+        low, high = 2, widest
         while low <= high:
             label_width = (low + high) // 2
             candidate = fitting(gap=1, padding_x=0, max_label_width=label_width)

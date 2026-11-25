@@ -14,7 +14,7 @@ from ..graph.model import Direction, Edge, Graph
 from ..layout.grid import (
     SG_BORDER_PAD, GridLayout, NodePlacement, SubgraphBounds, compute_layout,
 )
-from ..layout.layers import bus_edges
+from ..layout.layers import BusKey, bus_edges
 from .pathfinder import find_path, simplify_path
 
 
@@ -45,6 +45,10 @@ class RoutedEdge:
 
 
 _MAX_GAP_ROUNDS = 3
+# Above this many edges a routing pass takes a noticeable share of a
+# second and another pass rarely clears a crowded route, so crowded gaps
+# are left as they are.
+_MAX_GAP_EDGES = 24
 _CROWDING_COST = 10.0
 _OFF_BUS_COST = 0.5
 
@@ -64,13 +68,15 @@ def layout_and_route(
 ) -> tuple[GridLayout, list[RoutedEdge]]:
     """Lay out the graph and route its edges.
 
-    A layer gap holding a crowded cell gets one more grid cell, as long as
-    that leaves fewer crowded routes.
+    In a graph of up to ``_MAX_GAP_EDGES`` edges, a layer gap holding a
+    crowded cell gets one more grid cell, as long as that leaves fewer
+    crowded routes.
     """
     extra: dict[int, int] = {}
     layout = compute_layout(graph, padding_x, padding_y, gap, max_label_width)
-    routed = route_edges(graph, layout)
-    for _ in range(_MAX_GAP_ROUNDS):
+    grow_gaps = len(graph.edges) <= _MAX_GAP_EDGES
+    routed = route_edges(graph, layout, grow_gaps)
+    for _ in range(_MAX_GAP_ROUNDS if grow_gaps else 0):
         crowded = _crowded_gaps(routed, layout, graph.direction.normalized())
         if not crowded:
             break
@@ -99,15 +105,16 @@ def _crowded_gaps(
     return gaps
 
 
-def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
-    """Route all edges in the graph."""
+def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> list[RoutedEdge]:
+    """Route all edges in the graph, finding where each is crowded only
+    when *find_crowded*."""
     direction = graph.direction.normalized()
     routed: list[RoutedEdge] = []
     vertical = direction.is_vertical
     buses = bus_edges(graph)
-    on_bus = {i for idxs in buses.values() for i in idxs}
+    bus_of = {i: key for key, idxs in buses.items() for i in idxs}
     spans = _bus_spans(graph, layout, buses, vertical)
-    bus_cells: dict[str, _BusCells] = {}
+    bus_cells: dict[BusKey, _BusCells] = {}
 
     # Build subgraph bounds lookup
     sg_bounds: dict[str, SubgraphBounds] = {}
@@ -169,22 +176,23 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
             [ends[j] for j in order[pos + 1:] if j in ends and j not in related],
             cell_axes,
         )
-        bus = bus_cells.setdefault(edge.source, _BusCells()) if i in on_bus else _BusCells()
+        key = bus_of.get(i)
+        bus = bus_cells.setdefault(key, _BusCells()) if key else _BusCells()
         re = _route_edge(
             edge, src, tgt, layout, direction, (shared - bus.branches) | forbidden,
-            _prefer_cells(bus.preferred, penalty), crossings, blocked,
+            _prefer_cells(bus.preferred, penalty), crossings, blocked, find_crowded,
         )
         re.index = i
         routed.append(re)
         facing_homes.append((re, facing))
         bus.branches.update(re.occupied_cells)
-        if i in on_bus and _misalignment(edge, layout, vertical):
+        if key and _misalignment(edge, layout, vertical):
             if not bus.preferred:
-                bus.preferred.update(_bus_lane(re.grid_path, spans[edge.source], vertical))
+                bus.preferred.update(_bus_lane(re.grid_path, spans[key], vertical))
             bus.preferred.update(re.occupied_cells)
 
     routed.sort(key=lambda re: re.index)
-    _step_off_four_way_splits(routed, layout, vertical)
+    _step_off_four_way_splits(routed, layout, vertical, bus_of)
     _fit_boxes_to_corridors(facing_homes, layout, sg_bounds, sg_regions, direction)
 
     # Snap subgraph-endpoint edges onto the subgraph border so they
@@ -201,7 +209,7 @@ def route_edges(graph: Graph, layout: GridLayout) -> list[RoutedEdge]:
     # because edges diverge naturally from a shared T-junction, and
     # spreading the start creates jog segments at the border that produce
     # ┼ artifacts when the jog crosses the node border characters.
-    _spread_shared_endpoints(routed, layout, sg_bounds)
+    _spread_shared_endpoints(routed, layout, sg_bounds, bus_of)
     _keep_runs_off_titles(routed, layout)
 
     return routed
@@ -344,7 +352,7 @@ def _path_axes(path: list[tuple[int, int]]) -> dict[tuple[int, int], bool | None
     return axes
 
 
-def _routing_order(graph: Graph, layout: GridLayout, buses: dict[str, list[int]]) -> list[int]:
+def _routing_order(graph: Graph, layout: GridLayout, buses: dict[BusKey, list[int]]) -> list[int]:
     vertical = graph.direction.normalized().is_vertical
 
     def misalignment(i: int) -> int:
@@ -371,12 +379,22 @@ def _exits_by_cell(paths: list[list[tuple[int, int]]]) -> dict[tuple[int, int], 
     return exits
 
 
-def _step_off_four_way_splits(routed: list[RoutedEdge], layout: GridLayout, vertical: bool) -> None:
-    by_source: dict[str, list[RoutedEdge]] = {}
+def _step_off_four_way_splits(
+    routed: list[RoutedEdge], layout: GridLayout, vertical: bool, bus_of: dict[int, BusKey],
+) -> None:
+    """Where three or more lines leaving one node, or merging into one
+    fan-in trunk, meet in a ``┼`` that reads as a crossing, move the line
+    that runs straight through that cell aside, so the junction becomes a
+    ``┴┬`` pair. A fan-in's line moves at its start, keeping the shared
+    arrow."""
+    groups: dict[tuple[bool, str | BusKey], list[RoutedEdge]] = {}
     for re in routed:
         if not re.edge.is_self_reference:
-            by_source.setdefault(re.edge.source, []).append(re)
-    for lines in by_source.values():
+            groups.setdefault((False, re.edge.source), []).append(re)
+        key = bus_of.get(re.index)
+        if key and key.fan_in:
+            groups.setdefault((True, key), []).append(re)
+    for (fan_in, _), lines in groups.items():
         if len(lines) < 3:
             continue
         exits_per_line = [_exits_by_cell([re.grid_path]) for re in lines]
@@ -388,7 +406,9 @@ def _step_off_four_way_splits(routed: list[RoutedEdge], layout: GridLayout, vert
             if len(exits) == 4 and not is_crossing:
                 x, y = layout.grid_to_draw_center(*cell)
                 for re in lines:
-                    if _step_aside(re.draw_path, x, y, vertical):
+                    path = re.draw_path[::-1] if fan_in else re.draw_path
+                    if _step_aside(path, x, y, vertical):
+                        re.draw_path[:] = path[::-1] if fan_in else path
                         break
 
 
@@ -420,21 +440,24 @@ def _misalignment(edge: Edge, layout: GridLayout, vertical: bool) -> int:
 
 
 def _bus_spans(
-    graph: Graph, layout: GridLayout, buses: dict[str, list[int]], vertical: bool,
-) -> dict[str, tuple[int, int]]:
-    spans: dict[str, tuple[int, int]] = {}
-    for source, indexes in buses.items():
-        src = layout.placements.get(source)
-        if not src:
+    graph: Graph, layout: GridLayout, buses: dict[BusKey, list[int]], vertical: bool,
+) -> dict[BusKey, tuple[int, int]]:
+    """The cross-flow extent of each bus, from its shared node to the
+    farthest of its other ends."""
+    spans: dict[BusKey, tuple[int, int]] = {}
+    for key, indexes in buses.items():
+        hub = layout.placements.get(key.hub)
+        if not hub:
             continue
-        a = src.grid.col if vertical else src.grid.row
+        a = hub.grid.col if vertical else hub.grid.row
         lo, hi = a, a
         for i in indexes:
-            tgt = layout.placements.get(graph.edges[i].target)
-            if tgt:
-                b = tgt.grid.col if vertical else tgt.grid.row
+            edge = graph.edges[i]
+            other = layout.placements.get(edge.source if key.fan_in else edge.target)
+            if other:
+                b = other.grid.col if vertical else other.grid.row
                 lo, hi = min(lo, b), max(hi, b)
-        spans[source] = (lo, hi)
+        spans[key] = (lo, hi)
     return spans
 
 
@@ -462,12 +485,14 @@ def _spread_shared_endpoints(
     routed: list[RoutedEdge],
     layout: GridLayout,
     sg_bounds: dict[str, SubgraphBounds],
+    bus_of: dict[int, BusKey],
 ) -> None:
     """Spread edges that share the same draw-path end point.
 
     When multiple edges converge on the same cell (e.g. two edges arriving
     at the center of a node's top border), offset them along the border so
-    each edge gets its own arrow cell.
+    each edge gets its own arrow cell. The edges of one fan-in bus share
+    their trunk and its arrow, so they move as one.
     """
     from collections import defaultdict
 
@@ -486,7 +511,10 @@ def _spread_shared_endpoints(
             for d in departures for a in edges
         )
         departure = departures[0] if departures and not two_way else None
-        if len(edges) + (departure is not None) <= 1:
+        lanes: dict[BusKey | int, list[RoutedEdge]] = {}
+        for re in edges:
+            lanes.setdefault(bus_of.get(re.index, re.index), []).append(re)
+        if len(lanes) + (departure is not None) <= 1:
             continue
         tgt_id = edges[0].edge.target
         tgt = layout.placements.get(tgt_id)
@@ -499,16 +527,17 @@ def _spread_shared_endpoints(
             )
         if not tgt:
             continue
-        _apply_spread(edges, point, tgt, departure)
+        _apply_spread(list(lanes.values()), point, tgt, departure)
 
 
 def _apply_spread(
-    edges: list[RoutedEdge],
+    lanes: list[list[RoutedEdge]],
     point: tuple[int, int],
     placement: NodePlacement,
     departure: RoutedEdge | None,
 ) -> None:
-    """Offset each edge's endpoint along the node border.
+    """Offset each lane's endpoint along the node border. A lane is the
+    edges that arrive on one line.
 
     An edge that leaves from the same point keeps it, since moving a start
     leaves a jog across the border, and the arrivals take the slots beside
@@ -524,10 +553,10 @@ def _apply_spread(
     horizontal and the arrow direction is correct.
     """
     px, py = point
-    attach = edges[0].end_dir
+    attach = lanes[0][0].end_dir
     along = 0 if attach in (AttachDir.TOP, AttachDir.BOTTOM) else 1
 
-    def lane_order(re: RoutedEdge) -> tuple[int, int]:
+    def edge_order(re: RoutedEdge) -> tuple[int, int]:
         # An edge whose last lane comes from one side takes a slot on that
         # side, and the deeper of two lanes from the same side takes the
         # slot farther from it, so neither crosses the other's lane. The
@@ -539,7 +568,12 @@ def _apply_spread(
         depth = abs(corner[1 - along] - point[1 - along])
         return side, -side * depth
 
-    order = sorted(edges + ([departure] if departure else []), key=lane_order)
+    def lane_order(lane: list[RoutedEdge]) -> tuple[int, int]:
+        # A trunk fed from both sides keeps to the middle.
+        keys = {edge_order(re) for re in lane}
+        return keys.pop() if len({side for side, _ in keys}) == 1 else (0, 0)
+
+    order = sorted(lanes + ([[departure]] if departure else []), key=lane_order)
     n = len(order)
 
     def offsets(lo: int, hi: int, pos: int) -> list[int] | None:
@@ -548,7 +582,7 @@ def _apply_spread(
         if departure is None:
             step = min(2, (hi - lo) // max(n - 1, 1))
             return [int((i - (n - 1) / 2) * step) for i in range(n)]
-        k = order.index(departure)
+        k = next(k for k, lane in enumerate(order) if lane[0] is departure)
         for step in (2, 1):
             if lo <= pos - k * step and pos + (n - 1 - k) * step <= hi:
                 return [(i - k) * step for i in range(n)]
@@ -561,13 +595,15 @@ def _apply_spread(
         shifts = offsets(min_x, max_x, px)
         if shifts is None:
             return
-        for re, offset in zip(order, shifts):
+        for lane, offset in zip(order, shifts):
             if offset == 0:
                 continue
             new_x = max(min_x, min(max_x, px + offset))
-            adj_x, adj_y = re.draw_path[-2]
-            re.draw_path[-1] = (new_x, py)
-            re.draw_path[-2] = (new_x, adj_y)
+            for re in lane:
+                adj_x, adj_y = re.draw_path[-2]
+                re.draw_path[-1] = (new_x, py)
+                re.draw_path[-2] = (new_x, adj_y)
+                _drop_straight_corner(re.draw_path)
     else:
         # Horizontal arrival: spread vertically along the border.
         # Only spread when the approach segment is long enough to fit
@@ -581,19 +617,33 @@ def _apply_spread(
         # Check that all edges have enough approach distance. Beside a
         # departure one cell less will do: unspread, the arrival reads as
         # part of the departing line.
-        min_gap = min(abs(px - re.draw_path[-2][0]) for re in edges)
+        min_gap = min(abs(px - re.draw_path[-2][0]) for lane in lanes for re in lane)
         if min_gap < (3 if departure else 4):
             return  # not enough room for clean corner + arrow
-        for re, offset in zip(order, shifts):
+        for lane, offset in zip(order, shifts):
             if offset == 0:
                 continue
             new_y = max(min_y, min(max_y, py + offset))
-            adj_x, adj_y = re.draw_path[-2]
-            re.draw_path[-1] = (px, new_y)
-            if len(re.draw_path) > 2 and re.draw_path[-3][0] == adj_x:
-                re.draw_path[-2] = (adj_x, new_y)
-            else:
-                re.draw_path.insert(-1, (adj_x, new_y))
+            for re in lane:
+                adj_x, adj_y = re.draw_path[-2]
+                re.draw_path[-1] = (px, new_y)
+                if len(re.draw_path) > 2 and re.draw_path[-3][0] == adj_x:
+                    re.draw_path[-2] = (adj_x, new_y)
+                else:
+                    re.draw_path.insert(-1, (adj_x, new_y))
+                _drop_straight_corner(re.draw_path)
+
+
+def _drop_straight_corner(path: list[tuple[int, int]]) -> None:
+    """A moved end can straighten the line through its last corner, such
+    as the jog of a line stepped off a four-way junction. Each segment is
+    drawn one cell short of its ends, so a point left on a straight run
+    leaves a gap where another line should join it."""
+    while len(path) > 2:
+        (x0, y0), (x1, y1), (x2, y2) = path[-3:]
+        if not (x0 == x1 == x2 or y0 == y1 == y2):
+            return
+        del path[-2]
 
 
 def _sg_member_placements(
@@ -1020,6 +1070,7 @@ def _route_edge(
     penalty: Callable[[int, int], float] | None,
     crossings: dict[tuple[int, int], bool],
     blocked: set[tuple[int, int]],
+    find_crowded: bool,
 ) -> RoutedEdge:
     """Route a single edge between two nodes.
 
@@ -1059,7 +1110,7 @@ def _route_edge(
 
     # The preferred route as it would be if other lines were only soft
     # obstacles. Where it shares one, the gap there has no room to spare.
-    ideal = find_path(
+    ideal = find_crowded and find_path(
         *start_pref, *end_pref, layout.is_free,
         soft_obstacles | blocked | crossings.keys(), penalty=penalty,
     )
@@ -1087,10 +1138,18 @@ def _route_edge(
     elif path_alt:
         path, start_dir, end_dir = path_alt, alt[0], alt[1]
     else:
-        # Fallback: one corner. A diagonal segment is never walked to its end.
-        vertical = preferred[0] in (AttachDir.TOP, AttachDir.BOTTOM)
-        path = [start_pref, (start_pref[0], end_pref[1]) if vertical else (end_pref[0], start_pref[1]), end_pref]
+        # Crowding costs can spend the step limit before either relaxed
+        # search gets around the lines. A route that only keeps off boxes,
+        # with steps enough to cover the grid, rarely fails.
         start_dir, end_dir = preferred
+        path = find_path(
+            *start_pref, *end_pref, layout.is_free,
+            max_iterations=len(layout.col_widths) * len(layout.row_heights),
+        )
+        if path is None:
+            # One corner. A diagonal segment is never walked to its end.
+            vertical = preferred[0] in (AttachDir.TOP, AttachDir.BOTTOM)
+            path = [start_pref, (start_pref[0], end_pref[1]) if vertical else (end_pref[0], start_pref[1]), end_pref]
 
     simplified = simplify_path(path)
 

@@ -27,11 +27,9 @@ import sys
 import tempfile
 import threading
 import time
-from dataclasses import asdict, dataclass, field
 from functools import partial
 
-from .markdown import _OPEN, _dedent
-from .utils import display_width, fit_to_width, max_line_width
+from .utils import OPEN_FENCE, dedent_line, display_width, fit_to_width, max_line_width
 
 _DEFAULT_WIDTH = 80
 _MARGIN = 4  # Claude Code indents messages; keep diagrams clear of the edge
@@ -53,16 +51,17 @@ _WAIT_SECONDS = 1
 _STALE_STATE_SECONDS = 24 * 60 * 60
 
 
-@dataclass
+# Plain classes rather than dataclasses: importing dataclasses would add a
+# fifth to the start-up the hook pays for every batch.
 class Diagram:
     """A closed Mermaid block that :meth:`StreamRenderer.draw` will draw."""
 
-    held: list[str]  # the block as written, shown when it cannot be drawn
-    indent: str
-    end: str = "\n"  # "" when the reply ends on the closing fence's line
+    def __init__(self, held: list[str], indent: str, end: str = "\n") -> None:
+        self.held = held  # the block as written, shown when it cannot be drawn
+        self.indent = indent
+        self.end = end  # "" when the reply ends on the closing fence's line
 
 
-@dataclass
 class StreamRenderer:
     """Line filter that replaces fenced Mermaid blocks with drawings.
 
@@ -73,18 +72,25 @@ class StreamRenderer:
     to save the state between them, before the slow part.
     """
 
-    width: int | None = None
-    use_ascii: bool = False
-    # Fence state, kept simple so it survives a round trip through JSON.
-    fence: str = ""        # the opening fence's characters, "" when outside
-    indent: str = ""
-    held: list[str] = field(default_factory=list)   # original lines, fence included
-    carry: str = ""        # a final batch may end mid-line
-    other_fence: str = ""  # an open block of another language, passed through unsearched
-    held_size: int = field(default=0, init=False, repr=False, compare=False)  # held's characters, line breaks included
-
-    def __post_init__(self) -> None:
-        self.held_size = sum(len(line) + 1 for line in self.held)
+    def __init__(
+        self,
+        width: int | None = None,
+        use_ascii: bool = False,
+        fence: str = "",
+        indent: str = "",
+        held: list[str] | None = None,
+        carry: str = "",
+        other_fence: str = "",
+    ) -> None:
+        self.width = width
+        self.use_ascii = use_ascii
+        # Fence state, kept simple so it survives a round trip through JSON.
+        self.fence = fence              # the opening fence's characters, "" when outside
+        self.indent = indent
+        self.held = [] if held is None else held  # original lines, fence included
+        self.carry = carry              # a final batch may end mid-line
+        self.other_fence = other_fence  # an open block of another language, passed through unsearched
+        self.held_size = sum(len(line) + 1 for line in self.held)  # held's characters, line breaks included
 
     def feed(self, text: str, final: bool = False) -> str:
         return self.draw(self.scan(text, final))
@@ -147,7 +153,7 @@ class StreamRenderer:
             if close.match(line):
                 self.other_fence = ""
             return [line + "\n"]
-        match = _OPEN.match(line)
+        match = OPEN_FENCE.match(line)
         if match and not (match.group("fence")[0] == "`" and "`" in match.group("info")):
             words = match.group("info").split()
             if words and words[0].lower() == "mermaid":
@@ -174,7 +180,7 @@ class StreamRenderer:
         from . import _layout_width, render
 
         indent = diagram.indent
-        source = "\n".join(_dedent(raw, len(indent)).rstrip("\r") for raw in diagram.held[1:-1])
+        source = "\n".join(dedent_line(raw, len(indent)).rstrip("\r") for raw in diagram.held[1:-1])
         if not source.strip() or time.monotonic() >= deadline:
             return None
         width = self.width
@@ -211,7 +217,10 @@ class StreamRenderer:
         return [indent + fence] + [indent + ln for ln in text.split("\n")] + [indent + fence]
 
     def to_json(self) -> str:
-        return json.dumps({k: v for k, v in asdict(self).items() if k in ("fence", "indent", "held", "carry", "other_fence")})
+        return json.dumps({
+            "fence": self.fence, "indent": self.indent, "held": self.held,
+            "carry": self.carry, "other_fence": self.other_fence,
+        })
 
     def load(self, data: str) -> None:
         saved = json.loads(data)
