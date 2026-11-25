@@ -6,7 +6,7 @@ Supports vertical (default) and horizontal orientations.
 from __future__ import annotations
 
 from ..model.xychart import XYChart
-from ..utils import display_width
+from ..utils import display_width, truncate_to_width
 from .canvas import Canvas
 
 _CHART_H = 15     # chart area height (rows for data) in vertical mode
@@ -25,14 +25,20 @@ def render_xychart(
     *,
     use_ascii: bool = False,
     rounded: bool = True,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render an XYChart model to a Canvas."""
+    """Render an XYChart model to a Canvas.
+
+    With *max_label_width*, the plot narrows to about that many columns:
+    thinner bars and cut category names when upright, shorter bars when
+    horizontal.
+    """
     if not diagram.datasets:
         return Canvas(1, 1)
 
     if diagram.horizontal:
-        return _render_horizontal(diagram, use_ascii=use_ascii)
-    return _render_vertical(diagram, use_ascii=use_ascii, rounded=rounded)
+        return _render_horizontal(diagram, use_ascii=use_ascii, max_width=max_label_width)
+    return _render_vertical(diagram, use_ascii=use_ascii, rounded=rounded, max_width=max_label_width)
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +58,9 @@ def _draw_axis_header(canvas: Canvas, row: int, margin_l: int, label: str) -> No
     canvas.put_text(row, col, label, style="edge_label")
 
 
-def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = True) -> Canvas:
+def _render_vertical(
+    diagram: XYChart, use_ascii: bool = False, rounded: bool = True, max_width: int | None = None,
+) -> Canvas:
     bar_char = "#" if use_ascii else _BAR_CHAR
     bar_half = "=" if use_ascii else _BAR_HALF
     marker = "*" if use_ascii else _LINE_MARKER
@@ -90,6 +98,10 @@ def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = 
 
     cat_width = max(display_width(c) for c in categories) if categories else 2
     col_width = max(_BAR_WIDTH, cat_width + 1)
+    if max_width is not None:
+        room = max_width - _MARGIN_L - 3
+        col_width = max(1, min(col_width, (room + _BAR_GAP) // n_points - _BAR_GAP))
+        categories = [truncate_to_width(c, col_width + _BAR_GAP - 1) for c in categories]
 
     chart_w = n_points * (col_width + _BAR_GAP) - _BAR_GAP
     total_w = _MARGIN_L + 1 + chart_w + 2
@@ -180,7 +192,7 @@ def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = 
 # Horizontal chart
 # ---------------------------------------------------------------------------
 
-def _render_horizontal(diagram: XYChart, use_ascii: bool = False) -> Canvas:
+def _render_horizontal(diagram: XYChart, use_ascii: bool = False, max_width: int | None = None) -> Canvas:
     bar_char = "#" if use_ascii else _BAR_CHAR
     bar_half = "|" if use_ascii else _BAR_HALF_H
     marker = "*" if use_ascii else _LINE_MARKER
@@ -221,7 +233,7 @@ def _render_horizontal(diagram: XYChart, use_ascii: bool = False) -> Canvas:
     bar_height = 1  # each bar is 1 row tall
     row_gap = 1     # gap between rows
     chart_h = n_points * (bar_height + row_gap) - row_gap
-    chart_w = _CHART_W
+    chart_w = _CHART_W if max_width is None else max(10, min(_CHART_W, max_width - margin_l - 3))
 
     title_lines = _header_rows(diagram.title, diagram.x_label)
     total_h = title_lines + chart_h + 3  # chart + axis + value labels

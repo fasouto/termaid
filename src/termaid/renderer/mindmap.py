@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from ..model.mindmap import Mindmap, MindmapNode
 from .canvas import Canvas
-from ..utils import display_width
+from ..utils import display_width, wrap_display_text
 
 # When root has more children than this, spill some to the left
 _OVERFLOW_THRESHOLD = 6
@@ -67,13 +67,14 @@ def render_mindmap(
     *,
     use_ascii: bool = False,
     rounded: bool = True,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render a Mindmap model to a Canvas."""
+    """Render a Mindmap model to a Canvas, wrapping labels wider than *max_label_width*."""
     if diagram.root is None:
         return Canvas(1, 1)
 
     ch = _make_chars(use_ascii, rounded)
-    root = diagram.root
+    root = diagram.root if max_label_width is None else _wrapped(diagram.root, max(max_label_width, 1))
 
     if not root.children:
         lines = root.label.split("\n")
@@ -92,6 +93,14 @@ def render_mindmap(
     for r, line in enumerate(lines):
         canvas.put_text(r, 0, line, style="node")
     return canvas
+
+
+def _wrapped(node: MindmapNode, width: int) -> MindmapNode:
+    """A copy of the tree under *node* with every label wrapped to *width* columns."""
+    return MindmapNode(
+        label="\n".join(wrap_display_text(node.label, width, hard_break=False)) or node.label,
+        children=[_wrapped(child, width) for child in node.children],
+    )
 
 
 def _split_children(

@@ -123,7 +123,7 @@ class TestCliWrapFit:
         import argparse
         from termaid import render
         from termaid.cli import _auto_fit
-        source = 'pie title Languages\n  "Python" : 45\n  "Go" : 30\n  "Rust" : 25'
+        source = 'gantt\n  title Plan\n  dateFormat YYYY-MM-DD\n  section A\n  Design : a1, 2024-01-01, 10d\n  Build : a2, after a1, 20d'
         args = argparse.Namespace(
             gap=4, padding_x=4, padding_y=2, ascii=False, sharp_edges=False,
             inline_edge_labels=False, no_auto_fit=False, strict_width=False, arrow_style="pointer",
@@ -436,7 +436,7 @@ class TestChartsHonourWidth:
     @pytest.mark.parametrize("fixture, width", [
         ("packet/packet_01.mmd", 60),
         ("packet/packet_01.mmd", 40),
-        ("mindmap/mindmap_01.mmd", 32),
+        ("mindmap/corner_cases_04.mmd", 30),
         ("quadrant/quadrant_01.mmd", 44),
         ("pie/piechart_10.mmd", 50),
         ("xychart/showcase_horizontal_bars.mmd", 45),

@@ -277,7 +277,7 @@ def _render_canvas(
     if text.startswith("pie"):
         from .parser.piechart import parse_pie_chart
         from .renderer.piechart import render_pie_chart
-        return _Rendered(render_pie_chart(parse_pie_chart(text), use_ascii=use_ascii))
+        return _Rendered(render_pie_chart(parse_pie_chart(text), use_ascii=use_ascii, max_label_width=max_label_width))
 
     if text.startswith("treemap"):
         from .parser.treemap import parse_treemap
@@ -287,7 +287,9 @@ def _render_canvas(
     if text.startswith("mindmap"):
         from .parser.mindmap import parse_mindmap
         from .renderer.mindmap import render_mindmap
-        return _Rendered(render_mindmap(parse_mindmap(text), use_ascii=use_ascii, rounded=rounded_edges))
+        return _Rendered(render_mindmap(
+            parse_mindmap(text), use_ascii=use_ascii, rounded=rounded_edges, max_label_width=max_label_width,
+        ))
 
     if text.startswith("packet"):
         from .parser.packet import parse_packet
@@ -295,12 +297,16 @@ def _render_canvas(
         packet_extra = {"padding_y": padding_y} if padding_y != 2 else {}
         packet = parse_packet(text)
         packet.title = packet.title or _frontmatter_title(source)
-        return _Rendered(render_packet(packet, use_ascii=use_ascii, rounded=rounded_edges, **packet_extra))
+        return _Rendered(render_packet(
+            packet, use_ascii=use_ascii, rounded=rounded_edges, max_label_width=max_label_width, **packet_extra,
+        ))
 
     if text.startswith("xychart"):
         from .parser.xychart import parse_xychart
         from .renderer.xychart import render_xychart
-        return _Rendered(render_xychart(parse_xychart(text), use_ascii=use_ascii, rounded=rounded_edges))
+        return _Rendered(render_xychart(
+            parse_xychart(text), use_ascii=use_ascii, rounded=rounded_edges, max_label_width=max_label_width,
+        ))
 
     if text.startswith("journey"):
         from .parser.journey import parse_journey
@@ -320,7 +326,7 @@ def _render_canvas(
     if text.startswith("quadrantChart"):
         from .parser.quadrant import parse_quadrant
         from .renderer.quadrant import render_quadrant
-        return _Rendered(render_quadrant(parse_quadrant(text), use_ascii=use_ascii))
+        return _Rendered(render_quadrant(parse_quadrant(text), use_ascii=use_ascii, max_label_width=max_label_width))
 
     from .renderer import draw
     graph = _parse_graph(text)
@@ -364,7 +370,9 @@ def render(
         inline_edge_labels: Attach flowchart labels directly to their edges
         max_label_width: Wrap labels wider than this many columns at word
             boundaries. Applies to flowcharts (default 20) and sequence
-            diagrams (unwrapped by default); other diagram types ignore it.
+            diagrams (unwrapped by default), and mindmaps. Pie, quadrant, XY
+            and packet charts narrow to about this many columns. Other
+            diagram types ignore it.
         arrow_style: Arrowheads for Unicode output: ``"pointer"`` (default,
             ``► ◄ ▼ ▲``), ``"triangle"`` (``▶ ◀ ▼ ▲``) or ``"outline"``
             (``▷ ◁ ▽ △``). Class diagrams keep solid dependency arrows with
@@ -426,7 +434,9 @@ def render_rich(
         inline_edge_labels: Attach flowchart labels directly to their edges
         max_label_width: Wrap labels wider than this many columns at word
             boundaries. Applies to flowcharts (default 20) and sequence
-            diagrams (unwrapped by default); other diagram types ignore it.
+            diagrams (unwrapped by default), and mindmaps. Pie, quadrant, XY
+            and packet charts narrow to about this many columns. Other
+            diagram types ignore it.
         arrow_style: Arrowheads for Unicode output: ``"pointer"`` (default,
             ``► ◄ ▼ ▲``), ``"triangle"`` (``▶ ◀ ▼ ▲``) or ``"outline"``
             (``▷ ◁ ▽ △``). Class diagrams keep solid dependency arrows with

@@ -23,12 +23,20 @@ def render_packet(
     use_ascii: bool = False,
     rounded: bool = True,
     padding_y: int = 1,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render a Packet model to a Canvas."""
+    """Render a Packet model to a Canvas.
+
+    With *max_label_width*, rows hold half as many bits, then half again,
+    until a row is no wider than it.
+    """
     if not diagram.fields:
         return Canvas(1, 1)
 
     row_bits = diagram.row_bits
+    if max_label_width is not None:
+        while row_bits > 1 and row_bits * _BITS_PER_COL + 2 > max_label_width:
+            row_bits //= 2
     cols_per_row = row_bits * _BITS_PER_COL
     # The labels need a row inside the borders.
     padding_y = max(padding_y, 1)
@@ -46,7 +54,7 @@ def render_packet(
         tj, bj = "┬", "┴"
 
     margin = 1
-    shown = _shown_labels(diagram)
+    shown = _shown_labels(diagram, row_bits)
 
     # Group fields into rows
     rows: list[list[tuple[int, int, str]]] = []
@@ -194,7 +202,7 @@ def render_packet(
     return canvas
 
 
-def _shown_labels(diagram: Packet) -> dict[tuple[int, str], str]:
+def _shown_labels(diagram: Packet, row_bits: int) -> dict[tuple[int, str], str]:
     """What each field too narrow for its label shows instead, by (start bit, label).
 
     A label cut short keeps as much as fits. A field with room for one
@@ -206,7 +214,7 @@ def _shown_labels(diagram: Packet) -> dict[tuple[int, str], str]:
     keyed: list[tuple[int, str]] = []
     for field in diagram.fields:
         # The label sits in the field's first row.
-        bits = min(field.bits, diagram.row_bits - field.start % diagram.row_bits)
+        bits = min(field.bits, row_bits - field.start % row_bits)
         avail = bits * _BITS_PER_COL - 2
         if not field.label or display_width(field.label) <= avail:
             continue
