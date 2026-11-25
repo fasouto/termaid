@@ -1,7 +1,7 @@
 
 
-  main    ──●─────┼──────●─
+  main    ──●─────┬──────●─
             A     │  B-cherry
                   │      │
-  develop         ●──────┼
+  develop         ●──────┘
                   B

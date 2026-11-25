@@ -6,9 +6,38 @@ labels, tags, and fork/merge connections.
 from __future__ import annotations
 
 from ..model.gitgraph import Commit, GitGraph
-from .canvas import Canvas
+from .canvas import _DIRECTION_TO_CHAR, DOWN, LEFT, RIGHT, UP, Canvas
 from .charset import CharSet, default_charset
 from ..utils import display_width
+
+_Segment = tuple[tuple[int, int], tuple[int, int]]  # ((row, col), (row, col)), horizontal or vertical
+
+
+def _draw_lines(canvas: Canvas, segments: list[_Segment], use_ascii: bool) -> None:
+    """Draw branch lines and their connections, joining them where they meet.
+
+    A cell takes a direction only toward the rest of its own segment, so a
+    connection that starts or ends on a branch line draws a tee or a corner,
+    and only a line passing through another draws a cross.
+    """
+    directions: dict[tuple[int, int], int] = {}
+    for (r0, c0), (r1, c1) in segments:
+        if r0 == r1:
+            lo, hi = sorted((c0, c1))
+            cells = [((r0, c), (LEFT if c > lo else 0) | (RIGHT if c < hi else 0)) for c in range(lo, hi + 1)]
+        else:
+            lo, hi = sorted((r0, r1))
+            cells = [((r, c0), (UP if r > lo else 0) | (DOWN if r < hi else 0)) for r in range(lo, hi + 1)]
+        for cell, bits in cells:
+            directions[cell] = directions.get(cell, 0) | bits
+    for (row, col), bits in directions.items():
+        if not bits:
+            continue
+        if use_ascii:
+            ch = "-" if not bits & (UP | DOWN) else "|" if not bits & (LEFT | RIGHT) else "+"
+        else:
+            ch = _DIRECTION_TO_CHAR[bits]
+        canvas.put(row, col, ch, merge=False, style="edge")
 
 # ── layout constants ──────────────────────────────────────────────
 _MIN_COMMIT_GAP = 6  # minimum horizontal gap between commit markers
@@ -161,8 +190,6 @@ def _draw_lr(
     use_ascii: bool,
 ) -> None:
     """Draw the gitGraph in LR orientation onto the canvas."""
-    h_char = cs.line_horizontal
-    v_char = cs.line_vertical
 
     branch_commits: dict[str, list[Commit]] = {b: [] for b in sorted_branches}
     for c in diagram.commits:
@@ -185,15 +212,11 @@ def _draw_lr(
         row = branch_row[name]
         canvas.put_text(row, _MARGIN, name, style="subgraph")
 
-    # 2. Draw branch lines (horizontal)
-    for name in sorted_branches:
-        if name not in extents:
-            continue
-        row = branch_row[name]
-        start, end = extents[name]
-        canvas.draw_horizontal(row, start, end, h_char, style="edge")
-
-    # 3. Draw fork and merge lines (vertical connections between branches)
+    # 2. Branch lines (horizontal) and fork and merge lines (vertical) between them
+    segments: list[_Segment] = [
+        ((branch_row[name], extents[name][0]), (branch_row[name], extents[name][1]))
+        for name in sorted_branches if name in extents
+    ]
     for c in diagram.commits:
         col = commit_col[c.id]
         target_row = branch_row[c.branch]
@@ -206,13 +229,9 @@ def _draw_lr(
                 continue
 
             source_row = branch_row[parent.branch]
-            if source_row == target_row:
-                continue
-
-            r_min = min(source_row, target_row)
-            r_max = max(source_row, target_row)
-            for r in range(r_min, r_max + 1):
-                canvas.put(r, col, v_char, style="edge")
+            if source_row != target_row:
+                segments.append(((source_row, col), (target_row, col)))
+    _draw_lines(canvas, segments, use_ascii)
 
     # 4. Draw commit markers and labels (LAST so they are visible)
     for c in diagram.commits:
@@ -241,8 +260,6 @@ def _draw_tb(
     bottom_to_top: bool = False,
 ) -> None:
     """Draw the gitGraph in TB (or BT) orientation onto the canvas."""
-    h_char = cs.line_horizontal
-    v_char = cs.line_vertical
 
     sorted_branches = _sort_branches(diagram)
 
@@ -345,16 +362,11 @@ def _draw_tb(
         label_col = col - display_width(name) // 2
         canvas.put_text(label_row, label_col, name, style="subgraph")
 
-    # 2. Draw branch lines (vertical)
-    for name in sorted_branches:
-        if name not in branch_start:
-            continue
-        col = branch_col[name]
-        canvas.draw_vertical(
-            col, branch_start[name], branch_end[name], v_char, style="edge"
-        )
-
-    # 3. Draw fork/merge lines (horizontal connections) BEFORE markers
+    # 2. Branch lines (vertical) and fork and merge lines (horizontal) between them
+    segments: list[_Segment] = [
+        ((branch_start[name], branch_col[name]), (branch_end[name], branch_col[name]))
+        for name in sorted_branches if name in branch_start
+    ]
     for c in diagram.commits:
         row = commit_row[c.id]
         target_col = branch_col[c.branch]
@@ -367,13 +379,9 @@ def _draw_tb(
                 continue
 
             source_col = branch_col[parent.branch]
-            if source_col == target_col:
-                continue
-
-            c_min = min(source_col, target_col)
-            c_max = max(source_col, target_col)
-            for cc in range(c_min, c_max + 1):
-                canvas.put(row, cc, h_char, style="edge")
+            if source_col != target_col:
+                segments.append(((row, source_col), (row, target_col)))
+    _draw_lines(canvas, segments, use_ascii)
 
     # 4. Draw commit markers and labels LAST
     for c in diagram.commits:

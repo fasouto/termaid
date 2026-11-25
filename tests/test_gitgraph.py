@@ -537,6 +537,6 @@ class TestBranchJunctions:
     def test_ascii_joins_lines_with_plus(self):
         lines = render("gitGraph\n  commit\n  branch develop\n  commit\n  checkout main\n  merge develop\n  commit", use_ascii=True).splitlines()
         main, develop = self._row(lines, "main"), self._row(lines, "develop")
-        assert main[develop.index("o")] == "+"
+        assert main[develop.index("o", len("  develop"))] == "+"
         assert develop.rstrip().endswith("+")
 
