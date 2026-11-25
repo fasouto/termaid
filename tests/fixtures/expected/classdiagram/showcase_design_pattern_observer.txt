@@ -15,7 +15,7 @@
        ┌───────────────────────────┐
        │       EventEmitter        │
        ├───────────────────────────┤
-       │ -List~Observer~ observers │
+       │ -List<Observer> observers │
        ├───────────────────────────┤
        │ +attach(Observer) void    │
        │ +detach(Observer) void    │
