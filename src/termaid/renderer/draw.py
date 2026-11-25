@@ -1036,22 +1036,6 @@ def _overlaps(x: int, y: int, w: int, h: int, bx: int, by: int, bw: int, bh: int
     return x < bx + bw and bx < x + w and y < by + bh and by < y + h
 
 
-def _path_cells(path: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    """Every cell an edge's drawn path runs through."""
-    cells = path[:1]
-    for (x1, y1), (x2, y2) in zip(path, path[1:]):
-        dx = (x2 > x1) - (x2 < x1)
-        dy = (y2 > y1) - (y2 < y1)
-        x, y = x1, y1
-        while x != x2:
-            x += dx
-            cells.append((x, y))
-        while y != y2:
-            y += dy
-            cells.append((x, y))
-    return cells
-
-
 def _draw_notes(canvas: Canvas, notes: list[_NoteBox], cs: CharSet) -> None:
     """Draw note boxes."""
     for b in notes:
