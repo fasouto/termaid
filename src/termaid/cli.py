@@ -357,11 +357,11 @@ def _main(argv: list[str] | None) -> int:
         if value < 0:
             return _report(args, "invalid_arguments", f"{flag} must not be negative.", exit_code=2)
 
-    if args.demo is not None:
-        return _run_demo(args)
-
     if args.width is not None and args.width < 1:
         return _report(args, "invalid_arguments", "--width must be positive.", exit_code=2)
+
+    if args.demo is not None:
+        return _run_demo(args)
 
     # Read input
     source = _read_source(args)
@@ -693,21 +693,28 @@ def _run_demo(args: argparse.Namespace) -> int:
             f"Unknown demo type: {demo_type}\nAvailable: all, {', '.join(_DEMO_SOURCES.keys())}",
         )
 
+    from termaid import render, render_rich
+
     use_color = _use_color(args)
+    if use_color:
+        try:
+            import rich  # noqa: F401
+        except ImportError:
+            use_color = False
+
+    def render_fn(src: str, **kwargs):
+        if use_color:
+            return render_rich(src, theme=args.theme, **kwargs)
+        return render(src, **kwargs)
 
     for key in keys:
         title, source = _DEMO_SOURCES[key]
         print(f"=== {title} ===")
+        drawn = _render_one(source, args, render_fn, target_width=args.width)
         if use_color:
-            try:
-                from termaid import render_rich
-                _print_rich(render_rich(source, theme=args.theme or "default"))
-            except ImportError:
-                from termaid import render
-                print(render(source))
+            _print_rich(drawn)
         else:
-            from termaid import render
-            print(render(source))
+            print(drawn)
         print()
 
     return 0
