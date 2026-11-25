@@ -17,6 +17,11 @@
 - Architecture: every service joined at a junction is connected, and a `--` edge through a junction has no arrowhead. An edge runs the way its `L`/`R`/`T`/`B` sides say, whichever end is written first. `--ascii` drops the emoji icons
 - Block: a link label wider than the gap between two blocks goes on the row above them, and a block is never narrower than its label
 - Gantt, timeline and block: `accTitle`, `accDescr` and `click` lines are no longer drawn as content, and `<br/>` in their labels is a break or a space
+- Sequence: `Note left of` the first participant stays left of its lifeline, and the diagram makes room for it. It slid right over the other lifelines and read as a note over several participants
+- Sequence: fitting to a width wraps a note beside the first or last participant before it squeezes participant names and message text
+- Sequence: `box ... end` draws a frame with its title around its participants; `create participant` draws the participant at the message that creates it; `rect rgb(...)` is an untitled frame; entity codes such as `#9829;` are decoded; `autonumber off` and `autonumber` in mid-diagram work; a `title` line is drawn above the diagram
+- Sequence: the corners of a `collections` participant
+- gitGraph: a branch or merge point is drawn with a tee or a corner, and `┼` only where a line crosses another branch. In TB and BT a commit label is no longer cut by the branch line
 - Mindmap: a node written with an id and a shape, such as `root((Project))` or `id[Text]`, shows only its text. The id and brackets were drawn, and `((Text))` kept one pair of brackets. `::icon(...)` and `:::class` lines are no longer drawn as nodes
 
 ## 0.14.1 (2026-11-25)
