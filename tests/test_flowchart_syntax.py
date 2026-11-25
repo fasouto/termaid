@@ -185,3 +185,66 @@ def test_one_line_with_all_of_it_draws():
     )
     for text in ("go-on", "yes", "Load --> Parse", '"hi"', "spaced", "both"):
         assert text in out
+
+
+class TestCircleAndCrossEnds:
+    @pytest.mark.parametrize("link, style, start, end", [
+        ("==x", EdgeStyle.THICK, None, ArrowType.CROSS),
+        ("==o", EdgeStyle.THICK, None, ArrowType.CIRCLE),
+        ("-.-x", EdgeStyle.DOTTED, None, ArrowType.CROSS),
+        ("-.-o", EdgeStyle.DOTTED, None, ArrowType.CIRCLE),
+        ("o==o", EdgeStyle.THICK, ArrowType.CIRCLE, ArrowType.CIRCLE),
+        ("x-.-x", EdgeStyle.DOTTED, ArrowType.CROSS, ArrowType.CROSS),
+        ("---x", EdgeStyle.SOLID, None, ArrowType.CROSS),
+    ])
+    def test_thick_and_dotted_links_take_circle_and_cross_ends(self, link, style, start, end):
+        graph = parse(f"A {link} B")
+        assert set(graph.nodes) == {"A", "B"}
+        (edge,) = graph.edges
+        assert edge.style == style
+        assert edge.has_arrow_end and edge.arrow_type_end == end
+        assert edge.has_arrow_start == (start is not None)
+        if start is not None:
+            assert edge.arrow_type_start == start
+
+    @pytest.mark.parametrize("line, end", [
+        ("A --oB", ArrowType.CIRCLE),
+        ("C --xD", ArrowType.CROSS),
+        ("E---oF", ArrowType.CIRCLE),
+        ("G--oH", ArrowType.CIRCLE),
+    ])
+    def test_an_end_mark_needs_no_space_before_the_node(self, line, end):
+        # Mermaid's docs: "A---oB" draws a circle edge from A to B.
+        graph = parse(line)
+        (edge,) = graph.edges
+        assert len(graph.nodes) == 2
+        assert edge.arrow_type_end == end
+
+    def test_a_longer_cross_link_is_longer(self):
+        assert parse("A ---x B").edges[0].min_length == parse("A ---> B").edges[0].min_length == 2
+
+
+class TestMarkdownStrings:
+    def test_underscores_mark_italic_and_bold(self):
+        graph = parse('A["`This **is** _Markdown_ and __bold__`"]')
+        node = graph.nodes["A"]
+        assert node.label == "This is Markdown and bold"
+        styled = {(s.text, s.bold, s.italic) for s in node.label_segments}
+        assert {("Markdown", False, True), ("bold", True, False)} <= styled
+
+    def test_an_underscore_inside_a_word_is_text(self):
+        assert parse('A["`snake_case_name`"]').nodes["A"].label == "snake_case_name"
+
+    @pytest.mark.parametrize("line", ['A -->|"`**yes**`"| B', 'A -- "`**yes**` " --> B'])
+    def test_an_edge_label_drops_the_markdown_marks(self, line):
+        assert edges(line) == [("A", "B", "yes")]
+
+    def test_a_subgraph_title_drops_the_markdown_marks(self):
+        graph = parse('subgraph s1 ["`**Bold** title`"]\n  a --> b\nend')
+        assert graph.subgraphs[0].label == "Bold title"
+
+    def test_drawn_without_the_marks(self):
+        out = render('graph LR\n  A["`This **is** _Markdown_`"] -->|"`**yes**`"| B')
+        assert "This is Markdown" in out
+        assert "yes" in out
+        assert not set("`*_") & set(out)

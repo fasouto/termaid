@@ -4,6 +4,8 @@ Modeled after beautiful-mermaid's parser.test.ts state diagram section.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from termaid import parse, render
@@ -42,13 +44,13 @@ class TestStateDiagramParser:
         # Should create a start node with ● label
         start_nodes = [n for n in g.nodes.values() if n.label == "●"]
         assert len(start_nodes) == 1
-        assert start_nodes[0].shape == NodeShape.CIRCLE
+        assert start_nodes[0].shape == NodeShape.START_STATE
 
     def test_end_state(self):
         g = parse_state_diagram("stateDiagram-v2\n  Active --> [*]")
         end_nodes = [n for n in g.nodes.values() if n.label == "◉"]
         assert len(end_nodes) == 1
-        assert end_nodes[0].shape == NodeShape.CIRCLE
+        assert end_nodes[0].shape == NodeShape.END_STATE
 
     def test_start_and_end(self):
         g = parse_state_diagram(
@@ -318,3 +320,126 @@ class TestShapePreservation:
             "    f"
         )
         assert g.nodes["f"].shape == NodeShape.FORK_JOIN
+
+
+def _row_of(output: str, text: str) -> int:
+    return next(i for i, line in enumerate(output.splitlines()) if text in line)
+
+
+class TestCompositeDirection:
+    def test_direction_inside_composite_sets_only_that_composite(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "    Idle --> Busy\n"
+            "    Busy --> Done\n"
+            "    state Busy {\n"
+            "        direction LR\n"
+            "        Load --> Run\n"
+            "    }"
+        )
+        assert g.direction == Direction.TB
+        assert g.subgraphs[0].direction == Direction.LR
+
+    def test_inner_direction_does_not_flip_the_outer_flow(self):
+        output = render(
+            "stateDiagram-v2\n"
+            "    direction LR\n"
+            "    Idle --> Busy\n"
+            "    state Busy {\n"
+            "        direction TB\n"
+            "        Load --> Run\n"
+            "    }\n"
+            "    Busy --> Done"
+        )
+        assert _row_of(output, "Idle") == _row_of(output, "Done")
+        assert _row_of(output, "Load") < _row_of(output, "Run")
+
+
+class TestStateDescriptions:
+    def test_description_is_the_state_label(self):
+        output = render("stateDiagram-v2\n    s1 : Waiting for payment\n    s1 --> s2")
+        assert "Waiting for payment" in output
+        assert "s2" in output
+
+    def test_diagram_of_only_a_description_renders(self):
+        output = render("stateDiagram-v2\n    s2 : A state description")
+        assert "A state description" in output
+
+    def test_several_descriptions_keep_the_state_name(self):
+        g = parse_state_diagram("stateDiagram-v2\n    s1 : first\n    s1 : second")
+        assert g.nodes["s1"].label.split("\\n") == ["s1", "first", "second"]
+
+    def test_description_titles_a_composite(self):
+        output = render(
+            "stateDiagram-v2\n"
+            "    [*] --> NamedComposite\n"
+            "    NamedComposite: Another Composite\n"
+            "    state NamedComposite {\n"
+            "        [*] --> namedSimple\n"
+            "        namedSimple --> [*]\n"
+            "        namedSimple: Another simple\n"
+            "    }"
+        )
+        assert "Another Composite" in output
+        assert "Another simple" in output
+        assert "NamedComposite" not in output
+        assert "namedSimple" not in output
+
+
+def test_ascii_start_and_end_states_use_ascii_marks():
+    output = render("stateDiagram-v2\n    [*] --> A\n    A --> [*]", use_ascii=True)
+    assert "A" in output
+    assert output.isascii()
+
+
+def _assert_notes_clear_of_states(source: str, states: list[str], notes: list[str]) -> str:
+    output = render(source)
+    for text in [*states, *notes]:
+        assert re.search(rf"[│├┤] +{text} +[│├┤]", output), f"{text!r} is covered:\n{output}"
+    return output
+
+
+class TestNotes:
+    def test_right_note_keeps_off_the_next_state(self):
+        _assert_notes_clear_of_states(
+            "stateDiagram-v2\n  Alpha --> Beta\n  Alpha --> Gamma\n  note right of Beta : needs review",
+            ["Alpha", "Beta", "Gamma"], ["needs review"],
+        )
+
+    def test_left_note_at_the_left_edge_keeps_off_its_state(self):
+        _assert_notes_clear_of_states(
+            "stateDiagram-v2\n  Alpha --> Beta\n  note left of Beta : retry",
+            ["Alpha", "Beta"], ["retry"],
+        )
+
+    def test_right_note_in_lr_keeps_off_the_following_states(self):
+        output = _assert_notes_clear_of_states(
+            "stateDiagram-v2\n  direction LR\n  Alpha --> Beta\n  Beta --> Gamma\n"
+            "  note right of Alpha : a long right note text\n  note left of Gamma : left",
+            ["Alpha", "Beta", "Gamma"], ["a long right note text", "left"],
+        )
+        assert output.count("►") == 2
+
+    def test_notes_keep_their_side(self):
+        for direction in ("LR", "RL", "TB", "BT"):
+            output = render(
+                f"stateDiagram-v2\n  direction {direction}\n  Alpha --> Beta\n"
+                "  note right of Alpha : east\n  note left of Alpha : west"
+            )
+            row = next(line for line in output.splitlines() if "Alpha" in line)
+            assert "west" in output and "east" in output
+            west_row = next(line for line in output.splitlines() if "west" in line)
+            east_row = next(line for line in output.splitlines() if "east" in line)
+            assert west_row.index("west") < row.index("Alpha") < east_row.index("east"), output
+
+    def test_multi_line_note_is_a_note(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "    Idle --> Running\n"
+            "    note right of Running\n"
+            "        Retrying\n"
+            "        twice\n"
+            "    end note"
+        )
+        assert set(g.nodes) == {"Idle", "Running"}
+        assert [(n.position, n.target, n.text) for n in g.notes] == [("rightof", "Running", "Retrying\ntwice")]
