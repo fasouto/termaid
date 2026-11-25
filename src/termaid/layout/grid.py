@@ -84,6 +84,8 @@ class SubgraphBounds:
     y: int = 0
     width: int = 0
     height: int = 0
+    # Width the nodes need; a wider title makes ``width`` larger.
+    content_width: int = 0
 
 
 @dataclass
@@ -194,7 +196,7 @@ def compute_layout(
         separate_subgraph_layers,
     )
     from .placement import place_nodes, compute_sizes, normalize_sizes
-    from .subgraphs import expand_gaps_for_subgraphs, compute_subgraph_bounds
+    from .subgraphs import compute_subgraph_bounds, expand_gaps_for_subgraphs, fit_titles
     from .coordinates import compute_draw_coords, adjust_for_negative_bounds
 
     layout = GridLayout()
@@ -251,6 +253,9 @@ def compute_layout(
 
     # Step 7: Compute subgraph bounds
     compute_subgraph_bounds(graph, layout)
+
+    # Step 7b: Make room beside boxes stretched by a wide title
+    fit_titles(graph, layout)
 
     # Step 8: Adjust for negative subgraph bounds
     adjust_for_negative_bounds(layout)

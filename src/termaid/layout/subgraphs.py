@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ..graph.model import Direction, Graph, Subgraph
 from ..utils import display_width
+from .coordinates import compute_draw_coords
 from .grid import (
     SG_BORDER_PAD,
     SG_GAP_PER_LEVEL,
@@ -182,6 +183,7 @@ def compute_subgraph_bounds(
             y=int(min_y) - SG_BORDER_PAD - SG_LABEL_HEIGHT,
             width=final_width,
             height=int(max_y - min_y) + SG_BORDER_PAD * 2 + SG_LABEL_HEIGHT,
+            content_width=content_width,
         )
         return bounds
 
@@ -189,6 +191,66 @@ def compute_subgraph_bounds(
         bounds = _compute(sg)
         if bounds:
             layout.subgraph_bounds.append(bounds)
+
+
+_TITLE_CLEARANCE = 3  # cells between a box's side and a neighbour, room for `─►`
+
+
+def fit_titles(graph: Graph, layout: GridLayout) -> None:
+    """Widen the gap after a subgraph whose title is wider than its nodes.
+
+    The box grows rightwards to fit its title. Where that would cover a
+    node or box outside the subgraph, the gap column right after its nodes
+    grows by what that neighbour needs to keep clear, and the coordinates
+    and boxes are computed again. A widened nested box can stretch its
+    parent's box onto a neighbour in turn, so this repeats, at most once
+    per subgraph.
+    """
+    for _ in range(len(layout.subgraph_bounds)):
+        widen: dict[int, int] = {}
+        for sb in layout.subgraph_bounds:
+            if sb.width <= sb.content_width:
+                continue
+            members: set[str] = set()
+            _gather_all_nodes(sb.subgraph, members)
+            cols = [layout.placements[n].grid.col for n in members if n in layout.placements]
+            if not cols:
+                continue
+            content_side = sb.x + sb.content_width - 1
+            reach = sb.x + sb.width + _TITLE_CLEARANCE
+            lefts = [
+                p.draw_x for nid, p in layout.placements.items()
+                if nid not in members
+                and p.draw_y < sb.y + sb.height and sb.y < p.draw_y + p.draw_height
+                and content_side < p.draw_x < reach
+            ]
+            lefts += [
+                other.x for other in layout.subgraph_bounds
+                if not _nested(sb.subgraph, other.subgraph)
+                and other.y < sb.y + sb.height and sb.y < other.y + other.height
+                and content_side < other.x < reach
+            ]
+            if lefts:
+                gap_col = max(cols) + 2
+                widen[gap_col] = max(widen.get(gap_col, 0), reach - min(lefts))
+        if not widen:
+            return
+        for col, extra in widen.items():
+            layout.col_widths[col] = layout.col_widths.get(col, 1) + extra
+        compute_draw_coords(layout)
+        layout.subgraph_bounds.clear()
+        compute_subgraph_bounds(graph, layout)
+
+
+def _nested(a: Subgraph, b: Subgraph) -> bool:
+    """Whether one of the two subgraphs holds the other, or they are one."""
+    for inner, outer in ((a, b), (b, a)):
+        sg: Subgraph | None = inner
+        while sg:
+            if sg is outer:
+                return True
+            sg = sg.parent
+    return False
 
 
 def _gather_all_nodes(sg: Subgraph, result: set[str]) -> None:

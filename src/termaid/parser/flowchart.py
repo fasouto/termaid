@@ -194,7 +194,7 @@ def _parse_markdown_label(text: str) -> tuple[str, list[LabelSegment]] | None:
     if not (stripped.startswith('"`') and stripped.endswith('`"')):
         return None
 
-    md = stripped[2:-2]  # strip "` and `"
+    md = _line_breaks(stripped[2:-2])  # strip "` and `"
     segments: list[LabelSegment] = []
     i = 0
     while i < len(md):
@@ -332,6 +332,35 @@ def _split_on_semicolons(line: str) -> list[str]:
     return parts
 
 
+_MAX_STRING_LINES = 8
+_STATEMENT = re.compile(r"-->|---|==>|-\.-|~~~|^\s*(end|subgraph)\b", re.IGNORECASE)
+
+
+def _join_open_strings(lines: list[str]) -> list[str]:
+    """Join a quoted string that runs over several lines into one line.
+
+    Each line break in the string becomes a <br>, which every label draws
+    as a line break. A quote that is not closed within ``_MAX_STRING_LINES``
+    more lines, or before a line that reads as a link or a subgraph
+    statement, is a stray quote, not a label: its lines are left as they
+    are, so it cannot swallow the rest of the diagram.
+    """
+    result: list[str] = []
+    i = 0
+    while i < len(lines):
+        end = i
+        if lines[i].count('"') % 2 and not lines[i].lstrip().startswith("%%"):
+            for j in range(i + 1, min(i + _MAX_STRING_LINES, len(lines) - 1) + 1):
+                if lines[j].count('"') % 2:
+                    end = j
+                    break
+                if _STATEMENT.search(lines[j]):
+                    break
+        result.append("<br>".join(lines[i:end + 1]))
+        i = end + 1
+    return result
+
+
 def _is_style_statement(statement: str) -> bool:
     return statement.lstrip().lower().startswith(("style ", "classdef ", "linkstyle "))
 
@@ -366,7 +395,7 @@ class _FlowchartParser:
     def _preprocess(self, text: str) -> list[str]:
         """Split into lines, handle semicolons, strip comments."""
         raw_lines: list[str] = []
-        for line in text.split("\n"):
+        for line in _join_open_strings(text.split("\n")):
             # A comment is the whole line, semicolons included
             if line.lstrip().startswith("%%"):
                 continue

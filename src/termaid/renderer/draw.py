@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..graph.model import ArrowType, EdgeStyle, Graph, GraphNote
+from ..graph.model import ArrowType, EdgeStyle, Graph, GraphNote, Node
 from ..graph.shapes import NodeShape
 from ..layout.grid import GridLayout, NodePlacement, SubgraphBounds, compute_layout
 from ..routing.router import AttachDir, RoutedEdge, layout_and_route
@@ -262,27 +262,45 @@ def _draw_nodes(canvas: Canvas, graph: Graph, layout: GridLayout, cs: CharSet) -
 
         renderer = SHAPE_RENDERERS.get(node.shape, SHAPE_RENDERERS[NodeShape.RECTANGLE])
         renderer(canvas, p.draw_x, p.draw_y, p.draw_width, p.draw_height, node.label, cs, style=style)
+        if node.label_segments:
+            _style_markdown_label(canvas, node, p)
 
         # Protect node cells so edge lines don't overwrite borders
         for r in range(p.draw_y, p.draw_y + p.draw_height):
             for c in range(p.draw_x, p.draw_x + p.draw_width):
                 canvas.protect(r, c)
 
-        # Overwrite label with styled text if markdown segments exist
-        if node.label_segments:
-            label_row = p.draw_y + p.draw_height // 2
-            total_len = sum(display_width(seg.text) for seg in node.label_segments)
-            label_col = p.draw_x + (p.draw_width - total_len) // 2
-            styled_segs: list[tuple[str, str]] = []
-            for seg in node.label_segments:
-                if seg.bold:
-                    seg_style = "bold_label"
-                elif seg.italic:
-                    seg_style = "italic_label"
-                else:
-                    seg_style = "label"
-                styled_segs.append((seg.text, seg_style))
-            canvas.put_styled_text(label_row, label_col, styled_segs)
+
+def _style_markdown_label(canvas: Canvas, node: Node, p: NodePlacement) -> None:
+    """Draw a Markdown label again over the plain one, with its bold and
+    italic runs styled.
+
+    The label may be broken into lines and wrapped, so each drawn line
+    takes the style of the label characters it shows, in order. The lines
+    go where the shape drew the plain label.
+    """
+    chars: list[tuple[str, str]] = []
+    for seg in node.label_segments:
+        style = "bold_label" if seg.bold else "italic_label" if seg.italic else "label"
+        chars += [(ch, style) for ch in seg.text.replace("\\n", "")]
+    lines = node.label.split("\\n")
+    y, height = p.draw_y, p.draw_height
+    if node.shape == NodeShape.CYLINDER:
+        y, height = y + 1, height - 1  # the lid's rim, as the shape draws it
+    top = y + (height - len(lines)) // 2
+    pos = 0
+    for i, line in enumerate(lines):
+        runs: list[tuple[str, str]] = []
+        for ch in line:
+            k = next((k for k in range(pos, len(chars)) if chars[k][0] == ch), None)
+            style = "label"
+            if k is not None:
+                style, pos = chars[k][1], k + 1
+            if runs and runs[-1][1] == style:
+                runs[-1] = (runs[-1][0] + ch, style)
+            else:
+                runs.append((ch, style))
+        canvas.put_styled_text(top + i, p.draw_x + (p.draw_width - display_width(line)) // 2, runs)
 
 
 def _draw_edges(
