@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Behavior changes
+- Class and ER diagrams have a new layout. Boxes are placed in rows by their longest chain of links, so every link runs down to a later row, as in Mermaid. Diagrams that drew a chain as boxes side by side joined by a level line now stack it, and come out taller and narrower
+- Class: a note is a box of its own, joined to its class by a dashed line
+
 ### Fixes
 - State: `direction` inside a composite state sets the direction of that state. It changed the whole diagram, and the composite kept the old one
 - State: a description, `s1 : Waiting for payment`, is the state's label. It was dropped, and a diagram made only of descriptions drew nothing
@@ -22,6 +26,13 @@
 - Sequence: `box ... end` draws a frame with its title around its participants; `create participant` draws the participant at the message that creates it; `rect rgb(...)` is an untitled frame; entity codes such as `#9829;` are decoded; `autonumber off` and `autonumber` in mid-diagram work; a `title` line is drawn above the diagram
 - Sequence: the corners of a `collections` participant
 - gitGraph: a branch or merge point is drawn with a tee or a corner, and `┼` only where a line crosses another branch. In TB and BT a commit label is no longer cut by the branch line
+- Class and ER: a link between two boxes in one row was drawn through the box between them; a link going up joined another link and lost its arrowhead or overprinted a cardinality; two links between the same boxes, and links in a cycle, lost one line. Each link is now drawn whole, with its own label
+- Class and ER: a class or entity related to itself draws a small loop beside its box, with its label and cardinalities
+- Class and ER: labels on neighbouring links no longer overwrite each other, and lines leaving one box are ordered by where they go, so they do not cross
+- Class and ER: `direction LR` keeps labels and cardinalities whole, and `RL` and `BT` are honoured
+- Class: `note for X` no longer covers the class beside X, and a free-standing note no longer sends lines through a box
+- Class: `class Car["Fast car"]` and backtick names are read, generics show as `Box<T>` and `List<T>`, `<br/>` breaks a note's line, and a `namespace` gets a frame when its classes sit together
+- Class with `--ascii`: lines have `+` corners, and inheritance is drawn `A`/`V`, apart from an association's `^`/`v`
 - Mindmap: a node written with an id and a shape, such as `root((Project))` or `id[Text]`, shows only its text. The id and brackets were drawn, and `((Text))` kept one pair of brackets. `::icon(...)` and `:::class` lines are no longer drawn as nodes
 
 ## 0.14.1 (2026-11-25)
