@@ -45,7 +45,7 @@ termaid = "termaid.cli:main"
 packages = ["src/termaid"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "scripts", "README.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE"]
+include = ["/src", "/tests", "/scripts", "/README.md", "/CHANGELOG.md", "/CONTRIBUTING.md", "/LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
