@@ -146,3 +146,21 @@ def test_identifier_labels_keep_member_name_together():
     output = render("sequenceDiagram\nparticipant A as metadata_shard[s].mutex\nA->>A: work", max_label_width=20)
     assert "metadata_shard[s]" in output and ".mutex" in output
     assert "metadata_shard[s].mu" not in output
+
+
+@pytest.mark.parametrize("note", [
+    "Note right of Database: row written to the orders table",
+    "Note left of Client: the client keeps the order id for later",
+    "Note over Database: the row is written to the orders table",
+])
+def test_fitting_to_a_width_wraps_an_edge_note_before_participant_names(tmp_path, capsys, note):
+    from termaid.cli import main
+    mmd = tmp_path / "seq.mmd"
+    mmd.write_text(
+        "sequenceDiagram\n  Client->>Server: POST /orders\n  Server->>Database: INSERT order\n  " + note
+    )
+    assert main([str(mmd), "--width", "40", "--strict-width"]) == 0
+    out = capsys.readouterr().out
+    assert all(name in out for name in ("Client", "Server", "Database", "/orders", "INSERT"))
+    note_rows = [line[line.index("│") + 1:line.rindex("│")] for line in out.splitlines()[3:] if line.count("│") >= 2]
+    assert "".join(note.split(": ", 1)[1].split()) in "".join("".join(note_rows).split())
