@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import Iterator
+from typing import Iterable, Iterator
 
 # A %%{...}%% directive, which may span lines. It ends at the next %%{, so an
 # unclosed one is not rescanned to the end of the source from every later %%{.
@@ -42,6 +42,26 @@ def line_breaks(text: str, sep: str = "\n") -> str:
         part.strip() if 0 < i < last else part.rstrip() if i == 0 else part.lstrip()
         for i, part in enumerate(parts)
     )
+
+
+_META_LINE = re.compile(r"\s*(?:acc(?:Title|Descr)\s*:|accDescr\s*\{|click\s+[\w-]+\s+(?:href\b|call\b|[\"']))")
+
+
+def is_meta_line(line: str) -> bool:
+    """Whether *line* is an ``accTitle:``, ``accDescr:`` or ``click`` line, which Mermaid never draws."""
+    return _META_LINE.match(line) is not None
+
+
+def without_meta_lines(lines: Iterable[str]) -> Iterator[str]:
+    """*lines* without their meta lines, an ``accDescr { … }`` block included."""
+    in_block = False
+    for line in lines:
+        if in_block:
+            in_block = "}" not in line
+        elif is_meta_line(line):
+            in_block = line.lstrip().startswith("accDescr") and "{" in line and "}" not in line
+        else:
+            yield line
 
 
 _SOFT_HYPHEN = "­"

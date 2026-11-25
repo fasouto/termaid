@@ -7,7 +7,10 @@ from dataclasses import dataclass, field
 @dataclass
 class KanbanCard:
     title: str
-    metadata: str = ""  # optional tag/assignee
+    # From the card's ``@{ … }`` shape data, "" when not given
+    assigned: str = ""
+    ticket: str = ""
+    priority: str = ""
 
 
 @dataclass

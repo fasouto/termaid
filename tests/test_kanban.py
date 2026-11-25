@@ -83,8 +83,7 @@ class TestKanbanBracketIdsWithMetadata:
             "    spike[Research vector DB options] @alice"
         )
         card = kb.columns[0].cards[0]
-        assert card.title == "Research vector DB options"
-        assert card.assigned == "alice"
+        assert card.title == "Research vector DB options @alice"
 
 
 class TestKanbanCardData:

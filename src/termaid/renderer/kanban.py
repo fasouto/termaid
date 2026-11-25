@@ -17,6 +17,17 @@ _COL_GAP = 2      # gap between columns
 _CARD_GAP = 1     # gap between cards in a column
 
 
+_PRIORITY_BORDER = {
+    "very high": ("I", "┃"), "high": ("I", "┃"),
+    "low": (":", "┆"), "very low": (":", "┆"),
+}
+
+
+def _footer(card) -> str:
+    """The ticket and assignee line under a card's title, "" when it has neither."""
+    return " ".join(part for part in (card.ticket, card.assigned) if part)
+
+
 def render_kanban(
     diagram: Kanban,
     *,
@@ -40,7 +51,7 @@ def render_kanban(
     col_widths: list[int] = []
     for col in diagram.columns:
         title_w = display_width(col.title)
-        card_w = max((display_width(card.title) + (display_width(card.metadata) + 1 if card.metadata else 0)
+        card_w = max((max(display_width(card.title), display_width(_footer(card)))
                       for card in col.cards), default=0)
         need = max(title_w + 4, card_w + 2 + 2 * _COL_PAD)
         col_widths.append(max(need + (padding_x - _CARD_PAD) * 2, 10))
@@ -50,7 +61,7 @@ def render_kanban(
     for col in diagram.columns:
         h = 3  # top border + title + separator
         for ci, card in enumerate(col.cards):
-            h += 3  # card: top + content + bottom
+            h += 3 + bool(_footer(card))  # card: top + content (+ footer) + bottom
             if ci < len(col.cards) - 1:
                 h += _CARD_GAP
         h += 1  # bottom border
@@ -121,21 +132,26 @@ def _draw_column(
         cw = w - 2 * _COL_PAD
         cx = x + _COL_PAD
 
+        footer = _footer(card)
+        rows = 2 if footer else 1
+        # Mermaid marks a card's priority on its left border.
+        left = _PRIORITY_BORDER.get(card.priority.lower(), ("|", card_vt))[0 if use_ascii else 1]
+
         # Card box (lighter shade of column color)
         canvas.put_text(card_y, cx, card_tl + card_hz * (cw - 2) + card_tr, style=card_style)
-        canvas.put(card_y + 1, cx, card_vt, merge=False, style=card_style)
-        canvas.put(card_y + 1, cx + cw - 1, card_vt, merge=False, style=card_style)
-        canvas.put_text(card_y + 2, cx, card_bl + card_hz * (cw - 2) + card_br, style=card_style)
+        for r in range(card_y + 1, card_y + 1 + rows):
+            canvas.put(r, cx, left, merge=False, style=card_style)
+            canvas.put(r, cx + cw - 1, card_vt, merge=False, style=card_style)
+            for c in range(cx + 1, cx + cw - 1):
+                canvas._style_grid[r][c] = card_style
+        canvas.put_text(card_y + 1 + rows, cx, card_bl + card_hz * (cw - 2) + card_br, style=card_style)
 
-        # Card interior bg
-        for c in range(cx + 1, cx + cw - 1):
-            canvas._style_grid[card_y + 1][c] = card_style
+        canvas.put_text(card_y + 1, cx + 1, truncate_to_width(card.title, cw - 2), style=card_style)
+        if footer:
+            # Ticket on the left, assignee on the right, as Mermaid places them.
+            gap = cw - 2 - display_width(footer)
+            if card.assigned and gap > 0:
+                footer = card.ticket + " " * (gap + bool(card.ticket)) + card.assigned
+            canvas.put_text(card_y + 2, cx + 1, truncate_to_width(footer, cw - 2), style=card_style)
 
-        # Card content
-        text = card.title
-        if card.metadata:
-            text += " " + card.metadata
-        text = truncate_to_width(text, cw - 2)
-        canvas.put_text(card_y + 1, cx + 1, text, style=card_style)
-
-        card_y += 3 + _CARD_GAP
+        card_y += 2 + rows + _CARD_GAP
