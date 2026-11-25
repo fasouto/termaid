@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 
 from ..model.mindmap import Mindmap, MindmapNode
+from ..utils import line_breaks, without_meta_lines
+from .flowchart import _join_open_strings, _parse_markdown_label
 
 
 # Shape markers, longest first: an id may come before any of them.
@@ -29,15 +31,22 @@ _ID = re.compile(r"[\w-]*")
 
 
 def _label(text: str) -> str:
-    """The text of a node written as ``id((text))``, ``[text]`` and so on."""
+    """The text of a node written as ``id((text))``, ``[text]`` and so on.
+
+    Line breaks in the text come back as ``\\n``.
+    """
     rest = text[_ID.match(text).end():]
     for opener, closer in _SHAPES:
         if rest.startswith(opener) and rest.endswith(closer) and len(rest) > len(opener) + len(closer):
             inner = rest[len(opener):-len(closer)].strip()
-            if len(inner) >= 2 and inner[0] == inner[-1] and inner[0] in "\"`":
-                inner = inner.strip(inner[0])
-            return inner or text
-    return text
+            text = inner or text
+            break
+    markdown = _parse_markdown_label(text)
+    if markdown is not None:
+        return markdown[0].replace("\\n", "\n")  # the flowchart parser marks breaks as a literal \n
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"`":
+        text = text.strip(text[0])
+    return line_breaks(text)
 
 
 def parse_mindmap(text: str) -> Mindmap:
@@ -50,7 +59,7 @@ def parse_mindmap(text: str) -> Mindmap:
 
     # Skip header line (mindmap)
     body_lines: list[tuple[int, str]] = []
-    for line in lines[1:]:
+    for line in _join_open_strings(list(without_meta_lines(lines[1:]))):
         # Strip comments
         comment_idx = line.find("%%")
         if comment_idx >= 0:
