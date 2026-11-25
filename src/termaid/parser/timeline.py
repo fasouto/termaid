@@ -4,16 +4,24 @@ Syntax:
     timeline
         title My Project
         section Phase 1
-            Design : Wireframes, Mockups
+            Design : Wireframes : Mockups
+                   : Prototype
             Review : Stakeholder sign-off
         section Phase 2
             Build : Frontend, Backend
+
+A period is followed by its events, each after a colon and a space. A line
+that starts with a colon adds events to the period above. Commas are text.
 """
 from __future__ import annotations
 
 import re
 
 from ..model.timeline import Timeline, TimelineSection, TimelineEvent
+
+# Mermaid's lexer starts an event at a colon followed by whitespace, so
+# "10:30" stays one word.
+_EVENT_SEP = re.compile(r"\s*:(?:\s+|$)")
 
 
 def parse_timeline(text: str) -> Timeline:
@@ -53,16 +61,11 @@ def parse_timeline(text: str) -> Timeline:
             current_section = TimelineSection(title="")
             tl.sections.append(current_section)
 
-        if " : " in stripped:
-            title, details_str = stripped.split(" : ", 1)
-            details = [d.strip() for d in details_str.split(",") if d.strip()]
+        title, *events = _EVENT_SEP.split(stripped)
+        details = [e.strip() for e in events if e.strip()]
+        if not title and current_section.events:
+            current_section.events[-1].details.extend(details)
         else:
-            title = stripped
-            details = []
-
-        current_section.events.append(TimelineEvent(
-            title=title.strip(),
-            details=details,
-        ))
+            current_section.events.append(TimelineEvent(title=title.strip(), details=details))
 
     return tl
