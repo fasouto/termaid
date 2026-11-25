@@ -318,3 +318,36 @@ class TestShapePreservation:
             "    f"
         )
         assert g.nodes["f"].shape == NodeShape.FORK_JOIN
+
+
+def _row_of(output: str, text: str) -> int:
+    return next(i for i, line in enumerate(output.splitlines()) if text in line)
+
+
+class TestCompositeDirection:
+    def test_direction_inside_composite_sets_only_that_composite(self):
+        g = parse_state_diagram(
+            "stateDiagram-v2\n"
+            "    Idle --> Busy\n"
+            "    Busy --> Done\n"
+            "    state Busy {\n"
+            "        direction LR\n"
+            "        Load --> Run\n"
+            "    }"
+        )
+        assert g.direction == Direction.TB
+        assert g.subgraphs[0].direction == Direction.LR
+
+    def test_inner_direction_does_not_flip_the_outer_flow(self):
+        output = render(
+            "stateDiagram-v2\n"
+            "    direction LR\n"
+            "    Idle --> Busy\n"
+            "    state Busy {\n"
+            "        direction TB\n"
+            "        Load --> Run\n"
+            "    }\n"
+            "    Busy --> Done"
+        )
+        assert _row_of(output, "Idle") == _row_of(output, "Done")
+        assert _row_of(output, "Load") < _row_of(output, "Run")
