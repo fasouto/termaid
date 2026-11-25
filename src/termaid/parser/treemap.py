@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import re
 
+from ..utils import line_breaks
+
 from ..model.treemap import Treemap, TreemapNode
 
 _NODE_RE = re.compile(r'^(\s*)"([^"]+)"(?:\s*:\s*([0-9]+(?:\.[0-9]*)?))?')
@@ -39,7 +41,7 @@ def parse_treemap(text: str) -> Treemap:
             continue
 
         indent = len(m.group(1))
-        label = m.group(2)
+        label = line_breaks(m.group(2), " ")  # drawn on one row
         value = float(m.group(3)) if m.group(3) else 0
         body_lines.append((indent, label, value))
 

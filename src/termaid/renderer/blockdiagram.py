@@ -124,7 +124,8 @@ def _compute_block_size(block: Block, cs: CharSet, sizes: dict[str, tuple[int, i
         return max(w, _MIN_BLOCK_W), max(h, _MIN_BLOCK_H)
 
     label = block.label or block.id
-    w = max(display_width(label) + padding_x * 2, _MIN_BLOCK_W)
+    # padding_x counts the border column on each side.
+    w = max(display_width(label) + max(padding_x, 1) * 2, _MIN_BLOCK_W)
     h = _MIN_BLOCK_H
     return w, h
 
@@ -436,10 +437,14 @@ def _draw_link(
 
     # Draw label
     if link.label:
+        label_w = display_width(link.label)
         mid_r = (r1 + r2) // 2
         mid_c = (c1 + c2) // 2
-        label_col = mid_c - display_width(link.label) // 2
-        canvas.put_text(mid_r, label_col, link.label, style="edge_label")
+        if not use_vertical and r1 == r2 and label_w > abs(c2 - c1):
+            # Too wide for the gap between the boxes: above them, as Mermaid does.
+            mid_r = min(sy, ty) - 1
+        label_col = max(0, mid_c - label_w // 2)
+        canvas.put_text(mid_r, label_col, link.label, style="edge_label", grow=True)
 
 
 def _draw_routed_line(

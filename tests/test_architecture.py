@@ -83,3 +83,62 @@ class TestArchitectureRendering:
         assert "Data Store" in output
         assert "┌" in output  # box drawing
         assert "►" in output  # arrow
+
+
+def _connected(g, start: str) -> set[str]:
+    seen, todo = {start}, [start]
+    while todo:
+        n = todo.pop()
+        for e in g.edges:
+            for a, b in ((e.source, e.target), (e.target, e.source)):
+                if a == n and b not in seen:
+                    seen.add(b)
+                    todo.append(b)
+    return seen
+
+
+class TestJunctions:
+    """A junction joins every edge that meets it, keeping each edge's arrowheads."""
+
+    T_SHAPE = (
+        "architecture-beta\n"
+        "    service a(server)[A]\n    service b(server)[B]\n    service c(server)[C]\n"
+        "    junction j\n"
+        "    a:R -- L:j\n    j:R -- L:b\n    j:B -- T:c\n"
+    )
+
+    def test_every_branch_is_kept(self):
+        g = parse_architecture(self.T_SHAPE)
+        assert _connected(g, "a") == {"a", "b", "c"}
+
+    def test_plain_links_get_no_arrowheads(self):
+        g = parse_architecture(self.T_SHAPE)
+        assert not any(e.has_arrow_start or e.has_arrow_end for e in g.edges)
+        assert "►" not in render(self.T_SHAPE) and "◄" not in render(self.T_SHAPE)
+
+    def test_an_arrow_into_a_junction_reaches_the_service(self):
+        g = parse_architecture(self.T_SHAPE.replace("j:R -- L:b", "j:R --> L:b"))
+        (edge,) = [e for e in g.edges if "b" in (e.source, e.target)]
+        assert (edge.has_arrow_end if edge.target == "b" else edge.has_arrow_start) is True
+
+
+class TestEdgeSides:
+    def test_the_written_order_does_not_change_the_route(self):
+        head = "architecture-beta\n    service db(database)[Database]\n    service server(server)[Server]\n"
+        assert render(head + "    db:L -- R:server\n") == render(head + "    server:R -- L:db\n")
+        assert render(head + "    db:T --> B:server\n") == render(head + "    server:B <-- T:db\n")
+
+    def test_ascii_output_has_no_icons(self):
+        out = render(
+            "architecture-beta\n    service db(database)[Database]\n    service s(server)[Server]\n    s:R -- L:db\n",
+            use_ascii=True,
+        )
+        assert out.isascii()
+        assert "Database" in out and "Server" in out
+
+
+def test_br_tags_break_or_join_lines():
+    out = render('architecture-beta\n  group api(cloud)[API<br/>tier]\n  service db(database)[Main<br/>db] in api\n  service s(server)[Web<br>app] in api\n  s:R -- L:db\n')
+    assert "<br" not in out.lower()
+    for words in ['API tier', 'Main', 'db', 'Web', 'app']:
+        assert words in out, words

@@ -20,9 +20,11 @@ on the machine's timezone.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 
 from ..model.gantt import Duration, Gantt, GanttSection, GanttTask, TickInterval
+from ..utils import is_meta_line, line_breaks
 
 # Mermaid (dayjs) date format tokens -> strptime directives. SSS maps to %f,
 # which right-pads three digits to microseconds.
@@ -50,6 +52,49 @@ _DURATION_UNITS = {
 }
 _TICK_INTERVAL_RE = re.compile(r"^([1-9][0-9]*)(millisecond|second|minute|hour|day|week|month)$")
 
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_DAY = timedelta(days=1)
+# A task stretched over more days than this keeps its unstretched end.
+_MAX_STRETCH_DAYS = 100_000
+
+
+@dataclass
+class _Calendar:
+    """The days ``excludes``, ``includes`` and ``weekend`` take out of a task's duration."""
+    excludes: list[str] = field(default_factory=list)
+    includes: list[str] = field(default_factory=list)
+    weekend_friday: bool = False
+
+    def stretch(self, start: datetime, end: datetime, date_format: str) -> datetime:
+        """``end`` pushed one day later for each excluded day, as Mermaid's fixTaskDates does.
+
+        Mermaid checks the days from the one after ``start`` up to ``end``,
+        moving ``end`` as it goes.
+        """
+        days_off = {_WEEKDAYS.index(w) for w in self.excludes if w in _WEEKDAYS}
+        if "weekends" in self.excludes:
+            days_off |= {4, 5} if self.weekend_friday else {5, 6}
+        dates_off = self._dates(self.excludes, date_format)
+        if len(days_off) == 7 or not (days_off or dates_off):
+            return end
+        dates_on = self._dates(self.includes, date_format)
+        day = start + _DAY
+        try:
+            for _ in range(_MAX_STRETCH_DAYS):
+                if day > end:
+                    return end
+                d = day.date()
+                if d not in dates_on and (day.weekday() in days_off or d in dates_off):
+                    end += _DAY
+                day += _DAY
+        except OverflowError:
+            pass
+        return end
+
+    @staticmethod
+    def _dates(words: list[str], date_format: str) -> set[date]:
+        return {d.date() for d in (_parse_date(w, date_format) for w in words) if d is not None}
+
 
 def parse_gantt(text: str) -> Gantt:
     """Parse a mermaid gantt diagram definition."""
@@ -60,7 +105,9 @@ def parse_gantt(text: str) -> Gantt:
         return gantt
 
     current_section: GanttSection | None = None
-    tasks_by_id: dict[str, GanttTask] = {}
+    tasks: list[GanttTask] = []
+    calendar = _Calendar()
+    in_descr = False
 
     for line in lines[1:]:  # skip "gantt" header
         comment_idx = line.find("%%")
@@ -70,11 +117,17 @@ def parse_gantt(text: str) -> Gantt:
         stripped = line.strip()
         if not stripped:
             continue
+        if in_descr:
+            in_descr = "}" not in stripped
+            continue
+        if is_meta_line(stripped):
+            in_descr = stripped.startswith("accDescr") and stripped[8:].lstrip()[:1] == "{" and "}" not in stripped
+            continue
 
         lower = stripped.lower()
 
         if lower.startswith("title "):
-            gantt.title = stripped[6:].strip()
+            gantt.title = line_breaks(stripped[6:].strip(), " ")
             continue
 
         if lower.startswith("dateformat "):
@@ -91,8 +144,14 @@ def parse_gantt(text: str) -> Gantt:
                 gantt.tick_interval = TickInterval(int(m.group(1)), m.group(2))
             continue
 
-        if lower.startswith("excludes ") or lower.startswith("weekend "):
-            continue  # exclusions are not applied
+        if lower.startswith(("excludes ", "includes ")):
+            words = [w for w in re.split(r"[\s,]+", lower[9:]) if w]
+            (calendar.excludes if lower[0] == "e" else calendar.includes).extend(words)
+            continue
+
+        if lower.startswith("weekend "):
+            calendar.weekend_friday = lower[8:].strip() == "friday"
+            continue
 
         if lower.startswith("todaymarker "):
             if "off" in lower:
@@ -107,7 +166,7 @@ def parse_gantt(text: str) -> Gantt:
             continue
 
         if lower.startswith("section "):
-            current_section = GanttSection(title=stripped[8:].strip())
+            current_section = GanttSection(title=line_breaks(stripped[8:].strip(), " "))
             gantt.sections.append(current_section)
             continue
 
@@ -119,33 +178,48 @@ def parse_gantt(text: str) -> Gantt:
                     current_section = GanttSection(title="")
                     gantt.sections.append(current_section)
 
-                # Auto-chain: if no start and no after, start after the previous task
-                if task.start is None and not task.after and current_section.tasks:
-                    prev = current_section.tasks[-1]
-                    if prev.end:
-                        task.start_at(prev.end)
-
                 current_section.tasks.append(task)
-                if task.id:
-                    tasks_by_id[task.id] = task
+                tasks.append(task)
 
-    # Resolve "after" dependencies (multiple passes for chains)
-    for _ in range(len(tasks_by_id) + 1):
+    _schedule(tasks, calendar, gantt.date_format)
+    return gantt
+
+
+def _schedule(tasks: list[GanttTask], calendar: _Calendar, date_format: str) -> None:
+    """Give each task its start and end, the way Mermaid's compileTasks does.
+
+    A task with neither a start date nor ``after`` starts when the task
+    written before it ends, in whatever section. ``after`` and ``until`` may
+    name tasks written later, so passes repeat until nothing changes. Days
+    the calendar excludes stretch a duration.
+    """
+    by_id = {task.id: task for task in tasks}
+
+    def known(ids: str) -> list[GanttTask]:
+        return [by_id[i] for i in ids.split() if i in by_id]
+
+    for _ in range(len(tasks) + 1):
         changed = False
-        for section in gantt.sections:
-            for task in section.tasks:
-                if not task.after or task.start is not None:
-                    continue
-                # Multiple IDs: "after task1 task2" - start at the latest end
-                deps = [tasks_by_id.get(aid) for aid in task.after.split()]
-                ends = [dep.end for dep in deps if dep is not None and dep.end is not None]
-                if len(ends) == len(deps):
-                    task.start_at(max(ends))
+        for i, task in enumerate(tasks):
+            if task.start is None:
+                deps = known(task.after) if task.after else tasks[i - 1:i]
+                ends = [dep.end for dep in deps]
+                if ends and None not in ends:
+                    task.start = max(ends)
                     changed = True
+            if task.start is not None and task.end is None:
+                if task.until:
+                    starts = [dep.start for dep in known(task.until)]
+                    if starts and None not in starts:
+                        task.end = min(starts)
+                        changed = True
+                elif task.duration is not None:
+                    end = task.duration.end_from(task.start)
+                    if end is not None:
+                        task.end = calendar.stretch(task.start, end, date_format)
+                        changed = True
         if not changed:
             break
-
-    return gantt
 
 
 def _parse_task(line: str, date_format: str) -> GanttTask | None:
@@ -157,7 +231,7 @@ def _parse_task(line: str, date_format: str) -> GanttTask | None:
     title = line[:colon_idx].strip()
     rest = line[colon_idx + 1:].strip()
 
-    task = GanttTask(title=title)
+    task = GanttTask(title=line_breaks(title, " "))  # one row
 
     parts = [p.strip() for p in rest.split(",")]
 
@@ -182,6 +256,9 @@ def _parse_task(line: str, date_format: str) -> GanttTask | None:
             # Support multiple: "after task1 task2" - store all IDs
             task.after = part[6:].strip()
             continue
+        if part.lower().startswith("until "):
+            task.until = part[6:].strip()
+            continue
 
         d = _parse_date(part, date_format)
         if d:
@@ -194,8 +271,6 @@ def _parse_task(line: str, date_format: str) -> GanttTask | None:
         dur = _parse_duration(part)
         if dur is not None:
             task.duration = dur
-            if task.start:
-                task.end = dur.end_from(task.start)
             continue
 
         # Must be an ID

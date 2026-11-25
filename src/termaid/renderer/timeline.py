@@ -52,7 +52,8 @@ def render_timeline(
             styled_lines.append((f" {bullet}{h}{h} {event.title}", style))
 
             for detail in event.details:
-                styled_lines.append((f" {v}   {detail}", "edge_label"))
+                for row in detail.split("\n"):
+                    styled_lines.append((f" {v}   {row}", "edge_label"))
 
             if not (is_last_event and is_last_section):
                 styled_lines.append((f" {v}", style))
