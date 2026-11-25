@@ -564,6 +564,7 @@ def _indent(result, indent: str):
 def _run_tui(source: str, args: argparse.Namespace) -> int:
     """Launch the TUI viewer."""
     try:
+        from rich.text import Text
         from textual.app import App, ComposeResult
         from textual.widgets import Static
         from termaid import render as _render
@@ -579,7 +580,8 @@ def _run_tui(source: str, args: argparse.Namespace) -> int:
         CSS = "Static { width: auto; height: auto; }"
 
         def compose(self) -> ComposeResult:
-            yield Static(_render(
+            # Text, not str: Static reads a str as markup.
+            yield Static(Text(_render(
                 source,
                 use_ascii=args.ascii,
                 padding_x=args.padding_x,
@@ -587,7 +589,7 @@ def _run_tui(source: str, args: argparse.Namespace) -> int:
                 rounded_edges=not args.sharp_edges,
                 gap=args.gap,
                 arrow_style=args.arrow_style,
-            ))
+            )))
 
     DiagramApp().run()
     return 0
