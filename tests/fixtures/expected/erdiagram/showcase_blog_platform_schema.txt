@@ -1,33 +1,36 @@
 
 
-              ┌─────────────────────┐
-              │        USER         │
-              ├─────────────────────┤
-              │ int id  PK          │
-              │ string username  UK │
-              │ string email  UK    │
-              │ date joined         │
-              └─────────────────────┘
-                       │1  │1
-            ┌─writes───┘   └─authors────┐
-            │                           │
-            │0..*                       │0..*
-  ┌───────────────────┐        ┌─────────────────┐
-  │       POST        │        │     COMMENT     │
-  ├───────────────────┤        ├─────────────────┤
-  │ int id  PK        │ 1 0..* │ int id  PK      │
-  │ string title      │────────│ text body       │
-  │ text content      │  has   │ int post_id  FK │
-  │ int author_id  FK │        │ int user_id  FK │
-  │ date published    │        │ date created    │
-  └───────────────────┘        └─────────────────┘
-            │1..*
-            └─tagged-with┐
-                         │
-                         │0..*
-                ┌─────────────────┐
-                │       TAG       │
-                ├─────────────────┤
-                │ int id  PK      │
-                │ string name  UK │
-                └─────────────────┘
+           ┌─────────────────────┐
+           │        USER         │
+           ├─────────────────────┤
+           │ int id  PK          │
+           │ string username  UK │
+           │ string email  UK    │
+           │ date joined         │
+           └─────────────────────┘
+                    │1  │1
+           ┌────────┘   │
+           │            │ writes
+           │            │0..*
+           │  ┌───────────────────┐
+           │  │       POST        │
+           │  ├───────────────────┤
+           │  │ int id  PK        │
+           │  │ string title      │
+           │  │ text content      │
+           │  │ int author_id  FK │
+           │  │ date published    │
+           │  └───────────────────┘
+           │         │1    │1..*
+        ┌──┘  ┌─has──┘     └──────┐
+authors │     │                   │ tagged-with
+        │0..* │0..*               │
+  ┌─────────────────┐             │0..*
+  │     COMMENT     │    ┌─────────────────┐
+  ├─────────────────┤    │       TAG       │
+  │ int id  PK      │    ├─────────────────┤
+  │ text body       │    │ int id  PK      │
+  │ int post_id  FK │    │ string name  UK │
+  │ int user_id  FK │    └─────────────────┘
+  │ date created    │
+  └─────────────────┘
