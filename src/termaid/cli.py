@@ -383,8 +383,7 @@ def main(argv: list[str] | None = None) -> int:
     use_color = not styled and _use_color(args)
     if use_color:
         try:
-            from rich import print as rprint
-            from rich.console import Console
+            import rich  # noqa: F401
         except ImportError:
             return _report(
                 args,
@@ -415,20 +414,14 @@ def main(argv: list[str] | None = None) -> int:
             return failed
 
         if use_color:
-            rich_result = result
             if args.output:
                 try:
                     with open(args.output, "w", encoding="utf-8") as f:
-                        console = Console(
-                            file=f,
-                            force_terminal=True,
-                            width=max(max_line_width(_plain(rich_result)), 80),
-                        )
-                        console.print(rich_result)
+                        _print_rich(result, f)
                 except OSError as e:
                     return _report(args, "output_write_failed", f"Error writing to {args.output}: {e}", path=args.output)
             else:
-                rprint(rich_result)
+                _print_rich(result)
         else:
             if styled:
                 result = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
@@ -444,6 +437,13 @@ def main(argv: list[str] | None = None) -> int:
         return _report(args, "render_failed", f"Error rendering diagram: {e}")
 
     return 0
+
+
+def _print_rich(result, file=None) -> None:
+    """Print a coloured drawing. A drawing is never wrapped, whatever the console width."""
+    from rich.console import Console
+
+    Console(file=file, force_terminal=True if file else None, soft_wrap=True).print(result)
 
 
 def _check_output(text: str, args: argparse.Namespace) -> int | None:
@@ -681,8 +681,7 @@ def _run_demo(args: argparse.Namespace) -> int:
         if use_color:
             try:
                 from termaid import render_rich
-                from rich import print as rprint
-                rprint(render_rich(source, theme=args.theme or "default"))
+                _print_rich(render_rich(source, theme=args.theme or "default"))
             except ImportError:
                 from termaid import render
                 print(render(source))
