@@ -259,3 +259,14 @@ class TestLinkLabelsAndPadding:
     def test_no_padding_still_fits_the_label_in_the_box(self):
         out = render('block-beta\n  columns 2\n  a["Load balancer"] b["Web"]\n  a --> b\n', padding_x=0)
         assert "│Load balancer│" in out
+
+
+def test_accessibility_and_click_lines_are_not_drawn():
+    out = render(
+        "block-beta\n  accTitle: Hidden title\n  accDescr: Hidden description\n"
+        "  accDescr {\n    Hidden\n    block\n  }\n  a[\"App\"] b[\"Db\"]\n  a --> b\n"
+        '  click a href "https://example.com"\n'
+    )
+    assert "App" in out and "Db" in out
+    for word in ("acc", "Hidden", "block", "click", "http"):
+        assert word not in out

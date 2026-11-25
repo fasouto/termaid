@@ -67,3 +67,13 @@ class TestEvents:
 
     def test_a_colon_inside_a_word_is_text(self):
         assert self._events("    Launch : at 10:30\n") == {"Launch": ["at 10:30"]}
+
+
+def test_accessibility_lines_are_not_drawn():
+    out = render(
+        "timeline\n    accTitle: Hidden title\n    accDescr: Hidden description\n"
+        "    accDescr {\n      Hidden\n      block\n    }\n    2023 : v1\n"
+    )
+    assert "2023" in out
+    for word in ("acc", "Hidden", "block"):
+        assert word not in out

@@ -414,3 +414,20 @@ class TestExcludes:
         days = "monday tuesday wednesday thursday friday saturday sunday"
         s = _schedule(f"  excludes {days}\n  section S\n    A :a, 2024-01-05, 3d\n")
         assert s["A"][0] == datetime(2024, 1, 5)
+
+
+META_LINES = (
+    "    accTitle: Hidden title\n"
+    "    accDescr: Hidden description\n"
+    "    accDescr {\n      Hidden\n      block\n    }\n"
+)
+
+
+def test_accessibility_and_click_lines_are_not_drawn():
+    out = render(
+        "gantt\n" + META_LINES + "    dateFormat YYYY-MM-DD\n    Build :b, 2024-01-01, 3d\n"
+        '    click b href "https://example.com"\n    click b call cb()\n'
+    )
+    assert "Build" in out
+    for word in ("acc", "Hidden", "block", "click", "http"):
+        assert word not in out
