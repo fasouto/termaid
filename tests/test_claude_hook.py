@@ -5,6 +5,8 @@ import io
 import json
 import os
 import stat
+import subprocess
+import sys
 import threading
 import time
 
@@ -298,6 +300,30 @@ def test_cli_flag_runs_the_hook(monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO(_event("x\n", message_id="c", index=0, final=True)))
     assert main(["--claude-hook"]) == 0
     assert json.loads(capsys.readouterr().out)["hookSpecificOutput"]["displayContent"] == "x\n"
+
+
+def test_text_without_a_diagram_loads_none_of_the_drawing_code(tmp_path):
+    # The hook starts for every batch of every reply, so its start-up is
+    # paid even when there is nothing to draw.
+    import termaid
+
+    script = (
+        "import sys\n"
+        "from termaid.cli import main\n"
+        "code = main(['--claude-hook'])\n"
+        "sys.stderr.write(' '.join(sorted(sys.modules)))\n"
+        "sys.exit(code)\n"
+    )
+    env = dict(os.environ, PYTHONPATH=os.path.dirname(os.path.dirname(termaid.__file__)), TMPDIR=str(tmp_path))
+    done = subprocess.run(
+        [sys.executable, "-c", script],
+        input=_event("Plain text.\n", message_id="lean", index=0, final=False),
+        capture_output=True, text=True, env=env, check=True,
+    )
+    assert json.loads(done.stdout)["hookSpecificOutput"]["displayContent"] == "Plain text.\n"
+    heavy = ("termaid.graph", "termaid.parser", "termaid.renderer", "termaid.layout",
+             "termaid.routing", "termaid.output", "rich", "importlib.metadata")
+    assert [name for name in done.stderr.split() if name.startswith(heavy)] == []
 
 
 posix_only = pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX permissions")
