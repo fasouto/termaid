@@ -306,6 +306,21 @@ class TestShowIds:
         assert "B: End" in content
         assert "graph LR" not in content
 
+    @pytest.mark.parametrize("source", [
+        "mindmap\n  root[Project]\n    Design\n",
+        'block-beta\n  a["Alpha"] b["Beta"]\n',
+        "stateDiagram-v2\n  s1: Hello\n  s1 --> s2\n",
+        "kanban\n  todo[Todo]\n    t1[Write docs]\n",
+    ], ids=["mindmap", "block", "state", "kanban"])
+    def test_other_types_draw_as_without_the_flag(self, tmp_path: Path, source: str):
+        from termaid import render
+
+        mmd = tmp_path / "t.mmd"
+        mmd.write_text(source)
+        out = tmp_path / "out.txt"
+        assert main([str(mmd), "--show-ids", "-o", str(out)]) == 0
+        assert out.read_text(encoding="utf-8").strip("\n") == render(source).strip("\n")
+
 
 class TestThemeOptionInteractions:
     """--theme must not silently drop -o, --show-ids, --gap, or --width."""
