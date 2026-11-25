@@ -190,7 +190,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         if m and not _MESSAGE_RE.match(stripped):
             colour, title = m.group(1), m.group(2).strip()
             if not (colour.lower() in _CSS_COLOURS or "(" in colour):
-                title = f"{colour} {title}".strip()
+                title = stripped[3:].strip()
             open_box = ParticipantBox(title=_label_text(title))
             diagram.boxes.append(open_box)
             continue

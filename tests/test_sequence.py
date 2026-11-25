@@ -844,6 +844,7 @@ class TestParticipantBoxes:
 
     def test_a_title_that_is_not_a_colour_is_kept_whole(self):
         assert "Another Group" in render("sequenceDiagram\n  box Another Group\n  participant A\n  end")
+        assert "My-Team" in render("sequenceDiagram\n  box My-Team\n  participant A\n  end")
 
 
 class TestCreatedParticipants:
