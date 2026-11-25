@@ -360,8 +360,8 @@ class TestStateDescriptions:
         assert "s2" in output
 
     def test_diagram_of_only_a_description_renders(self):
-        output = render("stateDiagram-v2\n    s2 : This is a state description")
-        assert "This is a state description" in output
+        output = render("stateDiagram-v2\n    s2 : A state description")
+        assert "A state description" in output
 
     def test_several_descriptions_keep_the_state_name(self):
         g = parse_state_diagram("stateDiagram-v2\n    s1 : first\n    s1 : second")
