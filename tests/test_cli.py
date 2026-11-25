@@ -235,6 +235,18 @@ class TestCliPipe:
         assert "D" in result.stdout
 
 
+    @pytest.mark.parametrize("extra", [[], ["--theme", "default"], ["--format", "styled-json"], ["--demo"]])
+    def test_closed_pipe_exits_quietly(self, extra: list[str]):
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "termaid", *extra],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        proc.stdout.close()
+        _, err = proc.communicate(b"graph TD\n" + b"".join(b"  N%d --> N%d\n" % (i, i + 1) for i in range(50)))
+        assert err.decode() == ""
+        assert proc.returncode == 1
+
+
 def _boom(*args, **kwargs):
     raise RuntimeError("internal failure")
 
