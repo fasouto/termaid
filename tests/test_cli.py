@@ -359,3 +359,30 @@ class TestThemeOptionInteractions:
         def max_width(text: str) -> int:
             return max(len(line) for line in text.splitlines())
         assert max_width(fitted) < max_width(full)
+
+
+class TestDemoOptions:
+    """--demo draws each sample exactly as termaid draws that source with the same flags."""
+
+    @pytest.mark.parametrize("flags", [
+        ["--ascii"],
+        ["--width", "30"],
+        ["--padding-x", "1", "--padding-y", "0", "--gap", "1"],
+        ["--sharp-edges", "--arrow-style", "triangle"],
+        ["--theme", "default"],
+    ], ids=" ".join)
+    @pytest.mark.parametrize("kind", ["flowchart", "sequence"])
+    def test_demo_honours_drawing_flags(self, tmp_path: Path, capsys, kind: str, flags: list[str]):
+        from termaid.cli import _DEMO_SOURCES
+
+        title, source = _DEMO_SOURCES[kind]
+        mmd = tmp_path / "demo.mmd"
+        mmd.write_text(source)
+        assert main([str(mmd), *flags]) == 0
+        drawn = capsys.readouterr().out
+        assert main(["--demo", kind, *flags]) == 0
+        assert capsys.readouterr().out == f"=== {title} ===\n{drawn}\n"
+
+    def test_demo_rejects_a_bad_width(self, capsys):
+        assert main(["--demo", "flowchart", "--width", "0"]) == 2
+        assert capsys.readouterr().out == ""
