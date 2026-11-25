@@ -78,6 +78,38 @@ class TestLongestPath:
         assert set(lines[top - 1].strip()) == {"▼", " "}, "\n".join(lines)
 
 
+class TestBackwardSubgraphDirection:
+    """``direction RL`` and ``direction BT`` in a subgraph were drawn as LR
+    and TB."""
+
+    @staticmethod
+    def _boxes(graph: str, sg: str, extra: str = "") -> dict[str, tuple[int, int, int, int]]:
+        from termaid import render
+        from tests.conftest import find_box
+
+        out = render(f"flowchart {graph}\n  subgraph S\n    direction {sg}\n    a --> b --> c\n  end\n{extra}")
+        lines = out.split("\n")
+        return {n: find_box(lines, n) for n in "abc"}
+
+    @pytest.mark.parametrize("graph", ["TB", "LR", "RL"])
+    def test_rl_runs_right_to_left(self, graph):
+        boxes = self._boxes(graph, "RL")
+        assert boxes["c"][3] < boxes["b"][2] and boxes["b"][3] < boxes["a"][2]
+
+    @pytest.mark.parametrize("graph", ["LR", "TB", "BT"])
+    def test_bt_runs_bottom_to_top(self, graph):
+        boxes = self._boxes(graph, "BT")
+        assert boxes["c"][1] < boxes["b"][0] and boxes["b"][1] < boxes["a"][0]
+
+    def test_lr_in_an_rl_graph_runs_left_to_right(self):
+        boxes = self._boxes("RL", "LR")
+        assert boxes["a"][3] < boxes["b"][2] and boxes["b"][3] < boxes["c"][2]
+
+    def test_a_subgraph_linked_outside_follows_the_graph(self):
+        boxes = self._boxes("LR", "RL", "  x --> a\n")
+        assert boxes["a"][3] < boxes["b"][2] and boxes["b"][3] < boxes["c"][2]
+
+
 class TestGridPlacement:
     def test_no_overlap(self):
         """No two nodes should overlap on the grid."""
