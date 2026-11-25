@@ -12,6 +12,8 @@
 - Fitting a diagram to a width picks the label width from the layout's measure and draws once or twice, not five or six times. Fitting a 67-line flowchart to 200 columns went from 5.8 s to 0.3 s
 - Flowchart: two subgraphs with links in both directions are drawn as two boxes. They were merged into one box and one title was lost
 - Flowchart: a subgraph box stretched by a long title no longer covers the node or subgraph next to it
+- Claude Code hook: each call starts faster, about 40 ms where it took 65 ms on a reply with no diagram. The version lookup, the parsers and `dataclasses` are no longer loaded before they are needed
+- Claude Code plugin: the hook tries `python` when `python3` is missing or fails, which is how Python is usually installed on Windows. Windows itself is untested and needs Git Bash
 - `--theme` output sent to a pipe or a file is no longer wrapped at 80 columns, which broke every wider drawing
 - Class, ER, journey and kanban diagrams keep one column of padding inside their boxes. At `padding_x=0`, which fitting to a width tries last, text was written over the box borders or cut short. Three fitted drawings come out 2 to 9 columns wider and correct
 - Negative `--padding-x`, `--padding-y` and `--gap` are rejected by the CLI, and `render()` treats them as 0. A negative gap could raise `IndexError`
