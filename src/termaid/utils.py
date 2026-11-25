@@ -23,6 +23,18 @@ def dedent_line(line: str, width: int) -> str:
     return line[n:]
 
 
+_META_LINE = re.compile(r"(?:accTitle\s*:|accDescr\s*[:{]|click\s)")
+
+
+def is_meta_line(line: str) -> bool:
+    """Whether a stripped line is an accTitle, an accDescr or a click handler, which Mermaid does not draw.
+
+    An ``accDescr {`` without its ``}`` runs on to the line holding the ``}``;
+    the caller skips those lines too.
+    """
+    return _META_LINE.match(line) is not None
+
+
 _BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 

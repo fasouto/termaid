@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from ..model.gantt import Duration, Gantt, GanttSection, GanttTask, TickInterval
+from ..utils import is_meta_line
 
 # Mermaid (dayjs) date format tokens -> strptime directives. SSS maps to %f,
 # which right-pads three digits to microseconds.
@@ -106,6 +107,7 @@ def parse_gantt(text: str) -> Gantt:
     current_section: GanttSection | None = None
     tasks: list[GanttTask] = []
     calendar = _Calendar()
+    in_descr = False
 
     for line in lines[1:]:  # skip "gantt" header
         comment_idx = line.find("%%")
@@ -114,6 +116,12 @@ def parse_gantt(text: str) -> Gantt:
 
         stripped = line.strip()
         if not stripped:
+            continue
+        if in_descr:
+            in_descr = "}" not in stripped
+            continue
+        if is_meta_line(stripped):
+            in_descr = stripped.startswith("accDescr") and stripped[8:].lstrip()[:1] == "{" and "}" not in stripped
             continue
 
         lower = stripped.lower()

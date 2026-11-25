@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from ..model.blockdiagram import Block, BlockDiagram, BlockLink
+from ..utils import is_meta_line
 
 # Shape patterns: (open_delim, close_delim, shape_name)
 # Longest delimiters first to avoid ambiguity
@@ -53,6 +54,7 @@ def _preprocess(text: str) -> list[str]:
     """Strip header, comments, blank lines; return cleaned lines."""
     raw = text.strip().split("\n")
     result: list[str] = []
+    in_descr = False
     for line in raw:
         stripped = line.strip()
         if not stripped:
@@ -63,6 +65,12 @@ def _preprocess(text: str) -> list[str]:
             stripped = stripped[:idx].strip()
             if not stripped:
                 continue
+        if in_descr:
+            in_descr = "}" not in stripped
+            continue
+        if is_meta_line(stripped):
+            in_descr = stripped.startswith("accDescr") and stripped[8:].lstrip()[:1] == "{" and "}" not in stripped
+            continue
         result.append(stripped)
     # Remove header line (block-beta or block)
     if result and re.match(r"^block(-beta)?$", result[0], re.IGNORECASE):

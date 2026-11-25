@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 
 from ..model.timeline import Timeline, TimelineSection, TimelineEvent
+from ..utils import is_meta_line
 
 # Mermaid's lexer starts an event at a colon followed by whitespace, so
 # "10:30" stays one word.
@@ -33,6 +34,7 @@ def parse_timeline(text: str) -> Timeline:
         return tl
 
     current_section: TimelineSection | None = None
+    in_descr = False
 
     for line in lines[1:]:  # skip "timeline" header
         # Strip comments
@@ -42,6 +44,12 @@ def parse_timeline(text: str) -> Timeline:
 
         stripped = line.strip()
         if not stripped:
+            continue
+        if in_descr:
+            in_descr = "}" not in stripped
+            continue
+        if is_meta_line(stripped):
+            in_descr = stripped.startswith("accDescr") and stripped[8:].lstrip()[:1] == "{" and "}" not in stripped
             continue
 
         # Title
