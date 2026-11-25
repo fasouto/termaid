@@ -129,7 +129,8 @@ def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = 
 
     # Draw datasets
     for ds in diagram.datasets:
-        for i, val in enumerate(ds.values):
+        values = _clamped(ds.values, min_val, max_val)
+        for i, val in enumerate(values):
             if i >= n_points:
                 break
             col_x = _MARGIN_L + 1 + i * (col_width + _BAR_GAP)
@@ -155,7 +156,7 @@ def _render_vertical(diagram: XYChart, use_ascii: bool = False, rounded: bool = 
                 canvas.put(row, mid_x, line_ch, merge=False, style="edge")
 
                 if i > 0:
-                    prev_val = ds.values[i - 1]
+                    prev_val = values[i - 1]
                     prev_h = int((prev_val - min_val) / val_range * _CHART_H)
                     prev_row = row_offset + _CHART_H - 1 - max(0, prev_h - 1)
                     prev_x = _MARGIN_L + 1 + (i - 1) * (col_width + _BAR_GAP) + col_width // 2
@@ -264,7 +265,8 @@ def _render_horizontal(diagram: XYChart, use_ascii: bool = False) -> Canvas:
 
     # Draw datasets
     for ds in diagram.datasets:
-        for i, val in enumerate(ds.values):
+        values = _clamped(ds.values, min_val, max_val)
+        for i, val in enumerate(values):
             if i >= n_points:
                 break
             row = row_offset + i * (bar_height + row_gap)
@@ -287,7 +289,7 @@ def _render_horizontal(diagram: XYChart, use_ascii: bool = False) -> Canvas:
             point_x = margin_l + int((val - min_val) / val_range * (chart_w - 1))
             canvas.put(row, point_x, vt, merge=False, style="edge")
             if i > 0:
-                prev_val = ds.values[i - 1]
+                prev_val = values[i - 1]
                 prev_x = margin_l + int((prev_val - min_val) / val_range * (chart_w - 1))
                 prev_row = row_offset + (i - 1) * (bar_height + row_gap)
                 _draw_line_h(canvas, prev_x, prev_row, point_x, row, use_ascii)
@@ -373,6 +375,12 @@ def _draw_line_h(canvas: Canvas, x1: int, y1: int, x2: int, y2: int, use_ascii: 
 
         for r in range(mid_y + 1, y2):
             canvas.put(r, x2, vt, merge=False, style="edge")
+
+
+def _clamped(values: list[float], lo: float, hi: float) -> list[float]:
+    """*values* held to the axis range: a value past it draws at its edge, as in Mermaid."""
+    lo, hi = min(lo, hi), max(lo, hi)
+    return [min(max(value, lo), hi) for value in values]
 
 
 def _format_val(val: float) -> str:
