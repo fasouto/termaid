@@ -1,6 +1,7 @@
 """Tests for block diagram parsing and rendering."""
 from __future__ import annotations
 
+import re
 import time
 
 import pytest
@@ -243,3 +244,18 @@ class TestOversizedGrids:
         with pytest.raises(ValueError, match="too large to draw"):
             render(source)
         assert time.perf_counter() - start < 2
+
+
+class TestLinkLabelsAndPadding:
+    def test_a_label_too_wide_for_the_gap_leaves_both_boxes_whole(self):
+        out = render('block-beta\n  columns 2\n  a["App"] b["Cache"]\n  a -- "cache miss" --> b\n')
+        assert "cache miss" in out
+        assert re.search(r"│\s+App\s+│", out) and re.search(r"│\s+Cache\s+│", out)
+
+    def test_a_label_that_fits_sits_on_the_link(self):
+        out = render('block-beta\n  columns 2\n  a["Application"] b["Cache"]\n  a -- "ok" --> b\n', gap=8)
+        assert re.search(r"Application\s+│─*ok─*►│", out)
+
+    def test_no_padding_still_fits_the_label_in_the_box(self):
+        out = render('block-beta\n  columns 2\n  a["Load balancer"] b["Web"]\n  a --> b\n', padding_x=0)
+        assert "│Load balancer│" in out
