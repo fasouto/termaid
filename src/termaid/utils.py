@@ -9,6 +9,20 @@ from typing import Iterator
 # unclosed one is not rescanned to the end of the source from every later %%{.
 DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
 
+# An opening Markdown fence: three or more backticks or tildes, then an info
+# string. Any indentation is accepted so that diagrams nested in list items
+# are found; the indent is removed from the diagram's lines.
+OPEN_FENCE = re.compile(r"^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+
+
+def dedent_line(line: str, width: int) -> str:
+    """Remove up to ``width`` leading whitespace characters from a line."""
+    n = 0
+    while n < width and n < len(line) and line[n] in " \t":
+        n += 1
+    return line[n:]
+
+
 _BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 

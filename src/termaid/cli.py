@@ -8,7 +8,6 @@ import shutil
 import sys
 from typing import NoReturn
 
-from .diagnostics import Diagnostic
 from .utils import display_width, fit_to_width, max_line_width
 
 
@@ -39,6 +38,7 @@ class _ArgumentParser(argparse.ArgumentParser):
 
     def error(self, message: str) -> NoReturn:
         if self.diagnostics_format == "json":
+            from .diagnostics import Diagnostic
             Diagnostic("invalid_arguments", message, exit_code=2).emit("json")
             self.exit(2)
         super().error(message)
@@ -54,6 +54,8 @@ def _report(
     **details: str | int,
 ) -> int:
     """Print a diagnostic in the format chosen by --diagnostics-format."""
+    from .diagnostics import Diagnostic
+
     diagnostic = Diagnostic(code, message, exit_code=exit_code, severity=severity, details=details)
     return diagnostic.emit(args.diagnostics_format)
 

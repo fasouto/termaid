@@ -11,10 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# An opening fence: three or more backticks or tildes, then an info string.
-# Any indentation is accepted so that diagrams nested in list items are
-# found; the indent is removed from the diagram's lines.
-_OPEN = re.compile(r"^(?P<indent>[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+from .utils import OPEN_FENCE, dedent_line
 
 
 @dataclass
@@ -59,7 +56,7 @@ def split_markdown(text: str) -> list[Segment]:
 
     i = 0
     while i < len(lines):
-        match = _OPEN.match(lines[i])
+        match = OPEN_FENCE.match(lines[i])
         fence = match.group("fence") if match else ""
         # Backtick fences cannot have backticks in their info string.
         if not match or (fence[0] == "`" and "`" in match.group("info")):
@@ -80,7 +77,7 @@ def split_markdown(text: str) -> list[Segment]:
             continue
 
         indent = match.group("indent")
-        body = [_dedent(line, len(indent)).rstrip("\r") for line in lines[i + 1:end]]
+        body = [dedent_line(line, len(indent)).rstrip("\r") for line in lines[i + 1:end]]
         flush()
         segments.append(Segment(
             "\n".join(body),
@@ -93,11 +90,3 @@ def split_markdown(text: str) -> list[Segment]:
 
     flush()
     return segments
-
-
-def _dedent(line: str, width: int) -> str:
-    """Remove up to ``width`` leading whitespace characters from a line."""
-    n = 0
-    while n < width and n < len(line) and line[n] in " \t":
-        n += 1
-    return line[n:]
