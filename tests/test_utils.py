@@ -11,6 +11,7 @@ from termaid import _layout_width, render
 from termaid.utils import (
     _is_zero_width,
     display_width,
+    fit_to_width,
     iter_cells,
     max_line_width,
     truncate_to_width,
@@ -187,6 +188,41 @@ def test_layout_width_never_exceeds_the_drawing(path):
     for text in sources:
         for options in ({}, {"gap": 1, "padding_x": 0, "max_label_width": 8}):
             assert _layout_width(text, **options) <= max_line_width(render(text, **options))
+
+
+class TestFitToWidthLabelStage:
+    """A drawing 10 + 3 columns per label cell wide; spacing alone never fits."""
+
+    @staticmethod
+    def _width(overrides) -> int:
+        return 10 + 3 * overrides.get("max_label_width", 64)
+
+    def _fit(self, target: int, measure_slack: int) -> tuple[int, list[int]]:
+        drawn: list[int] = []
+
+        def render_fake(**overrides):
+            if "max_label_width" in overrides:
+                drawn.append(overrides["max_label_width"])
+            return "x" * self._width(overrides)
+
+        def measure(**overrides):
+            return self._width(overrides) - measure_slack
+
+        result = fit_to_width(render_fake, render_fake(), target, measure=measure)
+        return len(result), drawn
+
+    def test_an_exact_measure_draws_one_label_width(self):
+        assert self._fit(100, measure_slack=0) == (100, [30])
+
+    def test_a_low_measure_steps_down_to_the_widest_width_that_fits(self):
+        assert self._fit(100, measure_slack=5) == (100, [31, 30])
+
+    def test_a_far_too_low_measure_falls_back_to_searching_on_drawings(self):
+        width, drawn = self._fit(40, measure_slack=12)
+        assert (width, drawn[:3], len(drawn) <= 8) == (40, [14, 13, 1], True)
+
+    def test_when_nothing_fits_the_narrowest_drawing_comes_back(self):
+        assert self._fit(5, measure_slack=0) == (13, [1])
 
 
 class TestClusterBoundaries:

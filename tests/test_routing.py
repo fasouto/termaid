@@ -78,6 +78,19 @@ class TestPathfinder:
         # Searching to max_iterations checked about 6,000 cells.
         assert len(calls) < 2000
 
+    def test_open_goal_far_away_is_not_checked_for_a_wall_across_the_grid(self):
+        calls: list = []
+
+        def is_free(c, r):
+            calls.append((c, r))
+            return True
+
+        path = find_path(0, 0, 150, 0, is_free)
+        assert path is not None and path[-1] == (150, 0)
+        # Walking back from the goal until it meets the search checked
+        # about 5,000 cells; the search itself checks about 250.
+        assert len(calls) < 1500
+
     def test_goal_behind_crossings_is_still_found_after_a_long_search(self):
         path = find_path(0, 0, 10, 10, self._walled_grid([]), crossings=self._ring(True))
         assert path is not None and path[-1] == (10, 10)
@@ -311,6 +324,76 @@ class TestUnrelatedEdgesStayApart:
             "B": {"D", "E"},
             "C": {"E"},
         }
+
+
+class TestLongSearches:
+    # A search that runs out of steps used to fall back to one corner
+    # straight through other boxes, here ch -> Read0.
+    CROWDED_STATES = """stateDiagram-v2
+  [*] --> Read0
+  state Comp99 {
+    ConfigX1 --> RefreshX2
+    state NestedComp99 {
+      deep1 --> deep2
+    }
+    RefreshX2 --> NestedComp99
+    RefreshX2 --> [*]
+  }
+  Write4 --> Parse6 : write build test timeout refresh
+  Read0 --> Ship1
+  Ship1 --> Import2
+  Ship1 --> Sync3 : next
+  Parse6 --> Write7
+  Parse6 --> Comp99
+  Read0 --> fk
+  fk --> Pa
+  Pb --> jn
+  jn --> Sync3
+  Write7 --> ch
+  ch --> Read0 : a
+  ch --> Parse6 : b
+"""
+
+    def test_no_edge_runs_through_a_box(self):
+        from termaid import _parse_graph, _source_text
+        from termaid.routing.router import _path_axes, layout_and_route
+
+        layout, routed = layout_and_route(_parse_graph(_source_text(self.CROWDED_STATES, False)[1]), 4, 2, 4, None)
+        through = set()
+        for re in routed:
+            ends = {re.grid_path[0], re.grid_path[-1]}
+            if any(not layout.is_free(*cell) for cell in _path_axes(re.grid_path).keys() - ends):
+                through.add(f"{re.edge.source}->{re.edge.target}")
+        assert through == set()
+
+
+class TestCrowdedGapPasses:
+    """A crowded gap is grown and the graph routed again, but only while a
+    routing pass is cheap."""
+
+    @staticmethod
+    def _passes(source: str, monkeypatch) -> int:
+        import termaid.routing.router as router
+        from termaid import render
+
+        passes = []
+        route = router.route_edges
+        monkeypatch.setattr(router, "route_edges", lambda *a, **k: passes.append(1) or route(*a, **k))
+        render(source)
+        return len(passes)
+
+    def test_small_graph_is_routed_again_with_a_wider_gap(self, monkeypatch):
+        from tests.conftest import FLOWCHARTS_DIR
+
+        source = (FLOWCHARTS_DIR / "unrelated_edges_gap.mmd").read_text(encoding="utf-8")
+        assert self._passes(source, monkeypatch) == 2
+
+    def test_large_graph_is_routed_once(self, monkeypatch):
+        from tests.conftest import FLOWCHARTS_DIR
+
+        source = (FLOWCHARTS_DIR / "unrelated_edges_gap.mmd").read_text(encoding="utf-8")
+        source += "".join(f"    X{i} --> Y{i}\n" for i in range(20))
+        assert self._passes(source, monkeypatch) == 1
 
 
 class TestSubgraphEdgeRouting:

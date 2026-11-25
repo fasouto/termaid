@@ -101,7 +101,7 @@ def find_path(
     while open_set and iterations < max_iterations:
         iterations += 1
         if iterations == _WALL_CHECK and _walled_in(
-            (start_col, start_row), (end_col, end_row), is_free, cross, best_g, max_iterations,
+            (start_col, start_row), (end_col, end_row), is_free, cross, best_g,
         ):
             return None
         current = heappop(open_set)
@@ -175,6 +175,10 @@ def find_path(
 # The grid has no far edge, so a search for a walled-in end runs all of
 # max_iterations. One still going after this many steps checks for a wall.
 _WALL_CHECK = 100
+# Pockets between boxes and crossing lines hold a handful of states. A walk
+# that has not closed by this many is taken as open, so an end that is in
+# fact reachable costs little to check.
+_POCKET_LIMIT = 100
 
 
 def _walled_in(
@@ -183,14 +187,13 @@ def _walled_in(
     is_free: Callable[[int, int], bool],
     cross: dict[tuple[int, int], bool],
     reached: dict[tuple[int, ...], float],
-    limit: int,
 ) -> bool:
     """True when no path can reach *end*, so the search would fail anyway.
 
     Walks backward from *end* over the moves the search makes, in its
     states: a cell, or a crossing cell with the heading it was entered on.
     False as soon as the walk meets *start* or a state the search has
-    *reached*, or when it passes *limit* states without closing.
+    *reached*, or when it passes ``_POCKET_LIMIT`` states without closing.
     """
     if end in cross:
         todo: list[tuple[int, ...]] = [end + d for d in DIRS]
@@ -214,7 +217,7 @@ def _walled_in(
             if prev in reached:
                 return False
             if prev not in seen:
-                if len(seen) >= limit:
+                if len(seen) >= _POCKET_LIMIT:
                     return False
                 seen.add(prev)
                 queue.append(prev)
