@@ -222,3 +222,29 @@ class TestCircleAndCrossEnds:
 
     def test_a_longer_cross_link_is_longer(self):
         assert parse("A ---x B").edges[0].min_length == parse("A ---> B").edges[0].min_length == 2
+
+
+class TestMarkdownStrings:
+    def test_underscores_mark_italic_and_bold(self):
+        graph = parse('A["`This **is** _Markdown_ and __bold__`"]')
+        node = graph.nodes["A"]
+        assert node.label == "This is Markdown and bold"
+        styled = {(s.text, s.bold, s.italic) for s in node.label_segments}
+        assert {("Markdown", False, True), ("bold", True, False)} <= styled
+
+    def test_an_underscore_inside_a_word_is_text(self):
+        assert parse('A["`snake_case_name`"]').nodes["A"].label == "snake_case_name"
+
+    @pytest.mark.parametrize("line", ['A -->|"`**yes**`"| B', 'A -- "`**yes**` " --> B'])
+    def test_an_edge_label_drops_the_markdown_marks(self, line):
+        assert edges(line) == [("A", "B", "yes")]
+
+    def test_a_subgraph_title_drops_the_markdown_marks(self):
+        graph = parse('subgraph s1 ["`**Bold** title`"]\n  a --> b\nend')
+        assert graph.subgraphs[0].label == "Bold title"
+
+    def test_drawn_without_the_marks(self):
+        out = render('graph LR\n  A["`This **is** _Markdown_`"] -->|"`**yes**`"| B')
+        assert "This is Markdown" in out
+        assert "yes" in out
+        assert not set("`*_") & set(out)
