@@ -6,6 +6,7 @@ Run with --update-snapshots to regenerate all expected outputs.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -40,6 +41,9 @@ class TestAllDiagramSnapshots:
         output = render(source)
 
         expected_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not update_snapshots and not expected_path.exists() and os.environ.get("CI"):
+            pytest.fail(f"No snapshot for {name}. Run the tests locally and commit the file.")
 
         if update_snapshots or not expected_path.exists():
             expected_path.write_text(output + "\n", encoding="utf-8")
