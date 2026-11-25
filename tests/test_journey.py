@@ -52,3 +52,20 @@ class TestJourneyRendering:
         assert "Ship" in output
         assert "Write tests" in output
         assert "Deploy" in output
+
+
+def test_meta_lines_and_br_tags_are_not_drawn():
+    out = render(
+        "journey\n"
+        "    title My<br/>day\n"
+        "    accTitle: Checkout\n"
+        "    accDescr: How people pay\n"
+        "    accDescr {\n"
+        "      Several lines\n"
+        "    }\n"
+        "    section Pay<br>now\n"
+        "      Enter<br/>card: 2: Shopper\n"
+    )
+    assert "Checkout" not in out and "people pay" not in out and "Several" not in out
+    assert "<br" not in out
+    assert "Enter card" in out and "Pay now" in out and "My day" in out
