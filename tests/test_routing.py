@@ -321,6 +321,24 @@ class TestFanIn:
             assert edge_targets(out.split("\n"), source, names) == {"T"}
 
 
+class TestFanOutKeepsEachEdgeLook:
+    """A fan-out shares its trunk only between edges that look alike at the
+    source, so a dotted or two-way edge never borrows another's line."""
+
+    def test_a_dotted_edge_stays_dotted_beside_a_solid_one(self):
+        from termaid import render
+
+        out = render("graph TD\n  A -.-> B\n  A --> C")
+        assert "┆" in out
+
+    def test_a_two_way_edge_does_not_put_its_arrowhead_on_a_one_way_trunk(self):
+        from termaid import render
+
+        lines = render("graph TD\n  A --> B\n  A <--> C").split("\n")
+        b_col = lines[2].index("A")
+        assert lines[5][b_col] != "▲"
+
+
 class TestUnrelatedEdgesStayApart:
     """Edges with no common endpoint may cross but never share a run or a T
     junction, so each line leads only to its own targets."""
