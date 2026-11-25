@@ -22,6 +22,18 @@ def _get_version() -> str:
         return __version__
 
 
+class _VersionAction(argparse._VersionAction):
+    """``--version`` that looks the version up only when asked.
+
+    importlib.metadata takes longer to import than the rest of the Claude
+    hook's start-up, which runs for every batch of every reply.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        self.version = f"%(prog)s {_get_version()}"
+        super().__call__(parser, namespace, values, option_string)
+
+
 class _ArgumentParser(argparse.ArgumentParser):
     diagnostics_format = "text"
 
@@ -314,11 +326,7 @@ def main(argv: list[str] | None = None) -> int:
         metavar="TYPE",
         help="Render sample diagrams. Use 'all' or a type name (flowchart, sequence, etc.).",
     )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {_get_version()}",
-    )
+    parser.add_argument("--version", action=_VersionAction)
 
     args = parser.parse_args(argv)
     styled = args.output_format == "styled-json"

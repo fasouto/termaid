@@ -4,12 +4,10 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, NamedTuple
 
-from .graph.model import Graph
-from .parser.flowchart import parse_flowchart
-from .parser.statediagram import parse_state_diagram
 from .utils import DIRECTIVE
 
 if TYPE_CHECKING:
+    from .graph.model import Graph
     from .output.styled import StyledDocument
     from .renderer.canvas import Canvas
 
@@ -139,9 +137,12 @@ def parse(source: str, *, partial: bool = False) -> Graph:
         source = complete_partial(source)
     text = _typed(_skip_directives(_prepare_source(source)), arriving=arriving)
     if text is None:
+        from .graph.model import Graph
         return Graph()
     if text.startswith("stateDiagram"):
+        from .parser.statediagram import parse_state_diagram
         return parse_state_diagram(text)
+    from .parser.flowchart import parse_flowchart
     return parse_flowchart(text)
 
 
@@ -165,7 +166,9 @@ def _parse_graph(text: str) -> Graph:
         from .parser.architecture import parse_architecture
         return parse_architecture(text)
     if text.startswith("stateDiagram"):
+        from .parser.statediagram import parse_state_diagram
         return parse_state_diagram(text)
+    from .parser.flowchart import parse_flowchart
     return parse_flowchart(text)
 
 
@@ -493,9 +496,18 @@ def render_styled(
     ).canvas)
 
 
-# Lazy import for MermaidWidget
+# Imported on first use, so that the Claude hook starts fast when a reply has no diagram.
 def __getattr__(name: str):
     if name == "MermaidWidget":
         from .output.widget import _get_widget_class
         return _get_widget_class()
+    if name == "Graph":
+        from .graph.model import Graph
+        return Graph
+    if name == "parse_flowchart":
+        from .parser.flowchart import parse_flowchart
+        return parse_flowchart
+    if name == "parse_state_diagram":
+        from .parser.statediagram import parse_state_diagram
+        return parse_state_diagram
     raise AttributeError(f"module 'termaid' has no attribute {name!r}")
