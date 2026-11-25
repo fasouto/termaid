@@ -6,6 +6,8 @@
 - Class and ER diagrams have a new layout. Boxes are placed in rows by their longest chain of links, so every link runs down to a later row, as in Mermaid. Diagrams that drew a chain as boxes side by side joined by a level line now stack it, and come out taller and narrower
 - Class: a note is a box of its own, joined to its class by a dashed line
 
+- Flowchart and state: a node is placed after the longest path that leads to it, as in Mermaid, where it was placed after the shortest. With `Validate --> Process --> Save --> Done` and `Validate --> Done`, Done sits below Save and no edge points backwards. Some drawings change shape: a few LR flowcharts with back links become one row, and composite states run top to bottom. Very dense graphs keep the old placement
+
 ### Fixes
 - State: `direction` inside a composite state sets the direction of that state. It changed the whole diagram, and the composite kept the old one
 - State: a description, `s1 : Waiting for payment`, is the state's label. It was dropped, and a diagram made only of descriptions drew nothing
@@ -44,6 +46,13 @@
 - Mindmap: Markdown strings lose their marks and may span lines
 - Journey, mindmap, kanban, pie, quadrant and packet: `accTitle`, `accDescr` and `click` lines are no longer drawn as content, and `<br/>` in their labels is a break or a space
 - CLI: `termaid -` reads stdin; `--markdown` with `--json` or `--tui`, and an unknown `--demo` type, exit 2 like other argument errors; the `--strict-width` message for Markdown names the line that is too wide
+- Flowchart: a node outside a subgraph is no longer drawn inside the subgraph's box when its links leave the subgraph and come back
+- Flowchart: a chain inside a subgraph that an edge points into is no longer laid sideways, and a node after a subgraph sits below it
+- Flowchart: edges out of one node that look different leave from their own points. A dotted edge sharing a line with a solid one was drawn solid, and a two-way edge put its arrowhead on a line shared with one-way edges
+- Flowchart: a long label on an edge no longer cuts the return edge beside it. It sits across its own line, and the return edge moves aside when the label is wider still
+- Flowchart: a return edge inside a sideways subgraph keeps its line and arrowhead
+- Flowchart: at narrow widths an edge turning into its target keeps both its corner and its arrowhead
+- Flowchart: `direction RL` and `direction BT` in a subgraph are honoured, and `~~~` invisible links leave no stubs on the boxes
 - Mindmap: a node written with an id and a shape, such as `root((Project))` or `id[Text]`, shows only its text. The id and brackets were drawn, and `((Text))` kept one pair of brackets. `::icon(...)` and `:::class` lines are no longer drawn as nodes
 
 ## 0.14.1 (2026-11-25)
