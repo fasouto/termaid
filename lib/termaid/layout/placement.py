@@ -230,6 +230,9 @@ def compute_sizes(
 
         content_width = text_width + padding_x  # padding on each side
         content_height = text_height + padding_y  # padding top/bottom
+        if node.shape == NodeShape.CYLINDER:
+            # The lid's rim takes the first row inside the box.
+            content_height = max(content_height, text_height + 1)
 
         # Ensure minimum sizes
         content_width = max(content_width, 3)

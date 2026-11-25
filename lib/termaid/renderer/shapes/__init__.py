@@ -280,7 +280,8 @@ def draw_cylinder(
         canvas.put(y + height - 1, c, cs.horizontal, style=style)
     canvas.put(y + height - 1, x + width - 1, cs.round_bottom_right, style=style)
 
-    _draw_label(canvas, x, y, width, height, label, style=style)
+    # The label is centred below the rim, which counts as the top border.
+    _draw_label(canvas, x, y + 1, width, height - 1, label, style=style)
 
 
 def draw_trapezoid(

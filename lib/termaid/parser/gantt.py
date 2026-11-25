@@ -28,7 +28,7 @@ from ..model.gantt import Duration, Gantt, GanttSection, GanttTask, TickInterval
 # which right-pads three digits to microseconds.
 _FORMAT_TOKENS = {
     "YYYY": "%Y", "YY": "%y",
-    "MM": "%m", "M": "%m",
+    "MMMM": "%B", "MMM": "%b", "MM": "%m", "M": "%m",
     "DD": "%d", "D": "%d",
     "HH": "%H", "H": "%H", "hh": "%I", "h": "%I",
     "mm": "%M", "m": "%M",
@@ -218,12 +218,16 @@ def _parse_date(text: str, date_format: str) -> datetime | None:
             value = float(text)
         except ValueError:
             return None
-        return _EPOCH + (timedelta(milliseconds=value) if fmt == "x" else timedelta(seconds=value))
+        try:
+            return _EPOCH + (timedelta(milliseconds=value) if fmt == "x" else timedelta(seconds=value))
+        except (OverflowError, ValueError):  # past year 9999, or nan
+            return None
     # Try the declared dateFormat first (Mermaid/dayjs tokens)
     if fmt:
         try:
             return datetime.strptime(text, _FORMAT_TOKEN_RE.sub(lambda m: _FORMAT_TOKENS[m.group(0)], fmt))
-        except ValueError:
+        except (ValueError, re.error):
+            # re.error: a format naming one field twice, such as MM/DD/MM.
             pass
     # Try ISO format
     m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})$', text)

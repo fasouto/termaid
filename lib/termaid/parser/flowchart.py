@@ -68,24 +68,49 @@ _SHAPE_PATTERNS: list[tuple[str, str, NodeShape]] = [
 _AT_SHAPE_MAP: dict[str, NodeShape] = {
     "rect": NodeShape.RECTANGLE,
     "rectangle": NodeShape.RECTANGLE,
+    "proc": NodeShape.RECTANGLE,
+    "process": NodeShape.RECTANGLE,
     "rounded": NodeShape.ROUNDED,
+    "event": NodeShape.ROUNDED,
     "circle": NodeShape.CIRCLE,
     "circ": NodeShape.CIRCLE,
     "diam": NodeShape.DIAMOND,
     "diamond": NodeShape.DIAMOND,
+    "decision": NodeShape.DIAMOND,
+    "question": NodeShape.DIAMOND,
     "hex": NodeShape.HEXAGON,
     "hexagon": NodeShape.HEXAGON,
+    "prepare": NodeShape.HEXAGON,
     "stadium": NodeShape.STADIUM,
     "terminal": NodeShape.STADIUM,
+    "pill": NodeShape.STADIUM,
     "cyl": NodeShape.CYLINDER,
     "cylinder": NodeShape.CYLINDER,
     "db": NodeShape.CYLINDER,
+    "database": NodeShape.CYLINDER,
     "subroutine": NodeShape.SUBROUTINE,
+    "fr-rect": NodeShape.SUBROUTINE,
+    "framed-rectangle": NodeShape.SUBROUTINE,
+    "subproc": NodeShape.SUBROUTINE,
+    "subprocess": NodeShape.SUBROUTINE,
     "lean-r": NodeShape.PARALLELOGRAM,
+    "lean-right": NodeShape.PARALLELOGRAM,
+    "in-out": NodeShape.PARALLELOGRAM,
     "lean-l": NodeShape.PARALLELOGRAM_ALT,
-    "trap-t": NodeShape.TRAPEZOID,
-    "trap-b": NodeShape.TRAPEZOID_ALT,
+    "lean-left": NodeShape.PARALLELOGRAM_ALT,
+    "out-in": NodeShape.PARALLELOGRAM_ALT,
+    # trap-b is A[/text\], wide at the bottom; trap-t is A[\text/].
+    "trap-b": NodeShape.TRAPEZOID,
+    "trapezoid": NodeShape.TRAPEZOID,
+    "trapezoid-bottom": NodeShape.TRAPEZOID,
+    "priority": NodeShape.TRAPEZOID,
+    "trap-t": NodeShape.TRAPEZOID_ALT,
+    "trapezoid-top": NodeShape.TRAPEZOID_ALT,
+    "inv-trapezoid": NodeShape.TRAPEZOID_ALT,
+    "manual": NodeShape.TRAPEZOID_ALT,
     "dbl-circ": NodeShape.DOUBLE_CIRCLE,
+    "double-circle": NodeShape.DOUBLE_CIRCLE,
+    "odd": NodeShape.ASYMMETRIC,
 }
 
 
@@ -152,8 +177,8 @@ def parse_flowchart(text: str) -> Graph:
 
 
 def _strip_comments(line: str) -> str:
-    """Remove %% comments from a line, leaving %% inside quoted labels."""
-    idx = _mask_quotes(line).find("%%")
+    """Remove %% comments from a line, leaving %% inside labels."""
+    idx = _mask_labels(line).find("%%")
     if idx >= 0:
         return line[:idx]
     return line
@@ -222,6 +247,33 @@ def _mask_quotes(text: str) -> str:
     return "".join(result)
 
 
+_LABEL_CLOSERS = {"[": "]", "(": ")", "{": "}"}
+
+
+def _mask_labels(text: str) -> str:
+    """Like _mask_quotes, and also blank out the unquoted label of a node.
+
+    A node label is the inside of a [...], (...) or {...} that follows an id,
+    up to the bracket that closes it. A label with no closing bracket is left
+    as it is.
+    """
+    result = list(_mask_quotes(text))
+    opener = ""
+    start = depth = 0
+    for i, ch in enumerate(result):
+        if not opener:
+            if ch in _LABEL_CLOSERS and i > 0 and (result[i - 1].isalnum() or result[i - 1] == "_"):
+                opener, start, depth = ch, i, 1
+        elif ch == opener:
+            depth += 1
+        elif ch == _LABEL_CLOSERS[opener]:
+            depth -= 1
+            if depth == 0:
+                result[start + 1:i] = " " * (i - start - 1)
+                opener = ""
+    return "".join(result)
+
+
 _ENTITY_CODE = re.compile(r"#([A-Za-z0-9]+);")
 
 
@@ -253,22 +305,35 @@ def _strip_quotes(text: str) -> str:
     return text
 
 
+def _opens_node_data(line: str) -> bool:
+    """Whether the line ends inside an unclosed @{ ... }."""
+    masked = _mask_quotes(line)
+    at = masked.rfind("@{")
+    return at >= 0 and masked.find("}", at) < 0
+
+
 def _split_on_semicolons(line: str) -> list[str]:
-    """Split a line into statements at semicolons outside double quotes."""
+    """Split a line into statements at semicolons outside quotes and node labels.
+
+    The ; that ends an entity code such as #quot; or #9829; belongs to the text,
+    except in a style statement, where fill:#333; is a colour and a separator.
+    """
+    entity_ends = {
+        m.end() - 1 for m in _ENTITY_CODE.finditer(line)
+        if m.group(1).isdigit() or f"{m.group(1)};" in html.entities.html5
+    }
     parts: list[str] = []
-    buf: list[str] = []
-    in_quote = False
-    for ch in line:
-        if ch == '"':
-            in_quote = not in_quote
-            buf.append(ch)
-        elif ch == ";" and not in_quote:
-            parts.append("".join(buf))
-            buf = []
-        else:
-            buf.append(ch)
-    parts.append("".join(buf))
+    start = 0
+    for i, ch in enumerate(_mask_labels(line)):
+        if ch == ";" and (i not in entity_ends or _is_style_statement(line[start:i])):
+            parts.append(line[start:i])
+            start = i + 1
+    parts.append(line[start:])
     return parts
+
+
+def _is_style_statement(statement: str) -> bool:
+    return statement.lstrip().lower().startswith(("style ", "classdef ", "linkstyle "))
 
 
 class _FlowchartParser:
@@ -277,6 +342,8 @@ class _FlowchartParser:
         self.graph = Graph()
         self._subgraph_stack: list[Subgraph] = []
         self._shaped_node_ids: set[str] = set()  # nodes with explicit shapes
+        self._edge_ids: set[str] = set()
+        self._in_acc_descr = False
 
     def parse(self) -> Graph:
         lines = self._preprocess(self.text)
@@ -307,10 +374,19 @@ class _FlowchartParser:
             raw_lines.extend(_split_on_semicolons(line))
 
         result: list[str] = []
+        node_data_open = False
         for line in raw_lines:
             stripped = _strip_comments(line).strip()
-            if stripped:
+            if not stripped:
+                continue
+            if node_data_open and re.match(r"[\w-]+\s*:(?!:)|\}", stripped):
+                # The @{ ... } data of a node can span lines, one key on each.
+                result[-1] += ", " + stripped
+                closed = "}" in _mask_quotes(stripped)
+            else:
                 result.append(stripped)
+                closed = True
+            node_data_open = not closed or _opens_node_data(stripped)
         return result
 
     def _parse_header(self, line: str) -> None:
@@ -332,6 +408,16 @@ class _FlowchartParser:
     def _parse_line(self, line: str) -> None:
         """Parse a single body line."""
         lower = line.lower().strip()
+
+        # Accessibility title and description, not drawn
+        if self._in_acc_descr:
+            self._in_acc_descr = "}" not in line
+            return
+        if re.match(r"acc(title|descr)\s*:", lower):
+            return
+        if re.match(r"accdescr\s*\{", lower):
+            self._in_acc_descr = "}" not in line
+            return
 
         # Subgraph start
         if lower.startswith("subgraph"):
@@ -427,23 +513,23 @@ class _FlowchartParser:
         parts = line.split(None, 2)
         if len(parts) < 3:
             return
-        name = parts[1]
         props_str = parts[2]
         props: dict[str, str] = {}
         for prop in props_str.split(","):
             if ":" in prop:
                 k, v = prop.split(":", 1)
                 props[k.strip()] = v.strip()
-        self.graph.class_defs[name] = props
+        for name in filter(None, parts[1].split(",")):
+            self.graph.class_defs[name] = dict(props)
 
     def _parse_class_assignment(self, line: str) -> None:
         """Parse 'class nodeId className'."""
         parts = line.split()
         if len(parts) >= 3:
-            node_id = parts[1]
             class_name = parts[2]
-            if node_id in self.graph.nodes:
-                self.graph.nodes[node_id].style_class = class_name
+            for node_id in parts[1].split(","):
+                if node_id in self.graph.nodes:
+                    self.graph.nodes[node_id].style_class = class_name
 
     def _parse_style(self, line: str) -> None:
         """Parse 'style nodeId prop1:val1,prop2:val2'."""
@@ -502,7 +588,10 @@ class _FlowchartParser:
                 continue
 
             # Parse node group (handles &)
-            node_group = self._split_ampersand(seg.text)
+            text = seg.text
+            if i + 1 < len(segments):
+                text = self._strip_edge_id(text)
+            node_group = self._split_ampersand(text)
             current_nodes: list[str] = []
             for node_text in node_group:
                 node = self._parse_node(node_text.strip())
@@ -531,6 +620,14 @@ class _FlowchartParser:
 
             prev_nodes = current_nodes
             i += 1
+
+    def _strip_edge_id(self, text: str) -> str:
+        """Drop the id of the edge that follows: the e1@ in 'A e1@--> B'."""
+        parts = text.rsplit(None, 1)
+        if len(parts) == 2 and len(parts[1]) > 1 and parts[1].endswith("@") and '"' not in parts[1]:
+            self._edge_ids.add(parts[1][:-1])
+            return parts[0]
+        return text
 
     def _register_in_subgraph(self, node_id: str) -> None:
         """Register a node in the current subgraph if inside one."""
@@ -622,8 +719,8 @@ class _FlowchartParser:
         remaining = line.strip()
 
         while remaining:
-            # Mask quoted strings so arrows inside "..." aren't matched
-            masked = _mask_quotes(remaining)
+            # Mask quoted strings and node labels so arrows inside them aren't matched
+            masked = _mask_labels(remaining)
 
             # Try to find the earliest arrow match
             best_match: tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None = None
@@ -690,30 +787,46 @@ class _FlowchartParser:
     def _find_labeled_arrow(self, text: str) -> tuple[int, int, EdgeStyle, bool, bool, str, int, ArrowType, ArrowType] | None:
         """Find arrows with labels: -->|text| or -- text --> or == text ==>.
         Returns (start, end, style, arr_start, arr_end, label, min_length, type_start, type_end)."""
-        # Pattern: -->|text|
-        m = re.search(r'(<|[-=])([-=.]+)(>?)(\|)([^|]*)(\|)', text)
-        if m:
+        # Pattern: -- text -->, <-- text -->, -- text ---, -- text --o,
+        # == text ==>, -. text .-> and their longer forms. As in Mermaid, the
+        # text can't hold the pair that opens its link (`--`, `==`, `-.`), so
+        # it ends where the closing part starts.
+        patterns = [
+            r'(?<!-)--(?![->xo])((?:[^-]|-(?!-))+)(-{2,}(?:[->]|[xo](?=\s|$)))',
+            r'(?<!=)==(?![=>xo])((?:[^=]|=(?!=))+)(={2,}(?:[=>]|[xo](?=\s|$)))',
+            r'(?<!-)-\.(?![-.])((?:[^.-]|-(?!\.)|\.+(?![.-]))+)(-?\.+-(?:>|[xo](?=\s|$))?)',
+        ]
+        text_link = None
+        for pat in patterns:
+            found = re.search(pat, text)
+            if found and (text_link is None or found.start() < text_link.start()):
+                text_link = found
+        text_start = 0
+        if text_link:
+            text_start = text_link.start()
+            # A `<`, or an `o` or `x` after a space, right before the opening
+            # pair is the head at the link's start: `<-- text -->`, `o-- text --o`.
+            before = text[text_start - 1:text_start]
+            if before == "<" or (before in ("o", "x") and text[text_start - 2:text_start - 1].isspace()):
+                text_start -= 1
+
+        # Pattern: -->|text|, --> |text|, --o|text|, o--o|text|
+        m = re.search(r'(<|(?<=\s)[xo]|(?<![-=.])[-=])([-=.]+)([>xo]?)\s*(\|)([^|]*)(\|)', text)
+        if m and not (text_link and text_start < m.start()):
             label = m.group(5).strip()
-            # Parse the arrow part (everything before the first |)
-            arrow_part = text[m.start():m.start() + m.group(0).index("|")]
+            arrow_part = m.group(1) + m.group(2) + m.group(3)
             style, arr_start, arr_end, type_start, type_end = self._classify_arrow(arrow_part)
             length = _compute_arrow_length(arrow_part, style)
             return (m.start(), m.end(), style, arr_start, arr_end, label, length, type_start, type_end)
 
-        # Pattern: -- text --> or == text ==> or -. text .->
-        patterns = [
-            (r'(--)(\s+.+?\s+)(-->)', EdgeStyle.SOLID, False, True),
-            (r'(==)(\s+.+?\s+)(==>)', EdgeStyle.THICK, False, True),
-            (r'(-\.)(\s+.+?\s+)(\.+->)', EdgeStyle.DOTTED, False, True),
-        ]
-        for pat, style, arr_start, arr_end in patterns:
-            m = re.search(pat, text)
-            if m:
-                label_text = m.group(2).strip()
-                # Only the trailing arrow carries the length: `-- text -->` is a
-                # normal link, `-- text --->` is one step longer.
-                length = _compute_arrow_length(m.group(3), style)
-                return (m.start(), m.end(), style, arr_start, arr_end, label_text, length, ArrowType.ARROW, ArrowType.ARROW)
+        m = text_link
+        if m:
+            label_text = m.group(1).strip()
+            style, arr_start, arr_end, type_start, type_end = self._classify_arrow(text[text_start:m.start(1)] + m.group(2))
+            # Only the trailing arrow carries the length: `-- text -->` is a
+            # normal link, `-- text --->` is one step longer.
+            length = _compute_arrow_length(m.group(2), style)
+            return (text_start, m.end(), style, arr_start, arr_end, label_text, length, type_start, type_end)
 
         return None
 
@@ -725,15 +838,15 @@ class _FlowchartParser:
             (r'<-\.+->',  EdgeStyle.DOTTED, True, True, ArrowType.ARROW, ArrowType.ARROW),
             (r'<=+=>',     EdgeStyle.THICK, True, True, ArrowType.ARROW, ArrowType.ARROW),
             (r'<-+->',     EdgeStyle.SOLID, True, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'o-+o',      EdgeStyle.SOLID, True, True, ArrowType.CIRCLE, ArrowType.CIRCLE),
-            (r'x-+x',      EdgeStyle.SOLID, True, True, ArrowType.CROSS, ArrowType.CROSS),
+            (r'o--+o',     EdgeStyle.SOLID, True, True, ArrowType.CIRCLE, ArrowType.CIRCLE),
+            (r'x--+x',     EdgeStyle.SOLID, True, True, ArrowType.CROSS, ArrowType.CROSS),
             (r'-\.+->',    EdgeStyle.DOTTED, False, True, ArrowType.ARROW, ArrowType.ARROW),
             (r'=+=>',      EdgeStyle.THICK, False, True, ArrowType.ARROW, ArrowType.ARROW),
             (r'-+->',      EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.ARROW),
-            (r'-+o(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CIRCLE),
-            (r'-+x(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CROSS),
+            (r'--+o(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CIRCLE),
+            (r'--+x(?=\s|$)', EdgeStyle.SOLID, False, True, ArrowType.ARROW, ArrowType.CROSS),
             (r'~~~',       EdgeStyle.INVISIBLE, False, False, ArrowType.ARROW, ArrowType.ARROW),
-            (r'-\.-',      EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
+            (r'-\.+-',     EdgeStyle.DOTTED, False, False, ArrowType.ARROW, ArrowType.ARROW),
             (r'={3,}',     EdgeStyle.THICK, False, False, ArrowType.ARROW, ArrowType.ARROW),
             (r'-{3,}',     EdgeStyle.SOLID, False, False, ArrowType.ARROW, ArrowType.ARROW),
         ]
@@ -784,15 +897,18 @@ class _FlowchartParser:
 
         # Handle :::className suffix
         style_class: str | None = None
-        class_idx = _mask_quotes(text).rfind(":::")
+        class_idx = _mask_labels(text).rfind(":::")
         if class_idx >= 0:
             style_class = text[class_idx + 3:].strip()
             text = text[:class_idx].strip()
 
         # Try @{...} syntax: ID@{ shape: diamond, label: "text" }
-        at_match = re.match(r'^([a-zA-Z_]\w*)\s*@\{(.+)\}$', text, re.DOTALL)
+        at_match = re.match(r'^([^\s@\[\](){}<>]+)\s*@\{(.+)\}$', text, re.DOTALL)
         if at_match:
             node_id = at_match.group(1)
+            if node_id in self._edge_ids:
+                # e1@{ animate: true } sets an edge's animation, which isn't drawn.
+                return None
             body = at_match.group(2)
             props = _parse_at_shape_props(body)
             shape_name = props.get("shape", "rect")

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from .renderer.canvas import Canvas
 
 
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 _LEADING_DIRECTIVES_RE = re.compile(rf"(?:{DIRECTIVE}|%%[^\n]*|\s+)*")
@@ -57,6 +57,17 @@ _EDGE_RE = re.compile(r"-->|---|==>|===|-\.-|--[ox]|~~~")
 _HEADERLESS = "flowchart TD\n"
 
 
+def _names_drawn_type(word: str) -> bool:
+    """Whether *word*, the first word of a source, is a diagram keyword.
+
+    The whole word counts, up to a ``-`` suffix or a closing colon
+    (``stateDiagram-v2``, ``flowchart-elk``, ``gitGraph:``), so an id that
+    only starts like a keyword (``graphql``, ``pieces``) is not one.
+    """
+    keyword = word.rstrip(":;").split("-", 1)[0]
+    return keyword.lower() in ("graph", "flowchart") or keyword in _DRAWN_TYPES
+
+
 def _type_problem(text: str) -> str | None:
     """Why the first line of *text* names no diagram termaid draws, or None.
 
@@ -68,7 +79,7 @@ def _type_problem(text: str) -> str | None:
         return None
     word = first.split()[0]
     lower = word.lower()
-    if lower.startswith(("graph", "flowchart")) or text.startswith(_DRAWN_TYPES):
+    if _names_drawn_type(word):
         return None
     for prefix, name in _NOT_DRAWN_TYPES:
         if lower.startswith(prefix):
@@ -99,7 +110,7 @@ def _typed(text: str, *, arriving: bool = False) -> str | None:
     if _type_problem(text) is not None:
         return text if arriving else None
     first = text.split("\n", 1)[0]
-    if first.strip() and not text.startswith(_DRAWN_TYPES) and not first.split()[0].lower().startswith(("graph", "flowchart")):
+    if first.strip() and not _names_drawn_type(first.split()[0]):
         return _HEADERLESS + text
     return text
 
@@ -431,6 +442,11 @@ def render_rich(
         arrow_style=arrow_style,
         partial=partial,
     )
+    if rendered.canvas is None:
+        # Nothing was drawn (an unknown diagram type): empty, as render() is.
+        from rich.text import Text
+
+        return Text("")
     if rendered.graph is not None:
         return render_graph_rich(rendered.canvas, rendered.graph, theme=theme)
     return render_sequence_rich(rendered.canvas, theme=theme)
