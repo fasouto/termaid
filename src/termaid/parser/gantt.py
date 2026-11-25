@@ -20,7 +20,8 @@ on the machine's timezone.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 
 from ..model.gantt import Duration, Gantt, GanttSection, GanttTask, TickInterval
 
@@ -50,6 +51,49 @@ _DURATION_UNITS = {
 }
 _TICK_INTERVAL_RE = re.compile(r"^([1-9][0-9]*)(millisecond|second|minute|hour|day|week|month)$")
 
+_WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_DAY = timedelta(days=1)
+# A task stretched over more days than this keeps its unstretched end.
+_MAX_STRETCH_DAYS = 100_000
+
+
+@dataclass
+class _Calendar:
+    """The days ``excludes``, ``includes`` and ``weekend`` take out of a task's duration."""
+    excludes: list[str] = field(default_factory=list)
+    includes: list[str] = field(default_factory=list)
+    weekend_friday: bool = False
+
+    def stretch(self, start: datetime, end: datetime, date_format: str) -> datetime:
+        """``end`` pushed one day later for each excluded day, as Mermaid's fixTaskDates does.
+
+        Mermaid checks the days from the one after ``start`` up to ``end``,
+        moving ``end`` as it goes.
+        """
+        days_off = {_WEEKDAYS.index(w) for w in self.excludes if w in _WEEKDAYS}
+        if "weekends" in self.excludes:
+            days_off |= {4, 5} if self.weekend_friday else {5, 6}
+        dates_off = self._dates(self.excludes, date_format)
+        if len(days_off) == 7 or not (days_off or dates_off):
+            return end
+        dates_on = self._dates(self.includes, date_format)
+        day = start + _DAY
+        try:
+            for _ in range(_MAX_STRETCH_DAYS):
+                if day > end:
+                    return end
+                d = day.date()
+                if d not in dates_on and (day.weekday() in days_off or d in dates_off):
+                    end += _DAY
+                day += _DAY
+        except OverflowError:
+            pass
+        return end
+
+    @staticmethod
+    def _dates(words: list[str], date_format: str) -> set[date]:
+        return {d.date() for d in (_parse_date(w, date_format) for w in words) if d is not None}
+
 
 def parse_gantt(text: str) -> Gantt:
     """Parse a mermaid gantt diagram definition."""
@@ -61,6 +105,7 @@ def parse_gantt(text: str) -> Gantt:
 
     current_section: GanttSection | None = None
     tasks: list[GanttTask] = []
+    calendar = _Calendar()
 
     for line in lines[1:]:  # skip "gantt" header
         comment_idx = line.find("%%")
@@ -91,8 +136,14 @@ def parse_gantt(text: str) -> Gantt:
                 gantt.tick_interval = TickInterval(int(m.group(1)), m.group(2))
             continue
 
-        if lower.startswith("excludes ") or lower.startswith("weekend "):
-            continue  # exclusions are not applied
+        if lower.startswith(("excludes ", "includes ")):
+            words = [w for w in re.split(r"[\s,]+", lower[9:]) if w]
+            (calendar.excludes if lower[0] == "e" else calendar.includes).extend(words)
+            continue
+
+        if lower.startswith("weekend "):
+            calendar.weekend_friday = lower[8:].strip() == "friday"
+            continue
 
         if lower.startswith("todaymarker "):
             if "off" in lower:
@@ -122,16 +173,17 @@ def parse_gantt(text: str) -> Gantt:
                 current_section.tasks.append(task)
                 tasks.append(task)
 
-    _schedule(tasks)
+    _schedule(tasks, calendar, gantt.date_format)
     return gantt
 
 
-def _schedule(tasks: list[GanttTask]) -> None:
+def _schedule(tasks: list[GanttTask], calendar: _Calendar, date_format: str) -> None:
     """Give each task its start and end, the way Mermaid's compileTasks does.
 
     A task with neither a start date nor ``after`` starts when the task
     written before it ends, in whatever section. ``after`` and ``until`` may
-    name tasks written later, so passes repeat until nothing changes.
+    name tasks written later, so passes repeat until nothing changes. Days
+    the calendar excludes stretch a duration.
     """
     by_id = {task.id: task for task in tasks}
 
@@ -154,8 +206,10 @@ def _schedule(tasks: list[GanttTask]) -> None:
                         task.end = min(starts)
                         changed = True
                 elif task.duration is not None:
-                    task.end = task.duration.end_from(task.start)
-                    changed = task.end is not None or changed
+                    end = task.duration.end_from(task.start)
+                    if end is not None:
+                        task.end = calendar.stretch(task.start, end, date_format)
+                        changed = True
         if not changed:
             break
 
