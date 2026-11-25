@@ -4,14 +4,18 @@ from __future__ import annotations
 import re
 
 from ..utils import line_breaks
+from .flowchart import _decode_entities
 from ..model.sequence import (
     ActivateEvent,
+    AutonumberEvent,
     Block,
     BlockSection,
+    CreateEvent,
     DestroyEvent,
     Message,
     Note,
     Participant,
+    ParticipantBox,
     SequenceDiagram,
 )
 
@@ -38,7 +42,7 @@ _MESSAGE_RE = re.compile(
 
 # Combined regex for all participant types (with optional "create" prefix)
 _PARTICIPANT_KIND_RE = re.compile(
-    r"^\s*(?:create\s+)?(participant|actor|database|queue|boundary|control|entity|collections)"
+    r"^\s*(create\s+)?(participant|actor|database|queue|boundary|control|entity|collections)"
     r"\s+(\S+)(?:\s+as\s+(.+?))?\s*$", re.IGNORECASE)
 
 # Note regex: Note right of A: text, Note left of A: text, Note over A: text, Note over A,B: text
@@ -57,6 +61,28 @@ _BLOCK_SECTION_RE = re.compile(
     r"^\s*(else|and|option)\b\s*(.*?)\s*$",
     re.IGNORECASE,
 )
+
+# box [colour] [title]: a CSS colour function or a word, then the title
+_BOX_RE = re.compile(r"^\s*box\b\s*((?:rgba?|hsla?)\s*\(.*?\)|\w*)(.*?)\s*$", re.IGNORECASE)
+
+# The CSS colour names; Mermaid takes a box's first word as its colour when it is one.
+_CSS_COLOURS = frozenset("""
+aliceblue antiquewhite aqua aquamarine azure beige bisque black blanchedalmond blue blueviolet brown
+burlywood cadetblue chartreuse chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan
+darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta darkolivegreen darkorange darkorchid
+darkred darksalmon darkseagreen darkslateblue darkslategray darkslategrey darkturquoise darkviolet
+deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite forestgreen fuchsia gainsboro
+ghostwhite gold goldenrod gray green greenyellow grey honeydew hotpink indianred indigo ivory khaki
+lavender lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan lightgoldenrodyellow
+lightgray lightgreen lightgrey lightpink lightsalmon lightseagreen lightskyblue lightslategray
+lightslategrey lightsteelblue lightyellow lime limegreen linen magenta maroon mediumaquamarine
+mediumblue mediumorchid mediumpurple mediumseagreen mediumslateblue mediumspringgreen mediumturquoise
+mediumvioletred midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive olivedrab
+orange orangered orchid palegoldenrod palegreen paleturquoise palevioletred papayawhip peachpuff peru
+pink plum powderblue purple rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown
+seagreen seashell sienna silver skyblue slateblue slategray slategrey snow springgreen steelblue tan
+teal thistle tomato turquoise violet wheat white whitesmoke yellow yellowgreen transparent
+""".split())
 
 # Block end
 _BLOCK_END_RE = re.compile(r"^\s*end\s*$", re.IGNORECASE)
@@ -82,6 +108,11 @@ def _lookup_arrow(arrow_str: str) -> tuple[str, str]:
     return "solid", "open"
 
 
+def _label_text(text: str) -> str:
+    """A label as drawn: <br> breaks lines and entity codes such as #9829; are decoded."""
+    return _decode_entities(line_breaks(text.strip()))
+
+
 def _ensure_participant(diagram: SequenceDiagram, pid: str) -> None:
     """Add participant if not already present (auto-create on first mention)."""
     for p in diagram.participants:
@@ -98,6 +129,8 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
     # event_stack[0] is the top-level events list
     event_stack: list[list] = [diagram.events]
     block_stack: list[Block] = []
+    open_box: ParticipantBox | None = None
+    in_acc_descr = False
 
     lines = text.split("\n")
     for line in lines:
@@ -107,23 +140,37 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         if not stripped or stripped.startswith("sequenceDiagram") or stripped.startswith("%%"):
             continue
 
-        # Autonumber keyword, with an optional start value and increment
-        m = re.match(r"^autonumber(?:\s+(\d+)(?:\s+(\d+))?)?$", stripped, re.IGNORECASE)
+        # accDescr { ... } spans lines; accessibility text is not drawn
+        if in_acc_descr:
+            in_acc_descr = "}" not in stripped
+            continue
+        m = re.match(r"^(title|accTitle|accDescr)\b\s*:?\s*(.*)$", stripped)
+        if m and not _MESSAGE_RE.match(stripped):
+            if m.group(1) == "title":
+                diagram.title = _label_text(m.group(2)).replace("\n", " ")
+            elif m.group(1) == "accDescr" and m.group(2).startswith("{"):
+                in_acc_descr = "}" not in m.group(2)
+            continue
+
+        # Autonumber keyword, with an optional start value and increment, or off
+        m = re.match(r"^autonumber(?:\s+(off)|\s+(\d+)(?:\s+(\d+))?)?$", stripped, re.IGNORECASE)
         if m:
-            diagram.autonumber = True
-            if m.group(1):
-                diagram.autonumber_start = int(m.group(1))
-            if m.group(2):
-                diagram.autonumber_step = int(m.group(2))
+            event_stack[-1].append(AutonumberEvent(
+                visible=m.group(1) is None,
+                start=int(m.group(2)) if m.group(2) else None,
+                step=int(m.group(3)) if m.group(3) else None,
+            ))
             continue
 
         # Skip purely visual constructs
         if _SKIP_RE.match(stripped):
             continue
 
-        # Block end
+        # Block end; a box holds only declarations, so an end inside one closes it
         if _BLOCK_END_RE.match(stripped):
-            if block_stack:
+            if open_box is not None:
+                open_box = None
+            elif block_stack:
                 block_stack.pop()
                 event_stack.pop()
             continue
@@ -132,18 +179,28 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         m = _BLOCK_SECTION_RE.match(stripped)
         if m and block_stack:
             section_keyword = m.group(1).lower()
-            section_label = m.group(2).strip()
+            section_label = _label_text(m.group(2))
             section = BlockSection(label=section_label, events=[])
             block_stack[-1].sections.append(section)
             # Switch current event target to this section's events
             event_stack[-1] = section.events
             continue
 
+        m = _BOX_RE.match(stripped)
+        if m and not _MESSAGE_RE.match(stripped):
+            colour, title = m.group(1), m.group(2).strip()
+            if not (colour.lower() in _CSS_COLOURS or "(" in colour):
+                title = stripped[3:].strip()
+            open_box = ParticipantBox(title=_label_text(title))
+            diagram.boxes.append(open_box)
+            continue
+
         # Block start (loop, alt, opt, par, critical, break)
         m = _BLOCK_START_RE.match(stripped)
         if m:
             kind = m.group(1).lower()
-            label = m.group(2).strip()
+            # A rect's argument is its background colour, which a terminal does not draw.
+            label = "" if kind == "rect" else _label_text(m.group(2))
             block = Block(kind=kind, label=label)
             event_stack[-1].append(block)
             block_stack.append(block)
@@ -173,7 +230,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             _ensure_participant(diagram, p1)
             if p2:
                 _ensure_participant(diagram, p2)
-            note_text = line_breaks(note_text.strip())
+            note_text = _label_text(note_text)
             event_stack[-1].append(Note(
                 text=note_text,
                 position=position,
@@ -192,8 +249,8 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
         # Participant kind declarations (participant, actor, database, etc.)
         m = _PARTICIPANT_KIND_RE.match(stripped)
         if m:
-            kind, pid, label = m.group(1).lower(), m.group(2), m.group(3)
-            label = line_breaks(label.strip()) if label else pid
+            created, kind, pid, label = m.group(1), m.group(2).lower(), m.group(3), m.group(4)
+            label = _label_text(label) if label else pid
             found = False
             for p in diagram.participants:
                 if p.id == pid:
@@ -203,6 +260,10 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
                     break
             if not found:
                 diagram.participants.append(Participant(id=pid, label=label, kind=kind))
+                if created:
+                    event_stack[-1].append(CreateEvent(participant=pid))
+            if open_box is not None:
+                open_box.participants.append(pid)
             continue
 
         # message lines
@@ -234,7 +295,7 @@ def parse_sequence_diagram(text: str) -> SequenceDiagram:
             event_stack[-1].append(Message(
                 source=source,
                 target=target,
-                label=line_breaks(label.strip()) if label else "",
+                label=_label_text(label) if label else "",
                 line_type=line_type,
                 arrow_type=arrow_type,
             ))

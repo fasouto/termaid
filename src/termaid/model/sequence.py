@@ -54,15 +54,35 @@ class DestroyEvent:
     participant: str
 
 
+@dataclass
+class CreateEvent:
+    """``create participant X``: X's header is drawn here instead of at the top."""
+    participant: str
+
+
+@dataclass
+class AutonumberEvent:
+    """``autonumber [start [step]]`` or ``autonumber off``: numbering from here on."""
+    visible: bool
+    start: int | None = None
+    step: int | None = None
+
+
+@dataclass
+class ParticipantBox:
+    """``box [colour] [title] ... end``: a titled frame around the participants declared inside."""
+    title: str
+    participants: list[str] = field(default_factory=list)
+
+
 # Union type for all event types
-Event = Union[Message, Note, ActivateEvent, Block, DestroyEvent]
+Event = Union[Message, Note, ActivateEvent, Block, DestroyEvent, CreateEvent, AutonumberEvent]
 
 
 @dataclass
 class SequenceDiagram:
     participants: list[Participant] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
-    autonumber: bool = False
-    autonumber_start: int = 1
-    autonumber_step: int = 1
+    boxes: list[ParticipantBox] = field(default_factory=list)
+    title: str = ""
     warnings: list[str] = field(default_factory=list)
