@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 
 from ..model.timeline import Timeline, TimelineSection, TimelineEvent
-from ..utils import is_meta_line
+from ..utils import is_meta_line, line_breaks
 
 # Mermaid's lexer starts an event at a colon followed by whitespace, so
 # "10:30" stays one word.
@@ -54,12 +54,12 @@ def parse_timeline(text: str) -> Timeline:
 
         # Title
         if stripped.lower().startswith("title "):
-            tl.title = stripped[6:].strip()
+            tl.title = line_breaks(stripped[6:].strip(), " ")
             continue
 
         # Section
         if stripped.lower().startswith("section "):
-            current_section = TimelineSection(title=stripped[8:].strip())
+            current_section = TimelineSection(title=line_breaks(stripped[8:].strip(), " "))
             tl.sections.append(current_section)
             continue
 
@@ -70,10 +70,11 @@ def parse_timeline(text: str) -> Timeline:
             tl.sections.append(current_section)
 
         title, *events = _EVENT_SEP.split(stripped)
-        details = [e.strip() for e in events if e.strip()]
+        # An event may break over rows; a period's title has one.
+        details = [line_breaks(e.strip()) for e in events if e.strip()]
         if not title and current_section.events:
             current_section.events[-1].details.extend(details)
         else:
-            current_section.events.append(TimelineEvent(title=title.strip(), details=details))
+            current_section.events.append(TimelineEvent(title=line_breaks(title.strip(), " "), details=details))
 
     return tl

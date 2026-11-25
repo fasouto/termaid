@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 
 from ..model.blockdiagram import Block, BlockDiagram, BlockLink
-from ..utils import is_meta_line
+from ..utils import is_meta_line, line_breaks
 
 # Shape patterns: (open_delim, close_delim, shape_name)
 # Longest delimiters first to avoid ambiguity
@@ -71,7 +71,9 @@ def _preprocess(text: str) -> list[str]:
         if is_meta_line(stripped):
             in_descr = stripped.startswith("accDescr") and stripped[8:].lstrip()[:1] == "{" and "}" not in stripped
             continue
-        result.append(stripped)
+        # Labels are drawn on one row, and a <br> left in would split the
+        # line into tokens at its ">".
+        result.append(line_breaks(stripped, " "))
     # Remove header line (block-beta or block)
     if result and re.match(r"^block(-beta)?$", result[0], re.IGNORECASE):
         result = result[1:]

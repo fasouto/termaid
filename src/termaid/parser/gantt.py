@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from ..model.gantt import Duration, Gantt, GanttSection, GanttTask, TickInterval
-from ..utils import is_meta_line
+from ..utils import is_meta_line, line_breaks
 
 # Mermaid (dayjs) date format tokens -> strptime directives. SSS maps to %f,
 # which right-pads three digits to microseconds.
@@ -127,7 +127,7 @@ def parse_gantt(text: str) -> Gantt:
         lower = stripped.lower()
 
         if lower.startswith("title "):
-            gantt.title = stripped[6:].strip()
+            gantt.title = line_breaks(stripped[6:].strip(), " ")
             continue
 
         if lower.startswith("dateformat "):
@@ -166,7 +166,7 @@ def parse_gantt(text: str) -> Gantt:
             continue
 
         if lower.startswith("section "):
-            current_section = GanttSection(title=stripped[8:].strip())
+            current_section = GanttSection(title=line_breaks(stripped[8:].strip(), " "))
             gantt.sections.append(current_section)
             continue
 
@@ -231,7 +231,7 @@ def _parse_task(line: str, date_format: str) -> GanttTask | None:
     title = line[:colon_idx].strip()
     rest = line[colon_idx + 1:].strip()
 
-    task = GanttTask(title=title)
+    task = GanttTask(title=line_breaks(title, " "))  # one row
 
     parts = [p.strip() for p in rest.split(",")]
 

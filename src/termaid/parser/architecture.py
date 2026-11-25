@@ -17,6 +17,7 @@ import re
 
 from ..graph.model import Direction, Edge, Graph, Node, Subgraph
 from ..graph.shapes import NodeShape
+from ..utils import line_breaks
 
 
 # Map architecture icons to node shapes.
@@ -64,7 +65,7 @@ def parse_architecture(text: str) -> Graph:
         m = re.match(r'^group\s+(\w+)(?:\(([^)]*)\))?\[([^\]]*)\](?:\s+in\s+(\w+))?', stripped)
         if m:
             gid = m.group(1)
-            label = m.group(3)
+            label = line_breaks(m.group(3), " ")  # a title has one row
             parent_id = m.group(4)
 
             sg = Subgraph(id=gid, label=label)
@@ -81,7 +82,7 @@ def parse_architecture(text: str) -> Graph:
         if m:
             sid = m.group(1)
             icon = m.group(2) or ""
-            label = m.group(3)
+            label = line_breaks(m.group(3), "\\n")  # node labels break on a backslash-n
             parent_id = m.group(4)
 
             prefix = _ICON_PREFIX.get(icon, "")
