@@ -612,9 +612,14 @@ def _apply_show_ids(source: str) -> str:
     ``ID["ID: Label"]`` to the source so the parser picks up the new label.
     Non-flowchart diagrams are returned unchanged.
     """
+    from termaid import _prepare_source, _skip_directives, _typed
+
+    text = _typed(_skip_directives(_prepare_source(source)))
+    if not text or text.split(None, 1)[0].split("-", 1)[0].rstrip(":;").lower() not in ("graph", "flowchart"):
+        return source
     try:
-        from termaid import _prepare_source, _skip_directives, parse
-        graph = parse(source)
+        from termaid.parser.flowchart import parse_flowchart
+        graph = parse_flowchart(text)
     except Exception:
         return source
 
@@ -630,7 +635,7 @@ def _apply_show_ids(source: str) -> str:
         return source
 
     # Insert the redefinitions right after the graph/flowchart header line.
-    lines = _skip_directives(_prepare_source(source)).split("\n")
+    lines = text.split("\n")
     return lines[0] + "\n" + "\n".join(extra_lines) + "\n" + "\n".join(lines[1:])
 
 
