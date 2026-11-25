@@ -154,6 +154,18 @@ def _use_color(args: argparse.Namespace) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
+    try:
+        status = _main(argv)
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # The reader left, as `head` does. Without this, Python reports the
+        # unwritten output again when it flushes stdout at exit.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 1
+    return status
+
+
+def _main(argv: list[str] | None) -> int:
     # Pipes and redirects use the locale encoding, which on Windows is a
     # code page that cannot encode box-drawing characters.
     # A stream that is not a text file, or was already read, keeps its own.
@@ -437,6 +449,8 @@ def main(argv: list[str] | None = None) -> int:
                     return _report(args, "output_write_failed", f"Error writing to {args.output}: {e}", path=args.output)
             else:
                 print(result)
+    except BrokenPipeError:
+        raise
     except Exception as e:
         return _report(args, "render_failed", f"Error rendering diagram: {e}")
 
