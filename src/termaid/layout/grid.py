@@ -180,11 +180,13 @@ def compute_layout(
     gap: int = 4,
     max_label_width: int | None = None,
     extra_gaps: dict[int, int] | None = None,
+    min_lanes: dict[int, int] | None = None,
 ) -> GridLayout:
     """Compute the grid layout for a graph.
 
     ``extra_gaps`` adds grid cells between layers, by gap index, on top of
-    the ones crossing edges get.
+    the ones crossing edges get. ``min_lanes`` sets the least size, in
+    characters, of grid rows (LR) or columns (TD) across the flow.
     """
     gap = max(gap, 1)  # minimum 1 for arrow visibility
     # Lazy imports to avoid circular references at module load time
@@ -244,6 +246,9 @@ def compute_layout(
 
     # Step 4b: Normalize sizes (per-layer, capped)
     normalize_sizes(graph, layout)
+    lane_sizes = layout.col_widths if direction.is_vertical else layout.row_heights
+    for lane, size in (min_lanes or {}).items():
+        lane_sizes[lane] = max(lane_sizes.get(lane, 1), size)
 
     # Step 5: Expand gaps for subgraph borders and labels
     expand_gaps_for_subgraphs(graph, layout, direction)

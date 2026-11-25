@@ -86,7 +86,43 @@ def layout_and_route(
         if sum(bool(r.crowded) for r in next_routed) >= sum(bool(r.crowded) for r in routed):
             break
         extra, layout, routed = grown, next_layout, next_routed
+    lanes = _cramped_arrow_lanes(routed, layout, graph.direction.normalized().is_vertical)
+    if lanes:
+        layout = compute_layout(graph, padding_x, padding_y, gap, max_label_width, extra, lanes)
+        routed = route_edges(graph, layout)
     return layout, routed
+
+
+def _cramped_arrow_lanes(
+    routed: list[RoutedEdge], layout: GridLayout, vertical: bool,
+) -> dict[int, int]:
+    """The gap lanes too narrow for an edge that turns in them to draw its
+    arrowhead apart from its corner, with the size each one needs.
+
+    An edge runs down the middle of a lane, so turning toward its target
+    from the far side of a one-character lane leaves no cell between the
+    corner and the border, and the arrowhead covers the corner.
+    """
+    lanes: dict[int, int] = {}
+    for re in routed:
+        path = re.grid_path
+        if not re.edge.has_arrow_end or len(path) < 3 or re.edge.is_self_reference:
+            continue
+        (c0, r0), (c1, r1) = path[-2], path[-1]
+        across = (c1 == c0) if not vertical else (r1 == r0)
+        if not across:
+            continue
+        lane, end = (c0, c1) if vertical else (r0, r1)
+        if abs(end - lane) != 1:
+            continue
+        sizes = layout.col_widths if vertical else layout.row_heights
+        size = sizes.get(lane, 1)
+        # The edge leaves the lane toward the end: from its first half
+        # into a border after it, or from its middle into one before it.
+        needed = 3 if end > lane else 2
+        if size < needed:
+            lanes[lane] = max(lanes.get(lane, 0), needed)
+    return lanes
 
 
 def _crowded_gaps(
