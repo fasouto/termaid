@@ -100,3 +100,23 @@ class TestMindmapRendering:
     def test_no_crash_on_empty(self):
         out = render("mindmap")
         assert isinstance(out, str)
+
+
+class TestNodeShapes:
+    """A node written with an id and a shape shows only its text."""
+
+    @pytest.mark.parametrize("written", [
+        "root((termaid))", "((termaid))", "root(termaid)", "(termaid)", "root[termaid]",
+        "[termaid]", "root{{termaid}}", "root)termaid(", "root))termaid((", 'root["termaid"]',
+    ])
+    def test_shape_and_id_are_not_drawn(self, written):
+        out = render(f"mindmap\n  {written}\n    Library\n")
+        assert out.split("\n")[0].startswith("termaid ──"), out
+
+    def test_plain_text_with_brackets_inside_is_kept(self):
+        out = render("mindmap\n  root\n    call f(x) now\n")
+        assert "call f(x) now" in out
+
+    def test_icon_and_class_lines_are_not_nodes(self):
+        out = render("mindmap\n  root((termaid))\n    Library\n    ::icon(fa fa-book)\n    :::urgent\n")
+        assert "icon" not in out and "urgent" not in out and "Library" in out

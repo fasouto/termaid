@@ -16,6 +16,30 @@ import re
 from ..model.mindmap import Mindmap, MindmapNode
 
 
+# Shape markers, longest first: an id may come before any of them.
+_SHAPES = (
+    ("((", "))"),    # circle
+    ("))", "(("),    # bang
+    ("{{", "}}"),    # hexagon
+    (")", "("),      # cloud
+    ("(", ")"),      # round
+    ("[", "]"),      # square
+)
+_ID = re.compile(r"[\w-]*")
+
+
+def _label(text: str) -> str:
+    """The text of a node written as ``id((text))``, ``[text]`` and so on."""
+    rest = text[_ID.match(text).end():]
+    for opener, closer in _SHAPES:
+        if rest.startswith(opener) and rest.endswith(closer) and len(rest) > len(opener) + len(closer):
+            inner = rest[len(opener):-len(closer)].strip()
+            if len(inner) >= 2 and inner[0] == inner[-1] and inner[0] in "\"`":
+                inner = inner.strip(inner[0])
+            return inner or text
+    return text
+
+
 def parse_mindmap(text: str) -> Mindmap:
     """Parse a mermaid mindmap definition."""
     lines = text.strip().splitlines()
@@ -40,20 +64,11 @@ def parse_mindmap(text: str) -> Mindmap:
         indent = len(stripped) - len(stripped.lstrip())
         label = stripped.strip()
 
-        # Strip optional shape markers from Mermaid syntax:
-        # (Round), [Square], {{Hexagon}}, )Cloud(, etc.
-        for pattern, repl in [
-            (r"^\((.+)\)$", r"\1"),        # (round)
-            (r"^\[(.+)\]$", r"\1"),         # [square]
-            (r"^\{\{(.+)\}\}$", r"\1"),     # {{hexagon}}
-            (r"^\)(.+)\($", r"\1"),         # )cloud(
-        ]:
-            m = re.match(pattern, label)
-            if m:
-                label = m.group(1)
-                break
+        # `::icon(...)` and `:::class` lines decorate the node above them.
+        if label.startswith("::"):
+            continue
 
-        body_lines.append((indent, label))
+        body_lines.append((indent, _label(label)))
 
     if not body_lines:
         return mindmap
