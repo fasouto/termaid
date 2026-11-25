@@ -301,6 +301,21 @@ def _find_label(lines: list[str], label: str) -> tuple[int, int]:
     return row, lines[row].index(label)
 
 
+class TestLabelBesideAReturnEdge:
+    """A forward edge's label too wide for the room beside its line was
+    written over the return edge's line."""
+
+    @pytest.mark.parametrize("label", ["HTTP request", "a much longer request label"])
+    def test_both_edges_stay_whole(self, label):
+        from tests.conftest import edge_targets
+
+        out = render(f"flowchart TD\n  Client -->|{label}| Server\n  Server -->|response| Client")
+        lines = out.split("\n")
+        names = ["Client", "Server"]
+        assert label in out and "response" in out, out
+        assert edge_targets(lines, "Server", names) == {"Client"}, out
+
+
 class TestLayoutLeavesRoomForLabels:
     """Each label gets a spot beside its own edge, cutting no line."""
 
