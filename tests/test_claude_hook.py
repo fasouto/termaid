@@ -578,3 +578,12 @@ def test_the_render_limit_covers_every_diagram_in_a_batch(tmp_path, monkeypatch)
     assert time.monotonic() - start < 0.45
     assert "A0" in out and "graph LR" not in out.split("A0")[0]
     assert out.endswith(blocks[1] + blocks[2])
+
+
+def test_a_diagram_after_a_block_too_long_to_hold_is_still_drawn():
+    big = "```mermaid\ngraph LR\n" + "".join(f"  Node_number_{i} --> Node_number_{i + 1}\n" for i in range(300)) + "```\n"
+    r = StreamRenderer(width=60)
+    shown = r.feed(big + "Next one:\n```mermaid\ngraph LR; A --> B\n```\nend\n", final=True)
+    assert shown.startswith(big + "Next one:\n")
+    assert "A --> B" not in shown and "─►" in shown
+    assert shown.endswith("```\nend")
