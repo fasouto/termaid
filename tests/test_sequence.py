@@ -585,7 +585,11 @@ class TestSequenceDestroyAndRect:
             "  Bob-->>Alice: Hi\n"
             "  end"
         )
-        assert "[rect]" in output
+        # Mermaid shades the rect's background and prints none of its colour.
+        assert "rect" not in output and "rgb" not in output and "200" not in output
+        lines = output.splitlines()
+        top = next(i for i, line in enumerate(lines) if line.lstrip().startswith("┌") and "Alice" not in lines[i + 1])
+        assert "Hello" in lines[top + 1], "an untitled frame has no title row"
 
     def test_destroy_no_warning(self):
         d = parse_sequence_diagram(
