@@ -52,6 +52,7 @@ def closes_fence(line: str, fence: str) -> bool:
     stripped = line.strip(" \t\r")
     return len(stripped) >= len(fence) and stripped == fence[0] * len(stripped)
 
+
 _BR = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 

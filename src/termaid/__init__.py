@@ -31,7 +31,7 @@ def _strip_frontmatter(text: str) -> str:
 
 def _frontmatter_title(source: str) -> str:
     """The ``title:`` of the source's YAML frontmatter, or ""."""
-    match = _FRONTMATTER_RE.match(_CARRIAGE_RETURN_RE.sub("\n", source.lstrip("﻿")).strip())
+    match = _FRONTMATTER_RE.match(_CARRIAGE_RETURN_RE.sub("\n", source.lstrip("\ufeff")).strip())
     title = re.search(r"^title:[ \t]*(.*?)[ \t]*$", match.group(0), re.MULTILINE) if match else None
     return _CONTROL_CHARS_RE.sub("", title.group(1).strip("\"'")) if title else ""
 
