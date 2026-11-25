@@ -261,12 +261,12 @@ class _StateDiagramParser:
             if is_source:
                 self._start_count += 1
                 node_id = f"{_START_ID}_{self._start_count}"
-                self._ensure_node(node_id, "●", NodeShape.CIRCLE)
+                self._ensure_node(node_id, "●", NodeShape.START_STATE)
                 return node_id
             else:
                 self._end_count += 1
                 node_id = f"{_END_ID}_{self._end_count}"
-                self._ensure_node(node_id, "◉", NodeShape.CIRCLE)
+                self._ensure_node(node_id, "◉", NodeShape.END_STATE)
                 return node_id
 
         # Only set shape if node is new (don't override stereotype shapes)

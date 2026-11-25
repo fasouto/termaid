@@ -42,13 +42,13 @@ class TestStateDiagramParser:
         # Should create a start node with ● label
         start_nodes = [n for n in g.nodes.values() if n.label == "●"]
         assert len(start_nodes) == 1
-        assert start_nodes[0].shape == NodeShape.CIRCLE
+        assert start_nodes[0].shape == NodeShape.START_STATE
 
     def test_end_state(self):
         g = parse_state_diagram("stateDiagram-v2\n  Active --> [*]")
         end_nodes = [n for n in g.nodes.values() if n.label == "◉"]
         assert len(end_nodes) == 1
-        assert end_nodes[0].shape == NodeShape.CIRCLE
+        assert end_nodes[0].shape == NodeShape.END_STATE
 
     def test_start_and_end(self):
         g = parse_state_diagram(
