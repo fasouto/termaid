@@ -37,7 +37,7 @@ def _compute_box_size(cls: ClassDef, padding_x: int = _CLASS_PAD) -> tuple[int, 
     lines: list[str] = []
     if cls.annotation:
         lines.append(f"\u00ab{cls.annotation}\u00bb")
-    lines.append(cls.name)
+    lines.append(cls.display_name)
 
     attributes = [m for m in cls.members if not m.is_method]
     methods = [m for m in cls.members if m.is_method]
@@ -103,8 +103,8 @@ def _draw_class_box(
         canvas.put_text(row, ann_col, ann_text, style="label")
         row += 1
 
-    name_col = x + (width - display_width(cls.name)) // 2
-    canvas.put_text(row, name_col, cls.name, style="label")
+    name_col = x + (width - display_width(cls.display_name)) // 2
+    canvas.put_text(row, name_col, cls.display_name, style="label")
     row += 1
 
     attributes = [m for m in cls.members if not m.is_method]

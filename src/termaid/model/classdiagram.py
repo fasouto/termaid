@@ -18,6 +18,11 @@ class ClassDef:
     name: str
     annotation: str = ""               # "interface", "abstract", "enumeration", "service"
     members: list[Member] = field(default_factory=list)
+    label: str = ""                    # shown instead of the name: Car["Fast car"], Box~T~
+
+    @property
+    def display_name(self) -> str:
+        return self.label or self.name
 
 
 @dataclass
