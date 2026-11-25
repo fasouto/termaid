@@ -316,6 +316,34 @@ class TestLabelBesideAReturnEdge:
         assert edge_targets(lines, "Server", names) == {"Client"}, out
 
 
+class TestReturnEdgeInASidewaysSubgraph:
+    """In a subgraph laid out across the flow, the return edge between two
+    nodes lost its line and arrowhead under the forward edge's label."""
+
+    def test_flowchart_return_edge_keeps_its_line_and_arrow(self):
+        from tests.conftest import edge_targets
+
+        out = render(
+            "flowchart TB\n  subgraph S\n    direction LR\n"
+            "    A -->|connect| B --> C\n    B -->|fail| A\n    C --> A\n  end"
+        )
+        lines = out.split("\n")
+        assert "connect" in out and "fail" in out, out
+        assert edge_targets(lines, "B", ["A", "B", "C"]) == {"A", "C"}, out
+
+    def test_state_return_edges_keep_their_lines_and_arrows(self):
+        from tests.conftest import edge_targets
+
+        out = render(
+            "stateDiagram-v2\n  [*] --> Conn\n  state Conn {\n    Off --> On : connect\n"
+            "    On --> Off : fail\n    On --> Up\n    Up --> Off : drop\n  }"
+        )
+        lines = out.split("\n")
+        names = ["Off", "On", "Up"]
+        assert edge_targets(lines, "On", names) == {"Off", "Up"}, out
+        assert edge_targets(lines, "Up", names) == {"Off"}, out
+
+
 class TestLayoutLeavesRoomForLabels:
     """Each label gets a spot beside its own edge, cutting no line."""
 
