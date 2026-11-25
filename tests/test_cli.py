@@ -404,3 +404,27 @@ class TestDemoOptions:
     def test_demo_rejects_a_bad_width(self, capsys):
         assert main(["--demo", "flowchart", "--width", "0"]) == 2
         assert capsys.readouterr().out == ""
+
+
+class TestCliArgumentEdges:
+    def test_a_dash_reads_stdin(self, monkeypatch, capsys):
+        import io
+
+        monkeypatch.setattr("sys.stdin", io.StringIO("graph LR\n  A --> B\n"))
+        assert main(["-"]) == 0
+        assert "─►" in capsys.readouterr().out
+
+    def test_markdown_with_json_is_an_argument_error(self, tmp_path: Path):
+        doc = tmp_path / "d.md"
+        doc.write_text("text\n")
+        assert main([str(doc), "--markdown", "--json", "tree"]) == 2
+
+    def test_an_unknown_demo_is_an_argument_error(self):
+        assert main(["--demo", "nosuch"]) == 2
+
+    def test_strict_width_names_the_wide_line_in_markdown(self, tmp_path: Path, capsys):
+        doc = tmp_path / "d.md"
+        doc.write_text("# Doc\n\n" + "word " * 14 + "\n\n```mermaid\ngraph LR; A-->B\n```\n")
+        assert main([str(doc), "--markdown", "--strict-width", "--width", "40"]) == 2
+        err = capsys.readouterr().err
+        assert "diagram is" not in err and "line 3 of the output is 69 cols wide" in err
