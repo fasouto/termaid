@@ -225,6 +225,50 @@ def _draw_note_box(
         canvas.put_text(y + 1 + li, x + 2, line, style="label")
 
 
+def _namespace_frames(
+    diagram: ClassDiagram, positions: dict[str, tuple[int, int]], sizes: dict[str, tuple[int, int]],
+) -> list[tuple[str, int, int, int, int]]:
+    """(title, top, left, bottom, right) of a frame around each namespace.
+
+    A namespace whose classes did not end up next to each other gets no
+    frame, since it would have to take in other classes.
+    """
+    frames = []
+    for title, members in diagram.namespaces.items():
+        inside = [m for m in members if m in positions]
+        if not inside:
+            continue
+        top = min(positions[m][1] for m in inside) - 1
+        left = min(positions[m][0] for m in inside) - 2
+        bottom = max(positions[m][1] + sizes[m][1] for m in inside)
+        right = max(positions[m][0] + sizes[m][0] for m in inside) + 1
+        right = max(right, left + display_width(title) + 5)
+        if top < 0 or left < 0:
+            continue
+        clash = any(
+            x <= right + 1 and x + sizes[n][0] - 1 >= left - 1 and y <= bottom + 1 and y + sizes[n][1] - 1 >= top - 1
+            for n, (x, y) in positions.items() if n not in inside
+        )
+        if not clash:
+            frames.append((title, top, left, bottom, right))
+    return frames
+
+
+def _draw_frame(canvas: Canvas, frame: tuple[str, int, int, int, int], cs: CharSet) -> None:
+    _title, top, left, bottom, right = frame
+    canvas.resize(max(canvas.width, right + 1), max(canvas.height, bottom + 1))
+    for c in range(left + 1, right):
+        canvas.put(top, c, cs.sg_horizontal, style="subgraph")
+        canvas.put(bottom, c, cs.sg_horizontal, style="subgraph")
+    for r in range(top + 1, bottom):
+        canvas.put(r, left, cs.sg_vertical, style="subgraph")
+        canvas.put(r, right, cs.sg_vertical, style="subgraph")
+    canvas.put(top, left, cs.sg_top_left, style="subgraph")
+    canvas.put(top, right, cs.sg_top_right, style="subgraph")
+    canvas.put(bottom, left, cs.sg_bottom_left, style="subgraph")
+    canvas.put(bottom, right, cs.sg_bottom_right, style="subgraph")
+
+
 def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padding_x: int = 2, gap: int = 4, cs: CharSet | None = None) -> Canvas:
     """Render a ClassDiagram to a Canvas."""
     cs = cs or default_charset(use_ascii)
@@ -247,6 +291,9 @@ def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padd
     lay = layout(sizes, links, gap, diagram.direction)
     canvas = Canvas(lay.width, lay.height)
     corner = cs.corner_top_left if use_ascii else None
+    frames = _namespace_frames(diagram, lay.positions, lay.sizes)
+    for frame in frames:
+        _draw_frame(canvas, frame, cs)
 
     # Every line first, then the text, so a later line never cuts a label.
     n_rels = len(diagram.relationships)
@@ -271,6 +318,9 @@ def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padd
                          (rel.label, route.label_at)):
             if text and at is not None:
                 put_label(canvas, at, text)
+
+    for title, top, left, _, _ in frames:
+        canvas.put_text(top, left + 2, f" {title} ", style="subgraph_label")
 
     for name, (x, y) in lay.positions.items():
         if name in notes:

@@ -48,5 +48,6 @@ class ClassDiagram:
     classes: dict[str, ClassDef] = field(default_factory=dict)
     relationships: list[Relationship] = field(default_factory=list)
     notes: list[Note] = field(default_factory=list)
+    namespaces: dict[str, list[str]] = field(default_factory=dict)  # name -> its classes
     direction: str = "TB"              # "TB" or "LR"
     warnings: list[str] = field(default_factory=list)

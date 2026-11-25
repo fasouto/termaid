@@ -53,6 +53,9 @@ _NOTE_RE = re.compile(
     r'^\s*note\s+"([^"]*)"\s*$', re.IGNORECASE
 )
 
+# Namespace block opener: namespace BaseShapes {
+_NAMESPACE_RE = re.compile(r"^\s*namespace\s+(\S+?)\s*\{\s*$")
+
 # Lines to skip silently
 _SKIP_RE = re.compile(
     r"^\s*(?:namespace\s|style\s|classDef\s|cssClass\s|click\s|callback\s|link\s)",
@@ -143,6 +146,7 @@ def parse_class_diagram(text: str) -> ClassDiagram:
     diagram = ClassDiagram()
     lines = text.split("\n")
     i = 0
+    namespaces: list[str] = []
 
     while i < len(lines):
         stripped = lines[i].strip()
@@ -152,13 +156,21 @@ def parse_class_diagram(text: str) -> ClassDiagram:
         if not stripped or stripped.startswith("classDiagram") or stripped.startswith("%%") or stripped == "---":
             continue
 
+        m = _NAMESPACE_RE.match(stripped)
+        if m:
+            namespaces.append(m.group(1))
+            diagram.namespaces.setdefault(m.group(1), [])
+            continue
+
         # Skip unsupported constructs (with warning)
         if _SKIP_RE.match(stripped):
             diagram.warnings.append(f"Unsupported directive (ignored): {stripped!r}")
             continue
 
-        # Closing brace (stray)
+        # Closing brace: the end of a namespace, or stray
         if stripped == "}":
+            if namespaces:
+                namespaces.pop()
             continue
 
         # Note for a specific class
@@ -200,6 +212,8 @@ def parse_class_diagram(text: str) -> ClassDiagram:
             class_name = _name(m.group(1))
             _ensure_class(diagram, class_name)
             cls = diagram.classes[class_name]
+            if namespaces and class_name not in diagram.namespaces[namespaces[-1]]:
+                diagram.namespaces[namespaces[-1]].append(class_name)
             if m.group(3) is not None:
                 cls.label = m.group(3)
             elif m.group(2):
