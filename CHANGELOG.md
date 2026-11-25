@@ -4,6 +4,7 @@
 
 ### Behavior changes
 - Flowchart: the extra passes that add space between crowded layers now run only on graphs of up to 24 edges. Larger flowcharts draw several times faster and can come out a little narrower or shorter, with a few more lines sharing a gap
+- Flowchart: unlabelled edges of one style into the same box share one line and one arrowhead, the way edges out of one box already do. A box with 60 incoming edges draws in 0.05 s where it took 1.3 s, on 13 rows where it took 195. Labelled edges keep their own line
 - Flowchart: a subgraph title wider than its nodes is clipped with `…` where the whole title would push the box onto the node or subgraph beside it. With nothing beside it the box still grows to show the whole title
 
 ### Fixes
