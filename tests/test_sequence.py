@@ -749,3 +749,31 @@ class TestSelfMessageLayout:
             "  A->>B: 这是一个很长的中文标签测试"
         )
         assert "这是一个很长的中文标签测试" in output
+
+
+def _lifeline_column(output: str, name: str) -> int:
+    """Column of a participant's lifeline: the centre of its header label."""
+    header = next(line for line in output.splitlines() if name in line)
+    return header.index(name) + len(name) // 2
+
+
+def _note_row(output: str, text: str) -> str:
+    return next(line for line in output.splitlines() if text in line)
+
+
+class TestNotesBesideTheFirstParticipant:
+    def test_left_note_stays_left_of_the_lifeline(self):
+        output = render(
+            "sequenceDiagram\n  Alice->>Bob: Hi\n  Note left of Alice: Alice waits for a reply"
+        )
+        row = _note_row(output, "Alice waits for a reply")
+        assert row.rstrip().endswith("│")
+        assert len(row.rstrip()) - 1 < _lifeline_column(output, "Alice")
+
+    def test_wide_note_over_stays_centred_on_its_lifeline(self):
+        output = render(
+            "sequenceDiagram\n  Alice->>Bob: Hi\n  Note over Alice: Alice waits for a reply here"
+        )
+        row = _note_row(output, "Alice waits for a reply here")
+        left, right = row.index("│"), len(row.rstrip()) - 1
+        assert abs((left + right) // 2 - _lifeline_column(output, "Alice")) <= 1
