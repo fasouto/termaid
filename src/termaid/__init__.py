@@ -265,7 +265,9 @@ def _render_canvas(
     if text.startswith("gantt"):
         from .parser.gantt import parse_gantt
         from .renderer.gantt import render_gantt
-        return _Rendered(render_gantt(parse_gantt(text), use_ascii=use_ascii))
+        return _Rendered(render_gantt(
+            parse_gantt(text), use_ascii=use_ascii, padding_x=padding_x, max_label_width=max_label_width,
+        ))
 
     if text.startswith("pie"):
         from .parser.piechart import parse_pie_chart

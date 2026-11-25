@@ -17,6 +17,8 @@ from .canvas import Canvas
 
 
 _DEFAULT_WIDTH = 80
+# Below this many columns of bars, task names are clipped instead.
+_MIN_CHART_WIDTH = 20
 _BAR_CHAR = "█"
 _ACTIVE_CHAR = "▓"
 _DONE_CHAR = "░"
@@ -130,7 +132,7 @@ def _default_ticks(scale: _Scale, chart_w: int, fmt: str) -> list[tuple[int, str
     if scale.span < unit:
         unit = next((u for u in _SUB_DAY_UNITS if scale.span >= 2 * u), _SUB_DAY_UNITS[-1])
     total_units = scale.span / unit
-    n_ticks = max(2, min(6, int(total_units)))
+    n_ticks = max(2, min(6, int(total_units), chart_w // 9))
     return [
         (
             scale.x0 + int(i / n_ticks * (chart_w - 2)),
@@ -163,8 +165,16 @@ def render_gantt(
     *,
     use_ascii: bool = False,
     width: int = _DEFAULT_WIDTH,
+    padding_x: int = 4,
+    max_label_width: int | None = None,
 ) -> Canvas:
-    """Render a Gantt model to a Canvas."""
+    """Render a Gantt model to a Canvas.
+
+    Each step of ``padding_x`` below 4 takes 10 columns off ``width``, so
+    ``fit_to_width`` can narrow the chart; ``max_label_width`` clips task and
+    section names once the chart is as narrow as it goes.
+    """
+    width -= 10 * (4 - min(max(padding_x, 0), 4))
     if not diagram.sections:
         return Canvas(1, 1)
 
@@ -179,7 +189,7 @@ def render_gantt(
 
     # Collect all tasks and the label width
     all_tasks: list[tuple[str, list[tuple[str, datetime | None, datetime | None, str]]]] = []
-    max_label_width = 0
+    label_w = 0
 
     for section in diagram.sections:
         section_tasks: list[tuple[str, datetime | None, datetime | None, str]] = []
@@ -197,10 +207,10 @@ def render_gantt(
                 style = "normal"
 
             section_tasks.append((task.title, task.start, task.end, style))
-            max_label_width = max(max_label_width, display_width(task.title))
+            label_w = max(label_w, display_width(task.title))
 
         all_tasks.append((section.title, section_tasks))
-        max_label_width = max(max_label_width, display_width(section.title) + 2)
+        label_w = max(label_w, display_width(section.title) + 2)
 
     time_range = diagram.time_range()
     if time_range is None:
@@ -214,11 +224,13 @@ def render_gantt(
         else:
             min_date = max_date - timedelta(days=1)
 
+    if max_label_width is not None:
+        label_w = min(label_w, max(max_label_width, 1))
+
     # Layout: labels start at column 3 and need a blank column before the axis
-    margin_l = max_label_width + 4
-    chart_w = width - margin_l - 1
-    if chart_w < 10:
-        chart_w = 10
+    margin_l = label_w + 4
+    # The last axis label ends one column past the chart.
+    chart_w = max(width - margin_l - 2, _MIN_CHART_WIDTH)
     scale = _Scale(min_date, max_date, margin_l + 1, chart_w - 1)
 
     # Compute rows
@@ -237,15 +249,16 @@ def render_gantt(
 
     # Title
     if diagram.title:
-        tx = margin_l + (chart_w - display_width(diagram.title)) // 2
-        canvas.put_text(0, max(0, tx), diagram.title, style="label")
+        title = truncate_to_width(diagram.title, total_w)
+        tx = margin_l + (chart_w - display_width(title)) // 2
+        canvas.put_text(0, max(0, min(tx, total_w - display_width(title))), title, style="label")
 
     # Draw tasks
     row = title_rows
     section_idx = 0
     for section_title, tasks in all_tasks:
         if section_title:
-            canvas.put_text(row, 1, section_title, style=f"sectionfg:{section_idx}")
+            canvas.put_text(row, 1, truncate_to_width(section_title, margin_l - 2), style=f"sectionfg:{section_idx}")
             row += 1
 
         for title, start, end, style in tasks:
