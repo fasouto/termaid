@@ -440,11 +440,12 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
 
     layer_lists = best_ordering
 
-    # Enforce topological order for orthogonal subgraph nodes in the same layer
-    ortho_sets = _get_orthogonal_sg_nodes(graph)
+    # Enforce topological order for orthogonal subgraph nodes in the same
+    # layer, reversed for a subgraph that runs RL or BT.
+    ortho_sets = _orthogonal_subgraphs(graph)
     if ortho_sets:
         for layer in layer_lists:
-            for sg_nodes in ortho_sets:
+            for sg_nodes, backward in ortho_sets:
                 in_layer = [n for n in layer if n in sg_nodes]
                 if len(in_layer) <= 1:
                     continue
@@ -470,9 +471,12 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
                 # A cycle leaves topo incomplete; rewriting then duplicates
                 # some nodes and drops others, so keep the original order.
                 positions = [i for i, n in enumerate(layer) if n in internal]
-                if len(topo) == len(positions):
-                    for idx, pos in enumerate(positions):
-                        layer[pos] = topo[idx]
+                if len(topo) != len(positions):
+                    topo = in_layer
+                if backward:
+                    topo = topo[::-1]
+                for idx, pos in enumerate(positions):
+                    layer[pos] = topo[idx]
 
     return layer_lists
 
@@ -556,15 +560,58 @@ def compute_gap_expansions(
 
 def _get_orthogonal_sg_nodes(graph: Graph) -> list[set[str]]:
     """Find sets of node IDs in subgraphs whose direction is orthogonal to the graph's."""
-    graph_vertical = graph.direction.normalized().is_vertical
+    return [nodes for nodes, _ in _orthogonal_subgraphs(graph)]
+
+
+def backward_subgraph_nodes(graph: Graph) -> list[set[str]]:
+    """The members of each subgraph that runs against the graph's flow on
+    the same axis, such as ``direction RL`` inside an LR graph.
+
+    As in Mermaid, a subgraph with a node linked to the outside follows
+    the graph's direction instead.
+    """
+    vertical = graph.direction.normalized().is_vertical
     result: list[set[str]] = []
+
+    def _walk(subs: list[Subgraph]) -> None:
+        for sg in subs:
+            d = sg.direction
+            if d is not None and d.normalized().is_vertical == vertical and d.is_reversed != graph.direction.is_reversed:
+                members = set(sg.node_ids)
+                if not any((e.source in members) != (e.target in members) for e in graph.edges):
+                    result.append(members)
+            _walk(sg.children)
+
+    _walk(graph.subgraphs)
+    return result
+
+
+def reverse_backward_subgraphs(graph: Graph, layers: dict[str, int]) -> dict[str, int]:
+    """Turn the layers of each subgraph that runs against the flow end
+    over end, so its first node sits where its last one did."""
+    for members in backward_subgraph_nodes(graph):
+        present = [n for n in members if n in layers]
+        if len(present) < 2:
+            continue
+        lo = min(layers[n] for n in present)
+        hi = max(layers[n] for n in present)
+        for n in present:
+            layers[n] = lo + hi - layers[n]
+    return layers
+
+
+def _orthogonal_subgraphs(graph: Graph) -> list[tuple[set[str], bool]]:
+    """The node IDs of each subgraph laid out across the graph's flow, and
+    whether it runs backward along that cross axis (RL or BT)."""
+    graph_vertical = graph.direction.normalized().is_vertical
+    result: list[tuple[set[str], bool]] = []
 
     def _walk(subs: list[Subgraph]) -> None:
         for sg in subs:
             if sg.direction is not None:
                 sg_vertical = sg.direction.normalized().is_vertical
                 if sg_vertical != graph_vertical:
-                    result.append(set(sg.node_ids))
+                    result.append((set(sg.node_ids), sg.direction.is_reversed))
             _walk(sg.children)
 
     _walk(graph.subgraphs)

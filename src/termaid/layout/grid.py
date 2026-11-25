@@ -195,6 +195,7 @@ def compute_layout(
         compute_gap_expansions,
         expand_subgraph_edges,
         order_layers,
+        reverse_backward_subgraphs,
         separate_subgraph_layers,
     )
     from .placement import place_nodes, compute_sizes, normalize_sizes
@@ -228,6 +229,7 @@ def compute_layout(
         finally:
             if virtual_edges:
                 del graph.edges[len(graph.edges) - len(virtual_edges):]
+        layers = reverse_backward_subgraphs(graph, layers)
 
         # Step 2: Order nodes within layers (barycenter heuristic)
         layer_order = order_layers(graph, layers)

@@ -14,7 +14,7 @@ from ..graph.model import Direction, Edge, Graph
 from ..layout.grid import (
     SG_BORDER_PAD, GridLayout, NodePlacement, SubgraphBounds, compute_layout,
 )
-from ..layout.layers import BusKey, bus_edges
+from ..layout.layers import BusKey, backward_subgraph_nodes, bus_edges
 from .pathfinder import find_path, simplify_path
 
 
@@ -163,9 +163,15 @@ def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> 
     facing_homes: list[tuple[RoutedEdge, set[str]]] = []
 
     endpoints = [_resolve_endpoints(edge, layout, sg_bounds) for edge in graph.edges]
+    backward = backward_subgraph_nodes(graph)
+    flows = [
+        _BACKWARD[direction]
+        if any(edge.source in nodes and edge.target in nodes for nodes in backward) else direction
+        for edge in graph.edges
+    ]
     places = [_endpoint_places(edge, graph) for edge in graph.edges]
     ends = {
-        i: _end_cells(src, tgt, direction)
+        i: _end_cells(src, tgt, flows[i])
         for i, (src, tgt) in enumerate(endpoints)
         if src is not None and tgt is not None and not graph.edges[i].is_self_reference
     }
@@ -215,7 +221,7 @@ def route_edges(graph: Graph, layout: GridLayout, find_crowded: bool = True) -> 
         key = bus_of.get(i)
         bus = bus_cells.setdefault(key, _BusCells()) if key else _BusCells()
         re = _route_edge(
-            edge, src, tgt, layout, direction, (shared - bus.branches) | forbidden,
+            edge, src, tgt, layout, flows[i], (shared - bus.branches) | forbidden,
             _prefer_cells(bus.preferred, penalty), crossings, blocked, find_crowded,
         )
         re.index = i
@@ -1151,14 +1157,25 @@ def _get_attach_point(
         return (gc.col + 1, gc.row)
 
 
+_BACKWARD = {Direction.LR: Direction.RL, Direction.TB: Direction.BT}
+
+
 def _determine_directions(
     src: NodePlacement,
     tgt: NodePlacement,
     direction: Direction,
 ) -> tuple[tuple[AttachDir, AttachDir], tuple[AttachDir, AttachDir]]:
-    """Determine preferred and alternative start/end attachment directions."""
+    """Determine preferred and alternative start/end attachment directions.
+
+    RL and BT name an edge inside a subgraph that runs against the flow:
+    an edge to the node straight before its source runs forward.
+    """
     sc, sr = src.grid.col, src.grid.row
     tc, tr = tgt.grid.col, tgt.grid.row
+    if direction is Direction.RL and tc < sc and tr == sr:
+        return (AttachDir.LEFT, AttachDir.RIGHT), (AttachDir.LEFT, AttachDir.RIGHT)
+    if direction is Direction.BT and tr < sr and tc == sc:
+        return (AttachDir.TOP, AttachDir.BOTTOM), (AttachDir.TOP, AttachDir.BOTTOM)
 
     if direction.is_horizontal:
         # Primary flow is left-to-right
