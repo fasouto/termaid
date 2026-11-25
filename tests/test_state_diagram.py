@@ -382,3 +382,9 @@ class TestStateDescriptions:
         assert "Another simple" in output
         assert "NamedComposite" not in output
         assert "namedSimple" not in output
+
+
+def test_ascii_start_and_end_states_use_ascii_marks():
+    output = render("stateDiagram-v2\n    [*] --> A\n    A --> [*]", use_ascii=True)
+    assert "A" in output
+    assert output.isascii()
