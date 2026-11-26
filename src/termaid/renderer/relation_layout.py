@@ -316,7 +316,9 @@ def _assign_tracks(
     not touch. ``ends`` gives each line's (entry, exit) position across the
     gap, straight lines included: a line entering inside another's run
     must take an earlier track and one leaving inside it a later track, or
-    it would cut through that run. Returns {key: track_index}.
+    it would cut through that run. A line entering where another's run
+    leaves must take an earlier track too, or the two would share the
+    row (column) between their tracks. Returns {key: track_index}.
     """
     keys = sorted(intervals, key=lambda k: intervals[k])
     after: dict[int, set[int]] = {k: set() for k in keys}
@@ -327,7 +329,7 @@ def _assign_tracks(
                 if j == i:
                     continue
                 entry, leave = ends[j]
-                if low < entry < high and not low < leave < high:
+                if entry == ends[i][1] or low < entry < high and not low < leave < high:
                     after[i].add(j)
                 elif low < leave < high and not low < entry < high:
                     after[j].add(i)
@@ -740,7 +742,7 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
             if l in sizes:
                 body = display_width(link.label) + 2 if link.label and chain_of[i].items[-1] == l else 0
                 tail = max(tail, body + display_width(near_l) + 3)
-        tracks = _assign_tracks(runs)
+        tracks = _assign_tracks(runs, geo)
         n_tracks = max(tracks.values(), default=-1) + 1
         plans.append((geo, tracks, lead, n_tracks, tail))
 
