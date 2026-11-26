@@ -230,6 +230,12 @@ class TestAscii:
         assert "|-" not in out and "-|" not in out
         assert out.count("v") == 2
 
+    @pytest.mark.parametrize("direction, marker", [("LR", "<|"), ("RL", "|>")])
+    def test_cardinality_leaves_the_two_cell_inheritance_marker_whole(self, direction, marker):
+        out = render(f'classDiagram\n  direction {direction}\n  A "1" <|-- "many" B', use_ascii=True)
+        assert marker in out, out
+        assert "1" in out and "many" in out
+
 
 def _box_span(out: str, name: str) -> tuple[int, int, int]:
     """(bottom border row, left column, right column) of the box whose title is ``name``."""
