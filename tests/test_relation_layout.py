@@ -255,3 +255,28 @@ class TestManyLinksOnOneFace:
         assert below.count("│") == 10
         assert all(left < c < right for c, ch in enumerate(below) if ch == "│"), below
         assert all(left <= c <= right for c, ch in enumerate(below) if ch != " "), below
+
+
+class TestSeveralSelfLoops:
+    def test_class_loops_return_on_their_own_rows_with_whole_labels(self):
+        out = render("classDiagram\n  A --> A : parent\n  A --> A : child")
+        assert "parent" in out and "child" in out
+        rows = [i for i, row in enumerate(out.split("\n")) if "◄" in row]
+        assert len(rows) == 2 and len(set(rows)) == 2
+
+    def test_er_loops_keep_their_labels_whole(self):
+        out = render("erDiagram\n  A ||--o{ A : parent\n  A ||--o{ A : child")
+        assert "parent" in out and "child" in out
+        assert out.count("0..*") == 2
+
+    def test_lr_loops_all_leave_from_under_the_box(self):
+        out = render("classDiagram\n  direction LR\n" + "  A --> A\n" * 4)
+        bottom, left, right = _box_span(out, "A")
+        grid = out.split("\n")
+        assert out.count("▲") == 4
+        assert grid[bottom].count("┬") == 4
+        assert all(left < c < right for c, ch in enumerate(grid[bottom + 1]) if ch != " ")
+
+    def test_lr_loop_labels_stay_whole(self):
+        out = render('classDiagram\n  direction LR\n  A "1" --> "*" A : self\n  A --> A : again')
+        assert "self" in out and "again" in out
