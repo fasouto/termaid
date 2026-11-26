@@ -80,12 +80,14 @@ def assign_layers(graph: Graph, drawn: list[Edge] | None = None) -> dict[str, in
     # layers, and each layer gap an edge crosses needs a lane of its own, so
     # the drawing gets much taller and slower to route. There the
     # breadth-first tree is kept, which ranks each node by its shortest
-    # path from a root.
+    # path from a root. Decided per connected part, so that many small
+    # parts do not add up to one dense graph.
     tree = _bfs_tree_links(graph)
     tree_layers = _relax(graph, tree, edge_min_lengths)
-    drawn = graph.edges if drawn is None else drawn
-    if _span(drawn, layers) - _span(drawn, tree_layers) > _MAX_EXTRA_SPAN:
-        links, layers = tree, tree_layers
+    dense = _dense_parts(graph, graph.edges if drawn is None else drawn, layers, tree_layers)
+    if dense:
+        layers = {nid: tree_layers[nid] if nid in dense else layer for nid, layer in layers.items()}
+        links = [l for l in links if l[0] not in dense] + [l for l in tree if l[0] in dense]
     has_parent = {tgt for _, tgt in links}
 
     # Collapse orthogonal subgraph nodes to the same layer
@@ -136,18 +138,40 @@ def assign_layers(graph: Graph, drawn: list[Edge] | None = None) -> dict[str, in
     return layers
 
 
-# Longest-path layering is kept unless its drawn edges cross this many more
-# layer gaps in all than with the breadth-first tree. Measured: at most 8 in
-# the test fixtures, at least 45 in random graphs of 40 nodes and 60 edges.
+# Longest-path layering is kept for a connected part unless its drawn edges
+# cross more than this many more layer gaps in all than with the
+# breadth-first tree, and more than three for every four of its edges.
+# Measured: at most 5 more in the test fixtures; 2 for every 3 or 4 edges
+# in a flow of if/else merges, 0.72 per edge with ifs nested two deep; at
+# least 0.78 per edge (45 over 58) in random graphs of 40 nodes and 60 edges.
 _MAX_EXTRA_SPAN = 16
 
 
-def _span(edges: list[Edge], layers: dict[str, int]) -> int:
-    """How many layer gaps the edges cross in all."""
-    return sum(
-        abs(layers[e.target] - layers[e.source])
-        for e in edges if e.source in layers and e.target in layers
-    )
+def _dense_parts(
+    graph: Graph, drawn: list[Edge], layers: dict[str, int], tree_layers: dict[str, int],
+) -> set[str]:
+    """The nodes of each connected part whose longest-path layers stretch
+    its edges too far, as ``_MAX_EXTRA_SPAN`` sets out."""
+    part = {nid: nid for nid in layers}
+
+    def find(nid: str) -> str:
+        while part[nid] != nid:
+            part[nid] = part[part[nid]]
+            nid = part[nid]
+        return nid
+
+    for e in graph.edges:
+        if e.source in part and e.target in part:
+            part[find(e.source)] = find(e.target)
+    extra: Counter[str] = Counter()
+    edges: Counter[str] = Counter()
+    for e in drawn:
+        if e.source in part and e.target in part and e.source in tree_layers and e.target in tree_layers:
+            root = find(e.source)
+            extra[root] += abs(layers[e.target] - layers[e.source]) - abs(tree_layers[e.target] - tree_layers[e.source])
+            edges[root] += 1
+    dense = {root for root, n in extra.items() if n > _MAX_EXTRA_SPAN and 4 * n > 3 * edges[root]}
+    return {nid for nid in part if find(nid) in dense} if dense else set()
 
 
 def _relax(
@@ -538,7 +562,58 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
                 for idx, pos in enumerate(positions):
                     layer[pos] = topo[idx]
 
+    if graph.subgraphs:
+        layer_lists = [_group_subgraph_members(graph, layer) for layer in layer_lists]
     return layer_lists
+
+
+def _group_subgraph_members(graph: Graph, layer: list[str]) -> list[str]:
+    """Reorder a layer so each subgraph's members in it sit together.
+
+    A box is drawn around all its members, so a node of the layer between
+    two of them would be drawn inside it. Each subgraph, and each nested
+    one within it, moves as a block to the mean position of its members,
+    and a node outside it goes before or after the block, whichever side
+    it was nearer. An order that already keeps every block together is
+    left as it is.
+    """
+    position = {nid: i for i, nid in enumerate(layer)}
+    chains: dict[str, list[str]] = {}
+    for nid in layer:
+        chain: list[str] = []
+        sg = graph.find_subgraph_for_node(nid)
+        while sg:
+            chain.append(sg.id)
+            sg = sg.parent
+        chains[nid] = chain[::-1]
+
+    def arrange(nodes: list[str], depth: int) -> list[str]:
+        items: list[str | list[str]] = []
+        blocks: dict[str, list[str]] = {}
+        for nid in nodes:
+            chain = chains[nid]
+            if len(chain) <= depth:
+                items.append(nid)
+            elif chain[depth] in blocks:
+                blocks[chain[depth]].append(nid)
+            else:
+                blocks[chain[depth]] = [nid]
+                items.append(blocks[chain[depth]])
+
+        def mean_position(item: str | list[str]) -> float:
+            if isinstance(item, str):
+                return position[item]
+            return sum(position[n] for n in item) / len(item)
+
+        result: list[str] = []
+        for item in sorted(items, key=mean_position):
+            if isinstance(item, str):
+                result.append(item)
+            else:
+                result.extend(arrange(item, depth + 1))
+        return result
+
+    return arrange(layer, 0)
 
 
 class BusKey(NamedTuple):

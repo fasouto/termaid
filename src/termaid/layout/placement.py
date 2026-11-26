@@ -97,8 +97,10 @@ def _keep_outsiders_out(graph: Graph, layer_order: list[list[str]], slots: dict[
 
     A box spans its members' layers and slots, so a node of another layer
     between them can sit under it. Such a node moves past the box, with
-    the nodes after it in its layer. A node with members of the box after
-    it in its layer stays put, since moving those members widens the box.
+    the nodes after it in its layer. When members of the box come after it
+    in its layer (layers keep each box's members together, so the rest
+    come after them), the box moves past the node instead: in each of its
+    layers its members and the nodes after them.
     """
     member_sets: list[set[str]] = []
 
@@ -112,7 +114,7 @@ def _keep_outsiders_out(graph: Graph, layer_order: list[list[str]], slots: dict[
 
     collect(graph.subgraphs)
     layer_of = {nid: li for li, nodes in enumerate(layer_order) for nid in nodes}
-    for _ in range(len(member_sets) + 1):
+    for _ in range(len(slots) + len(member_sets)):
         moved = False
         for members in member_sets:
             present = [n for n in members if n in slots]
@@ -127,11 +129,21 @@ def _keep_outsiders_out(graph: Graph, layer_order: list[list[str]], slots: dict[
                     if nid in members or not low <= slots[nid] <= high:
                         continue
                     if any(n in members for n in nodes[i + 1:]):
-                        break
-                    shift = high + 1 - slots[nid]
-                    for n in nodes[i:]:
-                        slots[n] += shift
+                        shift = slots[nid] + 1 - low
+                        for box_layer in layer_order[first:last + 1]:
+                            starts = [j for j, n in enumerate(box_layer) if n in members]
+                            start = starts[0] if starts else next(
+                                (j for j, n in enumerate(box_layer) if slots[n] >= low), len(box_layer),
+                            )
+                            for n in box_layer[start:]:
+                                slots[n] += shift
+                    else:
+                        shift = high + 1 - slots[nid]
+                        for n in nodes[i:]:
+                            slots[n] += shift
                     moved = True
+                    break
+                if moved:
                     break
         if not moved:
             return

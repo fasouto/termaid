@@ -172,6 +172,23 @@ class TestOutsideNodeBetweenMembers:
         )
         assert_subgraphs(render(src), {"S": ["a", "b"]}, outside=["r", "q", "p"])
 
+    @pytest.mark.parametrize("d", ["TD", "LR", "BT", "RL"])
+    def test_a_sibling_declared_between_members_stays_outside(self, d):
+        src = (
+            f"flowchart {d}\n  R --> A\n  R --> X\n  R --> B\n"
+            "  subgraph S\n    A\n    B\n  end\n"
+        )
+        assert_subgraphs(render(src), {"S": ["A", "B"]}, outside=["R", "X"])
+
+    def test_a_sibling_between_nested_members_stays_outside_both(self):
+        src = (
+            "flowchart TD\n  R --> A & X & B & C\n"
+            "  subgraph Outer\n    C\n    subgraph Inner\n      A\n      B\n    end\n  end\n"
+        )
+        assert_subgraphs(render(src), {"Inner": ["A", "B"]}, outside=["R", "X"])
+        lines = render(src).split("\n")
+        assert not _touch(_node(lines, "X"), subgraph_box(lines, "Outer")), render(src)
+
     def test_a_node_between_nested_members_stays_outside_both(self):
         src = (
             "flowchart LR\n"
