@@ -286,7 +286,9 @@ def _ports(
             cards = [display_width(links[i].card_a if links[i].a == item else links[i].card_b)
                      for _, i, _ in ends]
         spacing = max(min_spacing, max(cards) + 2, (wide or {}).get((item, face), 0))
-        room = span_of[item] - 2
+        # Ends spread evenly about the centre cell stay off both corners.
+        centre = span_of[item] // 2
+        room = 2 * min(centre - 1, span_of[item] - 2 - centre) + 1
         if (n - 1) * spacing > room:
             spacing = max(min(2, min_spacing), room // (n - 1))
         spread = [int((j - (n - 1) / 2) * spacing) for j in range(n)]
