@@ -174,6 +174,13 @@ def _put_marker(canvas: Canvas, end: End, ch: str) -> None:
     canvas.put(end.row, end.col, ch, merge=False, style="arrow")
 
 
+def _past_marker(card: str, at, marker: str, end: End, cs: CharSet, use_ascii: bool):
+    """(card, position) with the card moved off a two-cell marker it would cover."""
+    if at is not None and end.toward in ("left", "right") and len(_marker_char(marker, end.toward, cs, use_ascii)) == 2:
+        at = (at[0], at[1] + (1 if end.toward == "left" else -1))
+    return card, at
+
+
 def _link(rel: Relationship) -> Link:
     # The marker points at the parent: "Animal <|-- Duck" and "Duck --|> Animal"
     # both put Animal above Duck. Other relationships run source to target.
@@ -314,7 +321,8 @@ def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padd
     for rel, route in zip(diagram.relationships, lay.routes):
         if route is None:
             continue
-        for text, at in ((rel.source_card, route.card_a_at), (rel.target_card, route.card_b_at),
+        for text, at in (_past_marker(rel.source_card, route.card_a_at, rel.source_marker, route.a, cs, use_ascii),
+                         _past_marker(rel.target_card, route.card_b_at, rel.target_marker, route.b, cs, use_ascii),
                          (rel.label, route.label_at)):
             if text and at is not None:
                 put_label(canvas, at, text)
