@@ -384,15 +384,19 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
     names = list(sizes)
     layers, segs, chains = _build(names, links)
     sizes = _fit_ends(sizes, segs, links, 0)
+    loops = _self_loops(set(names), links)
+    for node, idxs in loops.items():
+        # Each loop leaves and comes back on rows of its own.
+        w, h = sizes[node]
+        sizes[node] = (w, max(h, 2 * len(idxs) + 1))
     width_of = {item: (sizes[item][0] if item in sizes else 1) for layer in layers for item in layer}
     ports = _ports(layers, segs, links, width_of, 4, True)
-    loops = _self_loops(set(names), links)
     next_of = {layer[p]: layer[p + 1] for layer in layers for p in range(len(layer) - 1)}
 
     extra: dict[str, int] = {}
     for node, idxs in loops.items():
-        # Loops nest to the right of their box, labels beyond them.
-        far = max(_loop_room(links[i]) for i in idxs) + 2 * (len(idxs) - 1)
+        # Loops sit to the right of their box, each label beyond its loop.
+        far = max(_loop_room(links[i]) for i in idxs)
         extra[node] = far + max(display_width(links[i].label) + 3 for i in idxs) + 1
 
     def sep(left: str, right: str) -> int:
@@ -504,7 +508,7 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
         w, h = sizes[node]
         far = max(_loop_room(links[i]) for i in idxs)
         for j, i in enumerate(idxs):
-            routes[i] = _side_loop(links[i], x, y, w, h, far + 2 * j, j)
+            routes[i] = _side_loop(links[i], x, y, w, far, j)
         canvas_w = max(canvas_w, x + w + extra[node] + MARGIN)
 
     for r in routes:
@@ -637,24 +641,35 @@ def _fit_row(rows: list[list[tuple[int, int]]], start: int, end: int, grow: bool
     return len(rows) - 1
 
 
-def _side_loop(link: Link, x: int, y: int, w: int, h: int, reach: int, j: int) -> Route:
-    """A loop out of a box's top-right corner and back into its right side."""
+def _side_loop(link: Link, x: int, y: int, w: int, reach: int, j: int) -> Route:
+    """The j-th loop on a box's right side, out on row 2j and back on the
+    row below; the first leaves from the top-right corner."""
     right = x + w - 1
     corner = right + reach
-    back = y + 1 + j if j < h - 2 else y + 1
-    pts = [(y, right), (y, corner), (back, corner), (back, right + 1)]
-    a = End(y, right + 1, "left")
+    out, back = y + 2 * j, y + 2 * j + 1
+    pts = [(out, right if j == 0 else right + 1), (out, corner), (back, corner), (back, right + 1)]
+    a = End(out, right + 1, "left")
     b = End(back, right + 1, "left")
     label_at = (back, corner + 2) if link.label else None
-    return Route(pts, a, b, label_at, (y, right + 2), (back, right + 2))
+    return Route(pts, a, b, label_at, (out, right + 2), (back, right + 2))
 
 
-def _under_loop(link: Link, x: int, y: int, w: int, h: int, j: int) -> Route:
+def _under_spans(links: list[Link], idxs: list[int]) -> list[tuple[int, int]]:
+    """(left, right) columns, from a box's left border, of each loop under
+    it: side by side, each label after its loop and before the next."""
+    spans = []
+    left = 2
+    for i in idxs:
+        right = left + _loop_room(links[i])
+        spans.append((left, right))
+        left = right + 2 + (display_width(links[i].label) + 1 if links[i].label else 0)
+    return spans
+
+
+def _under_loop(link: Link, x: int, y: int, h: int, span: tuple[int, int]) -> Route:
     """A loop out of a box's bottom border and back into it."""
     bottom = y + h - 1
-    room = _loop_room(link)
-    left = x + 2 + j * (room + 1)
-    right = min(left + room, x + w - 3)
+    left, right = x + span[0], x + span[1]
     low = bottom + 2
     pts = [(bottom + 1, left), (low, left), (low, right), (bottom + 1, right)]
     a = End(bottom + 1, left, "up")
@@ -671,9 +686,13 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
     layers, segs, chains = _build(names, links)
 
     sizes = _fit_ends(sizes, segs, links, 1)
+    loops = _self_loops(set(names), links)
+    spans = {node: _under_spans(links, idxs) for node, idxs in loops.items()}
+    for node, node_spans in spans.items():
+        w, h = sizes[node]
+        sizes[node] = (max(w, node_spans[-1][1] + 3), h)
     height_of = {item: (sizes[item][1] if item in sizes else 1) for layer in layers for item in layer}
     ports = _ports(layers, segs, links, height_of, 2, False)
-    loops = _self_loops(set(names), links)
     chain_of = {ch.link: ch for ch in chains}
 
     # Rows: boxes stacked in each column, columns centred vertically.
@@ -781,8 +800,8 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
     for node, idxs in loops.items():
         x, y = positions[node]
         w, h = sizes[node]
-        for j, i in enumerate(idxs):
-            routes[i] = _under_loop(links[i], x, y, w, h, j)
+        for i, span in zip(idxs, spans[node]):
+            routes[i] = _under_loop(links[i], x, y, h, span)
             if links[i].label:
                 canvas_w = max(canvas_w, routes[i].label_at[1] + display_width(links[i].label) + MARGIN)
         canvas_h = max(canvas_h, y + h + 2 + MARGIN)
