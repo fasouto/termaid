@@ -34,11 +34,11 @@ _COLON_MEMBER_RE = re.compile(r"^\s*" + _NAME + r"\s*:\s*(.+?)\s*$")
 # Right markers: |>, >, *, o  (longest first)
 _REL_RE = re.compile(
     r'^\s*' + _NAME + r'\s*'                  # source
-    r'(?:"([^"]*)")?\s*'                     # optional source cardinality
+    r'(?:"([^"]*)"\s*)?'                     # optional source cardinality, with the blanks after it
     r'((?:<\||[<*o])?)'                      # left marker
-    r'(--|\.\.|--\*|\.\.)'                   # line style
+    r'(--|\.\.)'                           # line style
     r'((?:\|>|[>*o])?)'                      # right marker
-    r'\s*(?:"([^"]*)")?\s*'                  # optional target cardinality
+    r'\s*(?:"([^"]*)"\s*)?'                  # optional target cardinality, with the blanks after it
     + _NAME +                                # target
     r'(?:\s*:\s*(.+?))?\s*$'                 # optional label
 )

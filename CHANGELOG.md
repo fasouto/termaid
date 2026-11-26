@@ -53,6 +53,9 @@
 - Flowchart: a return edge inside a sideways subgraph keeps its line and arrowhead
 - Flowchart: at narrow widths an edge turning into its target keeps both its corner and its arrowhead
 - Flowchart: `direction RL` and `direction BT` in a subgraph are honoured, and `~~~` invisible links leave no stubs on the boxes
+- Packet: a field that ends past bit 4095 is not drawn. One field of a hundred million bits never finished
+- Class: a line with a very long run of blanks is read at once. 20,000 blanks took 17 seconds
+- xychart: a value that is not a number keeps its place as 0, so the values after it stay under their own labels
 - Mindmap: a node written with an id and a shape, such as `root((Project))` or `id[Text]`, shows only its text. The id and brackets were drawn, and `((Text))` kept one pair of brackets. `::icon(...)` and `:::class` lines are no longer drawn as nodes
 
 ## 0.14.1 (2026-11-25)

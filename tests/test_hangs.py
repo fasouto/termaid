@@ -51,3 +51,48 @@ def test_a_packet_field_after_a_gap_is_dropped_with_a_warning():
 def test_a_very_long_link_parses_quickly(link):
     graph = finishes(lambda: parse(f"graph LR\nA {link} B"), seconds=10)
     assert graph is not None
+
+
+class TestReviewFindings:
+    """Inputs an adversarial review of 0.15.0 found slow or never-ending."""
+
+    def test_a_long_run_of_quote_marks_is_read_at_once(self):
+        import time
+        from termaid.claude_hook import StreamRenderer
+        from termaid.utils import OPEN_FENCE
+        start = time.perf_counter()
+        assert OPEN_FENCE.match("> " * 2000 + "x") is None
+        assert StreamRenderer(width=80).feed("> " * 200 + "x\n", final=True) == "> " * 200 + "x\n"
+        assert time.perf_counter() - start < 1
+
+    def test_a_fence_inside_quotes_is_still_found(self):
+        from termaid.utils import OPEN_FENCE
+        assert OPEN_FENCE.match("> > ```mermaid").group("indent", "fence", "info") == ("> > ", "```", "mermaid")
+        assert OPEN_FENCE.match(" >  ~~~~").group("indent") == " >  "
+
+    def test_a_class_line_of_blanks_is_read_at_once(self):
+        import time
+        from termaid import render
+        start = time.perf_counter()
+        render("classDiagram\nA" + " " * 20000 + "x")
+        assert "many" in render('classDiagram\nA "1"   -->   "many"   B : has')
+        assert time.perf_counter() - start < 1
+
+    def test_a_packet_field_of_a_hundred_million_bits_is_not_drawn(self):
+        import time
+        from termaid import render
+        start = time.perf_counter()
+        assert render('packet-beta\n0-99999999: "x"\n') == ""
+        out = render('packet-beta\n0-15: "Port"\n16-99999999: "x"\n')
+        assert "Port" in out and len(out) < 2000
+        assert time.perf_counter() - start < 1
+
+
+def test_a_chart_value_that_is_not_a_number_keeps_its_place():
+    from termaid import render
+    out = render("xychart-beta\n x-axis [a,b,c]\n bar [1,x,3]\n")
+    labels = out.split("\n")[-1]
+    assert labels.split() == ["a", "b", "c"]
+    column = labels.index("c")
+    assert any(line[column:column + 1] == "█" for line in out.split("\n")), out
+    assert not any(line[labels.index("b"):labels.index("b") + 1] == "█" for line in out.split("\n")), out

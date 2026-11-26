@@ -106,10 +106,11 @@ def _parse_number_list(text: str) -> list[float]:
         try:
             value = float(item)
         except ValueError:
-            continue
-        # Mermaid reads only plain numbers, never inf or nan.
-        if math.isfinite(value):
-            result.append(_bounded(value))
+            value = 0.0
+        # Mermaid reads only plain numbers, never inf or nan. A value that
+        # is not one keeps its place as 0, so the values after it stay
+        # under their own labels.
+        result.append(_bounded(value) if math.isfinite(value) else 0.0)
     return result
 
 

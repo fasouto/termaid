@@ -19,6 +19,10 @@ from ..model.packet import Packet, PacketField
 from ..utils import line_breaks, without_meta_lines
 
 
+# A packet is drawn a row per 32 bits; past this it is no longer a diagram.
+_MAX_BITS = 4096
+
+
 def parse_packet(text: str) -> Packet:
     """Parse a mermaid packet diagram definition."""
     lines = text.strip().splitlines()
@@ -76,6 +80,9 @@ def parse_packet(text: str) -> Packet:
     # As in Mermaid, each field must start where the last one ended
     fields, next_bit = [], 0
     for f in packet.fields:
+        if f.end >= _MAX_BITS:
+            packet.warnings.append(f"Packet field {f.start}-{f.end} is past bit {_MAX_BITS - 1}, the last one drawn")
+            break
         if f.start != next_bit or f.end < f.start:
             packet.warnings.append(f"Packet field {f.start}-{f.end} is invalid: expected it to start at bit {next_bit}")
             continue

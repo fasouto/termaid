@@ -13,7 +13,10 @@ DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
 # string. Any indentation is accepted so that diagrams nested in list items
 # are found, and so are blockquote markers; :func:`unfence` removes the
 # indent from the block's lines.
-OPEN_FENCE = re.compile(r"^(?P<indent>(?:[ \t]*>[ \t]?)*[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
+# Each `>` takes only the blanks before it: letting it also take one after
+# gave two ways to read every "> ", and a quoted line that is not a fence
+# was then tried in all of them (2^n for n marks).
+OPEN_FENCE = re.compile(r"^(?P<indent>(?:[ \t]*>)*[ \t]*)(?P<fence>`{3,}|~{3,})(?P<info>.*)$")
 _QUOTE_MARK = re.compile(r"[ \t]*>[ \t]?")
 
 
