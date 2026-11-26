@@ -263,6 +263,13 @@ class TestManyLinksOnOneFace:
         assert all(left < c < right for c, ch in enumerate(below) if ch == "│"), below
         assert all(left <= c <= right for c, ch in enumerate(below) if ch != " "), below
 
+    def test_ends_spaced_for_wide_cards_stay_off_the_corner(self):
+        out = render("classDiagram\n" + "".join(f'  A "12345" --> B{i}\n' for i in range(3)))
+        bottom, left, right = _box_span(out, "A")
+        below = out.split("\n")[bottom + 1]
+        assert below.count("│") == 3
+        assert all(left < c < right for c, ch in enumerate(below) if ch == "│"), out
+
 
 class TestSeveralSelfLoops:
     def test_class_loops_return_on_their_own_rows_with_whole_labels(self):
