@@ -6,6 +6,7 @@ import re
 import pytest
 
 from termaid import render
+from termaid.renderer.relation_layout import Link, layout
 
 _LINE_CHARS = set("│─┼┌┐└┘├┤┬┴▲▼►◄△▽◁▷◆◇┄┆")
 
@@ -280,3 +281,32 @@ class TestSeveralSelfLoops:
     def test_lr_loop_labels_stay_whole(self):
         out = render('classDiagram\n  direction LR\n  A "1" --> "*" A : self\n  A --> A : again')
         assert "self" in out and "again" in out
+
+
+def _shared_runs(links: list[Link], direction: str) -> list[tuple[int, int, int, int]]:
+    """Cells where lines of two different links run the same way, so they
+    read as one line; a plain crossing does not count."""
+    lay = layout({n: (16, 3) for link in links for n in (link.a, link.b)}, links, 4, direction)
+    seen: dict[tuple[int, int, str], int] = {}
+    shared = []
+    for i, route in enumerate(lay.routes):
+        pts = route.points
+        for (r1, c1), (r2, c2) in zip(pts, pts[1:]):
+            way = "v" if c1 == c2 else "h"
+            cells = ([(r, c1) for r in range(min(r1, r2), max(r1, r2) + 1)] if way == "v"
+                     else [(r1, c) for c in range(min(c1, c2), max(c1, c2) + 1)])
+            for r, c in cells:
+                if seen.setdefault((r, c, way), i) != i:
+                    shared.append((seen[(r, c, way)], i, r, c))
+    return shared
+
+
+class TestLinesKeepApart:
+    @pytest.mark.parametrize("direction", ["LR", "RL"])
+    def test_lr_lines_into_one_box_do_not_share_a_run(self, direction):
+        pairs = [("A", "B"), ("A", "C"), ("A", "D"), ("B", "D"), ("C", "D")]
+        assert _shared_runs([Link(a, b) for a, b in pairs], direction) == []
+
+    def test_lr_er_fan_out_does_not_share_a_run(self):
+        links = [Link("A", f"B{i}", True, "r", "1", "0..*") for i in range(6)]
+        assert _shared_runs(links, "LR") == []
