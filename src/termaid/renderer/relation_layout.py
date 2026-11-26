@@ -263,17 +263,46 @@ def _ports(
             for _, i, _ in ends:
                 offsets[(item, i, face)] = 0
             continue
-        spacing = min_spacing
+        cards = [0] * n
         if card_room:
-            for _, i, _ in ends:
-                link = links[i]
-                spacing = max(spacing, display_width(link.card_a if link.a == item else link.card_b) + 2)
+            cards = [display_width(links[i].card_a if links[i].a == item else links[i].card_b)
+                     for _, i, _ in ends]
+        spacing = max(min_spacing, max(cards) + 2)
         room = span_of[item] - 2
         if (n - 1) * spacing > room:
             spacing = max(min(2, min_spacing), room // (n - 1))
-        for j, (_, i, _) in enumerate(ends):
-            offsets[(item, i, face)] = int((j - (n - 1) / 2) * spacing)
+        spread = [int((j - (n - 1) / 2) * spacing) for j in range(n)]
+        # The last cardinality must still end inside the box.
+        over = span_of[item] // 2 + spread[-1] + cards[-1] - (span_of[item] - 1)
+        shift = -min(max(over, 0), span_of[item] // 2 + spread[0] - 1)
+        for (_, i, _), off in zip(ends, spread):
+            offsets[(item, i, face)] = off + shift
     return offsets
+
+
+def _fit_ends(sizes: dict[str, tuple[int, int]], segs, links: list[Link], axis: int) -> dict[str, tuple[int, int]]:
+    """Grow each box along ``axis`` (0 width, 1 height) so the ends on one
+    face fit with a blank cell between them and the corners.
+
+    Along a width the cardinality written beside each end must fit
+    between it and the next end too.
+    """
+    faces: dict[tuple[str, str], list[int]] = {}
+    for boundary in segs:
+        for u, l, i in boundary:
+            faces.setdefault((u, "next"), []).append(i)
+            faces.setdefault((l, "prev"), []).append(i)
+    grown = dict(sizes)
+    for (item, _), idxs in faces.items():
+        if item not in grown:
+            continue
+        card = 0
+        if axis == 0:
+            card = max(display_width(links[i].card_a if links[i].a == item else links[i].card_b) for i in idxs)
+        dims = list(grown[item])
+        dims[axis] = max(dims[axis], (len(idxs) - 1) * max(2, card + 1) + 3)
+        grown[item] = (dims[0], dims[1])
+    return grown
 
 
 def _assign_tracks(
@@ -354,6 +383,7 @@ def _self_loops(names: set[str], links: list[Link]) -> dict[str, list[int]]:
 def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -> Layout:
     names = list(sizes)
     layers, segs, chains = _build(names, links)
+    sizes = _fit_ends(sizes, segs, links, 0)
     width_of = {item: (sizes[item][0] if item in sizes else 1) for layer in layers for item in layer}
     ports = _ports(layers, segs, links, width_of, 4, True)
     loops = _self_loops(set(names), links)
@@ -481,7 +511,7 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
         if r is None:
             continue
         canvas_w = max(canvas_w, max(c for _, c in r.points) + 1 + MARGIN)
-    return Layout(positions, dict(sizes), canvas_w, canvas_h, routes)
+    return Layout(positions, sizes, canvas_w, canvas_h, routes)
 
 
 def _place_labels(links, chains, geos, tracks_of, gap):
@@ -640,18 +670,7 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
     names = list(sizes)
     layers, segs, chains = _build(names, links)
 
-    # Ends on a side face are a row apart, with a blank row between them;
-    # boxes grow to fit them.
-    face_count: dict[tuple[str, str], int] = {}
-    for boundary in segs:
-        for u, l, _ in boundary:
-            face_count[(u, "next")] = face_count.get((u, "next"), 0) + 1
-            face_count[(l, "prev")] = face_count.get((l, "prev"), 0) + 1
-    sizes = dict(sizes)
-    for (item, _), n in face_count.items():
-        if item in sizes:
-            w, h = sizes[item]
-            sizes[item] = (w, max(h, 2 * n + 1))
+    sizes = _fit_ends(sizes, segs, links, 1)
     height_of = {item: (sizes[item][1] if item in sizes else 1) for layer in layers for item in layer}
     ports = _ports(layers, segs, links, height_of, 2, False)
     loops = _self_loops(set(names), links)
@@ -776,8 +795,8 @@ def layout(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int, direc
     """Place boxes of the given sizes and route the links between them.
 
     ``direction`` is TB, BT, LR or RL; BT and RL are TB and LR mirrored.
-    In LR boxes can come back taller than asked, to fit the lines on their
-    sides; draw them at ``Layout.sizes``.
+    Boxes can come back wider (TB) or taller (LR) than asked, to fit the
+    lines on their faces; draw them at ``Layout.sizes``.
     """
     if not sizes:
         return Layout({}, {}, 1, 1, [None] * len(links))

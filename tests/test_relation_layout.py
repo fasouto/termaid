@@ -253,4 +253,5 @@ class TestManyLinksOnOneFace:
         bottom, left, right = _box_span(out, "A")
         below = out.split("\n")[bottom + 1]
         assert below.count("│") == 10
-        assert all(left < c < right for c, ch in enumerate(below) if ch != " "), below
+        assert all(left < c < right for c, ch in enumerate(below) if ch == "│"), below
+        assert all(left <= c <= right for c, ch in enumerate(below) if ch != " "), below

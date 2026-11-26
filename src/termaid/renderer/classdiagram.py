@@ -71,11 +71,11 @@ def _compute_box_size(cls: ClassDef, padding_x: int = _CLASS_PAD) -> tuple[int, 
 
 def _draw_class_box(
     canvas: Canvas, x: int, y: int, cls: ClassDef, cs: CharSet,
-    padding_x: int = _CLASS_PAD, height: int = 0,
+    padding_x: int = _CLASS_PAD, size: tuple[int, int] = (0, 0),
 ) -> tuple[int, int]:
-    """Draw a class box, at least ``height`` rows tall, and return (width, height)."""
-    width, natural = _compute_box_size(cls, padding_x=padding_x)
-    height = max(height, natural)
+    """Draw a class box, at least ``size`` big, and return (width, height)."""
+    natural = _compute_box_size(cls, padding_x=padding_x)
+    width, height = max(size[0], natural[0]), max(size[1], natural[1])
     style = "node"
 
     # Top border
@@ -327,7 +327,7 @@ def render_class_diagram(diagram: ClassDiagram, *, use_ascii: bool = False, padd
             _draw_note_box(canvas, x, y, notes[name], cs)
         else:
             _draw_class_box(canvas, x, y, diagram.classes[name], cs, padding_x=padding_x,
-                            height=lay.sizes[name][1])
+                            size=lay.sizes[name])
     for rel, route in zip(diagram.relationships, lay.routes):
         if route is not None and rel.source == rel.target:
             if not rel.source_marker:
