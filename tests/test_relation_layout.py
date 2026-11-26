@@ -331,3 +331,12 @@ class TestParallelLinkLabels:
                 covered = [c for c in range(m.start(), m.end())
                            if cell(r - 1, c) in "│▲▼" and cell(r + 1, c) in "│▲▼"]
                 assert covered == [], "\n".join(grid)
+
+
+class TestLrLoopLabelRoom:
+    def test_long_loop_label_stays_clear_of_the_next_column(self):
+        out = render(
+            "classDiagram\n  direction LR\n  A --> A : a rather long self label\n"
+            "  A --> B\n  A --> C\n  A --> D\n  X --> C"
+        )
+        assert "a rather long self label " in out + " ", out
