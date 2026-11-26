@@ -766,6 +766,17 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
         plans.append((geo, tracks, lead, n_tracks, tail))
 
     layer_w = [max((sizes[it][0] for it in layer if it in sizes), default=1) for layer in layers]
+    # A loop label can run past its column; the gap's jogs start beyond it.
+    for k, plan in enumerate(plans):
+        over = 0
+        for item in layers[k]:
+            for i, (_, right) in zip(loops.get(item, ()), spans.get(item, ())):
+                if links[i].label:
+                    end = (layer_w[k] - sizes[item][0]) // 2 + right + 1 + display_width(links[i].label)
+                    over = max(over, end - (layer_w[k] - 1))
+        if over:
+            geo, tracks, lead, n_tracks, tail = plan
+            plans[k] = (geo, tracks, max(lead, over + 1), n_tracks, tail)
     lefts: list[int] = []
     x = MARGIN
     for k in range(len(layers)):
