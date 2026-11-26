@@ -36,8 +36,21 @@ def reserve_note_room(graph: Graph, layout: GridLayout) -> None:
         if p is None:
             continue
         need = note_size(note)[0] + 2 * NOTE_GAP
-        col = p.grid.col + (2 if note_on_right(graph, note) else -2)
+        on_right = note_on_right(graph, note)
+        col = p.grid.col + (2 if on_right else -2)
+        if on_right and not _box_further_right(layout, p):
+            # Nothing to keep clear of: the note takes the blank cells
+            # there, and no other row is pushed apart for it.
+            continue
         if col >= 0:
             layout.col_widths[col] = max(layout.col_widths.get(col, 1), need)
         else:
             layout.offset_x = max(layout.offset_x, need)
+
+
+def _box_further_right(layout: GridLayout, p) -> bool:
+    """Whether a box sits right of *p* on the rows *p* is drawn on."""
+    return any(
+        q.grid.col > p.grid.col and q.grid.row == p.grid.row
+        for q in layout.placements.values()
+    )
