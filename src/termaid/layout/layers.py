@@ -538,7 +538,58 @@ def order_layers(graph: Graph, layers: dict[str, int]) -> list[list[str]]:
                 for idx, pos in enumerate(positions):
                     layer[pos] = topo[idx]
 
+    if graph.subgraphs:
+        layer_lists = [_group_subgraph_members(graph, layer) for layer in layer_lists]
     return layer_lists
+
+
+def _group_subgraph_members(graph: Graph, layer: list[str]) -> list[str]:
+    """Reorder a layer so each subgraph's members in it sit together.
+
+    A box is drawn around all its members, so a node of the layer between
+    two of them would be drawn inside it. Each subgraph, and each nested
+    one within it, moves as a block to the mean position of its members,
+    and a node outside it goes before or after the block, whichever side
+    it was nearer. An order that already keeps every block together is
+    left as it is.
+    """
+    position = {nid: i for i, nid in enumerate(layer)}
+    chains: dict[str, list[str]] = {}
+    for nid in layer:
+        chain: list[str] = []
+        sg = graph.find_subgraph_for_node(nid)
+        while sg:
+            chain.append(sg.id)
+            sg = sg.parent
+        chains[nid] = chain[::-1]
+
+    def arrange(nodes: list[str], depth: int) -> list[str]:
+        items: list[str | list[str]] = []
+        blocks: dict[str, list[str]] = {}
+        for nid in nodes:
+            chain = chains[nid]
+            if len(chain) <= depth:
+                items.append(nid)
+            elif chain[depth] in blocks:
+                blocks[chain[depth]].append(nid)
+            else:
+                blocks[chain[depth]] = [nid]
+                items.append(blocks[chain[depth]])
+
+        def mean_position(item: str | list[str]) -> float:
+            if isinstance(item, str):
+                return position[item]
+            return sum(position[n] for n in item) / len(item)
+
+        result: list[str] = []
+        for item in sorted(items, key=mean_position):
+            if isinstance(item, str):
+                result.append(item)
+            else:
+                result.extend(arrange(item, depth + 1))
+        return result
+
+    return arrange(layer, 0)
 
 
 class BusKey(NamedTuple):
