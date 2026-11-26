@@ -241,6 +241,7 @@ def _ports(
     span_of: dict[str, int],
     min_spacing: int,
     card_room: bool,
+    wide: dict[tuple[str, str], int] | None = None,
 ) -> dict[tuple[str, int, str], int]:
     """Offset from a box's centre for each link end on its two faces.
 
@@ -267,7 +268,7 @@ def _ports(
         if card_room:
             cards = [display_width(links[i].card_a if links[i].a == item else links[i].card_b)
                      for _, i, _ in ends]
-        spacing = max(min_spacing, max(cards) + 2)
+        spacing = max(min_spacing, max(cards) + 2, (wide or {}).get((item, face), 0))
         room = span_of[item] - 2
         if (n - 1) * spacing > room:
             spacing = max(min(2, min_spacing), room // (n - 1))
@@ -280,12 +281,19 @@ def _ports(
     return offsets
 
 
-def _fit_ends(sizes: dict[str, tuple[int, int]], segs, links: list[Link], axis: int) -> dict[str, tuple[int, int]]:
+def _fit_ends(
+    sizes: dict[str, tuple[int, int]],
+    segs,
+    links: list[Link],
+    axis: int,
+    spacing: dict[tuple[str, str], int] | None = None,
+) -> dict[str, tuple[int, int]]:
     """Grow each box along ``axis`` (0 width, 1 height) so the ends on one
     face fit with a blank cell between them and the corners.
 
     Along a width the cardinality written beside each end must fit
-    between it and the next end too.
+    between it and the next end too, and ``spacing`` can ask for wider
+    spacing on a face: {(item, face): cells from one end to the next}.
     """
     faces: dict[tuple[str, str], list[int]] = {}
     for boundary in segs:
@@ -293,14 +301,15 @@ def _fit_ends(sizes: dict[str, tuple[int, int]], segs, links: list[Link], axis: 
             faces.setdefault((u, "next"), []).append(i)
             faces.setdefault((l, "prev"), []).append(i)
     grown = dict(sizes)
-    for (item, _), idxs in faces.items():
+    for (item, face), idxs in faces.items():
         if item not in grown:
             continue
         card = 0
         if axis == 0:
             card = max(display_width(links[i].card_a if links[i].a == item else links[i].card_b) for i in idxs)
+        step = max(2, card + 1, (spacing or {}).get((item, face), 0))
         dims = list(grown[item])
-        dims[axis] = max(dims[axis], (len(idxs) - 1) * max(2, card + 1) + 3)
+        dims[axis] = max(dims[axis], (len(idxs) - 1) * step + 3)
         grown[item] = (dims[0], dims[1])
     return grown
 
@@ -385,14 +394,14 @@ def _self_loops(names: set[str], links: list[Link]) -> dict[str, list[int]]:
 def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -> Layout:
     names = list(sizes)
     layers, segs, chains = _build(names, links)
-    sizes = _fit_ends(sizes, segs, links, 0)
     loops = _self_loops(set(names), links)
+    sizes = dict(sizes)
     for node, idxs in loops.items():
         # Each loop leaves and comes back on rows of its own.
         w, h = sizes[node]
         sizes[node] = (w, max(h, 2 * len(idxs) + 1))
-    width_of = {item: (sizes[item][0] if item in sizes else 1) for layer in layers for item in layer}
-    ports = _ports(layers, segs, links, width_of, 4, True)
+    asked = sizes
+    wide: dict[tuple[str, str], int] = {}
     next_of = {layer[p]: layer[p + 1] for layer in layers for p in range(len(layer) - 1)}
 
     extra: dict[str, int] = {}
@@ -406,6 +415,9 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
         return max(base, extra.get(left, 0))
 
     for _attempt in range(3):
+        sizes = _fit_ends(asked, segs, links, 0, wide)
+        width_of = {item: (sizes[item][0] if item in sizes else 1) for layer in layers for item in layer}
+        ports = _ports(layers, segs, links, width_of, 4, True, wide)
         x_of: dict[str, int] = {}
         widths = []
         for layer in layers:
@@ -436,11 +448,13 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
             runs = {i: (min(g[0], g[1]), max(g[0], g[1])) for i, g in geo.items() if g[0] != g[1]}
             geos.append(geo)
             tracks_of.append(_assign_tracks(runs, {i: (g[0], g[1]) for i, g in geo.items()}))
-        labels, upper_rows, lower_rows, need = _place_labels(links, chains, geos, tracks_of, gap)
-        if not need:
+        labels, upper_rows, lower_rows, need, wider = _place_labels(links, chains, geos, tracks_of, gap)
+        wider = {face: sp for face, sp in wider.items() if sp > wide.get(face, 0)}
+        if not need and not wider:
             break
         for item, more in need.items():
             extra[item] = sep(item, next_of[item]) + more
+        wide.update(wider)
 
     # Rows: a gap holds the label rows beside lines leaving the box above,
     # the jog tracks, then the label rows beside lines entering the box below.
@@ -531,15 +545,17 @@ def _place_labels(links, chains, geos, tracks_of, gap):
     added while the gap stays as tall as ``gap`` asks; past that a label
     first tries the gap's first or last row, beside the cardinalities.
     When nothing fits, the label goes beside the entering line anyway,
-    and if a neighbouring box's line is in the way that box is asked to
-    move over. Returns ({link: (where, boundary, row, col)}, upper row
-    counts, lower row counts, {item: extra columns needed to its right}).
+    and the line in the way is asked to move: a neighbouring box moves
+    over, or the line's own box spreads its ends apart. Returns ({link:
+    (where, boundary, row, col)}, upper row counts, lower row counts,
+    {item: extra columns needed to its right}, {(item, face): spacing}).
     """
     upper: list[list[list[tuple[int, int]]]] = [[] for _ in geos]
     lower: list[list[list[tuple[int, int]]]] = [[] for _ in geos]
     edge_rows: dict[tuple[str, int], list[tuple[int, int]]] = {}
     placed: dict[int, tuple[str, int, int, int]] = {}
     need: dict[str, int] = {}
+    wider: dict[tuple[str, str], int] = {}
     chain_of = {ch.link: ch for ch in chains}
 
     def card(k: int, j: int, at: int) -> str:
@@ -595,15 +611,18 @@ def _place_labels(links, chains, geos, tracks_of, gap):
                 or in_edge_row(i, "start", first, w) or in_edge_row(i, "end", last, w)
                 or in_row(i, "lower", last, w, True) or in_row(i, "upper", first, w, True))
         if spot is None:
-            xb, owner = geos[last][i][1], geos[last][i][3]
+            _, xb, top, owner = geos[last][i]
             blocking = [(g[1], g[3]) for j, g in geos[last].items() if j != i and xb < g[1] <= xb + w + 2]
             if blocking:
                 c, o = min(blocking)
                 if o != owner:
                     need[owner] = max(need.get(owner, 0), xb + w + 3 - c)
+                else:
+                    for face in ((owner, "prev"), (top, "next")):
+                        wider[face] = max(wider.get(face, 0), w + 3)
             spot = ("lower", last, _fit_row(lower[last], xb + 2, xb + w + 1, True), xb + 2)
         placed[i] = spot
-    return placed, [len(r) for r in upper], [len(r) for r in lower], need
+    return placed, [len(r) for r in upper], [len(r) for r in lower], need, wider
 
 
 def _free_span_on_run(i, tracks, geo, w) -> int | None:
