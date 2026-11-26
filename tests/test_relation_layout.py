@@ -228,3 +228,29 @@ class TestAscii:
         out = render("classDiagram\n  A --> B\n  A --> C", use_ascii=True)
         assert "|-" not in out and "-|" not in out
         assert out.count("v") == 2
+
+
+def _box_span(out: str, name: str) -> tuple[int, int, int]:
+    """(bottom border row, left column, right column) of the box whose title is ``name``."""
+    grid = out.split("\n")
+    r = next(i for i, row in enumerate(grid) if re.search(rf"│\s*{name}\s*│", row))
+    left = grid[r].rindex("│", 0, grid[r].index(name))
+    right = grid[r].index("│", grid[r].index(name))
+    bottom = r
+    while grid[bottom][left] != "└":
+        bottom += 1
+    return bottom, left, right
+
+
+class TestManyLinksOnOneFace:
+    @pytest.mark.parametrize("kind", ["class", "er"])
+    def test_every_line_leaves_from_under_the_box(self, kind):
+        if kind == "class":
+            src = "classDiagram\n" + "".join(f"  A --> B{i}\n" for i in range(10))
+        else:
+            src = "erDiagram\n" + "".join(f"  A ||--o{{ B{i} : r\n" for i in range(10))
+        out = render(src)
+        bottom, left, right = _box_span(out, "A")
+        below = out.split("\n")[bottom + 1]
+        assert below.count("│") == 10
+        assert all(left < c < right for c, ch in enumerate(below) if ch != " "), below
