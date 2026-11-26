@@ -235,6 +235,7 @@ def _build(names: list[str], links: list[Link]):
 
 
 def _ports(
+    boxes: dict[str, tuple[int, int]],
     layers: list[list[str]],
     segs: list[list[tuple[str, str, int]]],
     links: list[Link],
@@ -260,7 +261,7 @@ def _ports(
     for (item, face), ends in faces.items():
         ends.sort()
         n = len(ends)
-        if item.startswith(_DUMMY) or n == 1:
+        if item not in boxes or n == 1:
             for _, i, _ in ends:
                 offsets[(item, i, face)] = 0
             continue
@@ -417,7 +418,7 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
     for _attempt in range(3):
         sizes = _fit_ends(asked, segs, links, 0, wide)
         width_of = {item: (sizes[item][0] if item in sizes else 1) for layer in layers for item in layer}
-        ports = _ports(layers, segs, links, width_of, 4, True, wide)
+        ports = _ports(sizes, layers, segs, links, width_of, 4, True, wide)
         x_of: dict[str, int] = {}
         widths = []
         for layer in layers:
@@ -713,7 +714,7 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
         w, h = sizes[node]
         sizes[node] = (max(w, node_spans[-1][1] + 3), h)
     height_of = {item: (sizes[item][1] if item in sizes else 1) for layer in layers for item in layer}
-    ports = _ports(layers, segs, links, height_of, 2, False)
+    ports = _ports(sizes, layers, segs, links, height_of, 2, False)
     chain_of = {ch.link: ch for ch in chains}
 
     # Rows: boxes stacked in each column, columns centred vertically.
