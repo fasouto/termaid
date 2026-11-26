@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, NamedTuple
 
-from .utils import DIRECTIVE
+from .utils import CONTROL_CHARS, DIRECTIVE
 
 if TYPE_CHECKING:
     from .graph.model import Graph
@@ -18,9 +18,7 @@ _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 _LEADING_DIRECTIVES_RE = re.compile(rf"(?:{DIRECTIVE}|%%[^\n]*|\s+)*")
 
 
-# C0 and C1 control characters, except tab and newline. In a label they would
-# reach the terminal as escape sequences, title changes or cursor moves.
-_CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]")
+_CONTROL_CHARS_RE = CONTROL_CHARS
 _CARRIAGE_RETURN_RE = re.compile(r"\r\n?")
 
 
@@ -31,14 +29,15 @@ def _strip_frontmatter(text: str) -> str:
 
 def _frontmatter_title(source: str) -> str:
     """The ``title:`` of the source's YAML frontmatter, or ""."""
-    match = _FRONTMATTER_RE.match(_CARRIAGE_RETURN_RE.sub("\n", source.lstrip("\ufeff")).strip())
+    cleaned = _CONTROL_CHARS_RE.sub("", _CARRIAGE_RETURN_RE.sub("\n", source)).strip()
+    match = _FRONTMATTER_RE.match(cleaned)
     title = re.search(r"^title:[ \t]*(.*?)[ \t]*$", match.group(0), re.MULTILINE) if match else None
-    return _CONTROL_CHARS_RE.sub("", title.group(1).strip("\"'")) if title else ""
+    return title.group(1).strip("\"'") if title else ""
 
 
 def _prepare_source(source: str) -> str:
     """Normalize line endings, drop control characters, a byte order mark and frontmatter."""
-    text = _CONTROL_CHARS_RE.sub("", _CARRIAGE_RETURN_RE.sub("\n", source.lstrip("\ufeff")))
+    text = _CONTROL_CHARS_RE.sub("", _CARRIAGE_RETURN_RE.sub("\n", source))
     return _strip_frontmatter(text.strip())
 
 

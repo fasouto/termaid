@@ -9,6 +9,16 @@ from typing import Iterable, Iterator
 # unclosed one is not rescanned to the end of the source from every later %%{.
 DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
 
+# C0 and C1 control characters (except tab and newline), mid-text BOM,
+# zero-width/invisible format characters, line/paragraph separators, and
+# bidirectional marks/overrides/isolates.
+CONTROL_CHARS = re.compile(
+    r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f"
+    r"\u034f\u061c\u180e"
+    r"\u200b-\u200f\u2028-\u202e\u2060-\u206f"
+    r"\ufeff]"
+)
+
 # An opening Markdown fence: three or more backticks or tildes, then an info
 # string. Any indentation is accepted so that diagrams nested in list items
 # are found, and so are blockquote markers; :func:`unfence` removes the
@@ -129,6 +139,14 @@ def _cluster_width(cluster: str) -> int:
     return 1
 
 
+def _is_invisible_format(ch: str) -> bool:
+    return (
+        ch == "\u034f"
+        or (unicodedata.category(ch) == "Cf" and ch != _SOFT_HYPHEN)
+        or (0x2028 <= ord(ch) <= 0x2029)
+    )
+
+
 def iter_cells(text: str) -> Iterator[tuple[str, int]]:
     """Yield the terminal cells of *text* as ``(cluster, width)`` pairs.
 
@@ -137,6 +155,8 @@ def iter_cells(text: str) -> Iterator[tuple[str, int]]:
     """
     cluster = ""
     for ch in text:
+        if not cluster and _is_invisible_format(ch):
+            continue
         if cluster and _is_zero_width(ch):
             cluster += ch
             continue
