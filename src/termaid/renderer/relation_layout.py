@@ -293,8 +293,8 @@ def _ports(
             spacing = max(min(2, min_spacing), room // (n - 1))
         spread = [int((j - (n - 1) / 2) * spacing) for j in range(n)]
         # The last cardinality must still end inside the box.
-        over = span_of[item] // 2 + spread[-1] + cards[-1] - (span_of[item] - 1)
-        shift = -min(max(over, 0), span_of[item] // 2 + spread[0] - 1)
+        over = centre + spread[-1] + cards[-1] - (span_of[item] - 1)
+        shift = -min(max(over, 0), centre + spread[0] - 1)
         for (_, i, _), off in zip(ends, spread):
             offsets[(item, i, face)] = off + shift
     return offsets
