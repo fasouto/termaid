@@ -11,6 +11,7 @@ ride on its own jog gets a label row (TB) or sits on the line into its box
 """
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 
 from ..utils import display_width
@@ -133,11 +134,26 @@ def _layering(names: list[str], links: list[Link]) -> tuple[dict[str, int], list
 # ── ordering ──────────────────────────────────────────────────────
 
 def _crossings(segs: list[tuple[str, str, int]], pos: dict[str, int]) -> int:
+    """Pairs of segments that cross: one starts left of the other and ends right of it.
+
+    Counted as inversions with a Fenwick tree, in O(n log n).
+    """
+    pairs = sorted((pos[u], pos[l]) for u, l, _ in segs)
+    size = max((l for _, l in pairs), default=0) + 1
+    tree = [0] * (size + 1)
     count = 0
-    for j, (u1, l1, _) in enumerate(segs):
-        for u2, l2, _ in segs[j + 1:]:
-            if (pos[u1] - pos[u2]) * (pos[l1] - pos[l2]) < 0:
-                count += 1
+    for seen, (_, l) in enumerate(pairs):
+        # Earlier segments start left of this one or level with it; those
+        # level with it end left of it too, so every one ending right crosses.
+        at, not_right = l + 1, 0
+        while at > 0:
+            not_right += tree[at]
+            at -= at & -at
+        count += seen - not_right
+        at = l + 1
+        while at <= size:
+            tree[at] += 1
+            at += at & -at
     return count
 
 
@@ -235,12 +251,14 @@ def _build(names: list[str], links: list[Link]):
 
 
 def _ports(
+    boxes: dict[str, tuple[int, int]],
     layers: list[list[str]],
     segs: list[list[tuple[str, str, int]]],
     links: list[Link],
     span_of: dict[str, int],
     min_spacing: int,
     card_room: bool,
+    wide: dict[tuple[str, str], int] | None = None,
 ) -> dict[tuple[str, int, str], int]:
     """Offset from a box's centre for each link end on its two faces.
 
@@ -259,21 +277,60 @@ def _ports(
     for (item, face), ends in faces.items():
         ends.sort()
         n = len(ends)
-        if item.startswith(_DUMMY) or n == 1:
+        if item not in boxes or n == 1:
             for _, i, _ in ends:
                 offsets[(item, i, face)] = 0
             continue
-        spacing = min_spacing
+        cards = [0] * n
         if card_room:
-            for _, i, _ in ends:
-                link = links[i]
-                spacing = max(spacing, display_width(link.card_a if link.a == item else link.card_b) + 2)
-        room = span_of[item] - 2
+            cards = [display_width(links[i].card_a if links[i].a == item else links[i].card_b)
+                     for _, i, _ in ends]
+        spacing = max(min_spacing, max(cards) + 2, (wide or {}).get((item, face), 0))
+        # Ends spread evenly about the centre cell stay off both corners.
+        centre = span_of[item] // 2
+        room = 2 * min(centre - 1, span_of[item] - 2 - centre) + 1
         if (n - 1) * spacing > room:
             spacing = max(min(2, min_spacing), room // (n - 1))
-        for j, (_, i, _) in enumerate(ends):
-            offsets[(item, i, face)] = int((j - (n - 1) / 2) * spacing)
+        spread = [int((j - (n - 1) / 2) * spacing) for j in range(n)]
+        # The last cardinality must still end inside the box.
+        over = centre + spread[-1] + cards[-1] - (span_of[item] - 1)
+        shift = -min(max(over, 0), centre + spread[0] - 1)
+        for (_, i, _), off in zip(ends, spread):
+            offsets[(item, i, face)] = off + shift
     return offsets
+
+
+def _fit_ends(
+    sizes: dict[str, tuple[int, int]],
+    segs,
+    links: list[Link],
+    axis: int,
+    spacing: dict[tuple[str, str], int] | None = None,
+) -> dict[str, tuple[int, int]]:
+    """Grow each box along ``axis`` (0 width, 1 height) so the ends on one
+    face fit with a blank cell between them and the corners.
+
+    Along a width the cardinality written beside each end must fit
+    between it and the next end too, and ``spacing`` can ask for wider
+    spacing on a face: {(item, face): cells from one end to the next}.
+    """
+    faces: dict[tuple[str, str], list[int]] = {}
+    for boundary in segs:
+        for u, l, i in boundary:
+            faces.setdefault((u, "next"), []).append(i)
+            faces.setdefault((l, "prev"), []).append(i)
+    grown = dict(sizes)
+    for (item, face), idxs in faces.items():
+        if item not in grown:
+            continue
+        card = 0
+        if axis == 0:
+            card = max(display_width(links[i].card_a if links[i].a == item else links[i].card_b) for i in idxs)
+        step = max(2, card + 1, (spacing or {}).get((item, face), 0))
+        dims = list(grown[item])
+        dims[axis] = max(dims[axis], (len(idxs) - 1) * step + 3)
+        grown[item] = (dims[0], dims[1])
+    return grown
 
 
 def _assign_tracks(
@@ -284,23 +341,32 @@ def _assign_tracks(
 
     ``intervals`` maps a key to the inclusive (low, high) span of a run;
     runs on one track are at least one blank cell apart so their corners do
-    not touch. ``ends`` gives each line's (entry, exit) position across the
-    gap, straight lines included: a line entering inside another's run
-    must take an earlier track and one leaving inside it a later track, or
-    it would cut through that run. Returns {key: track_index}.
+    not touch. ``ends`` gives each run's (entry, exit) position across the
+    gap: a run entering inside another must take an earlier track and one
+    leaving inside it a later track, or it would cut through that run. A
+    run entering where another leaves must take an earlier track too, or
+    the two would share the row (column) between their tracks. Returns
+    {key: track_index}.
     """
     keys = sorted(intervals, key=lambda k: intervals[k])
     after: dict[int, set[int]] = {k: set() for k in keys}
     if ends:
+        by_entry = sorted((ends[j][0], j) for j in keys)
+        by_leave = sorted((ends[j][1], j) for j in keys)
+        entries = [e for e, _ in by_entry]
+        leaves = [e for e, _ in by_leave]
         for i in keys:
             low, high = intervals[i]
-            for j in keys:
-                if j == i:
-                    continue
-                entry, leave = ends[j]
-                if low < entry < high and not low < leave < high:
+            exit_i = ends[i][1]
+            lo, hi = bisect_left(entries, exit_i), bisect_right(entries, exit_i)
+            for _, j in by_entry[lo:hi]:
+                if j != i:
                     after[i].add(j)
-                elif low < leave < high and not low < entry < high:
+            for _, j in by_entry[bisect_right(entries, low):bisect_left(entries, high)]:
+                if j != i and not low < ends[j][1] < high:
+                    after[i].add(j)
+            for _, j in by_leave[bisect_right(leaves, low):bisect_left(leaves, high)]:
+                if j != i and not low < ends[j][0] < high and ends[j][0] != exit_i:
                     after[j].add(i)
     # Visit runs in an order that respects the constraints where it can.
     order: list[int] = []
@@ -354,15 +420,20 @@ def _self_loops(names: set[str], links: list[Link]) -> dict[str, list[int]]:
 def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -> Layout:
     names = list(sizes)
     layers, segs, chains = _build(names, links)
-    width_of = {item: (sizes[item][0] if item in sizes else 1) for layer in layers for item in layer}
-    ports = _ports(layers, segs, links, width_of, 4, True)
     loops = _self_loops(set(names), links)
+    sizes = dict(sizes)
+    for node, idxs in loops.items():
+        # Each loop leaves and comes back on rows of its own.
+        w, h = sizes[node]
+        sizes[node] = (w, max(h, 2 * len(idxs) + 1))
+    asked = sizes
+    wide: dict[tuple[str, str], int] = {}
     next_of = {layer[p]: layer[p + 1] for layer in layers for p in range(len(layer) - 1)}
 
     extra: dict[str, int] = {}
     for node, idxs in loops.items():
-        # Loops nest to the right of their box, labels beyond them.
-        far = max(_loop_room(links[i]) for i in idxs) + 2 * (len(idxs) - 1)
+        # Loops sit to the right of their box, each label beyond its loop.
+        far = max(_loop_room(links[i]) for i in idxs)
         extra[node] = far + max(display_width(links[i].label) + 3 for i in idxs) + 1
 
     def sep(left: str, right: str) -> int:
@@ -370,6 +441,9 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
         return max(base, extra.get(left, 0))
 
     for _attempt in range(3):
+        sizes = _fit_ends(asked, segs, links, 0, wide)
+        width_of = {item: (sizes[item][0] if item in sizes else 1) for layer in layers for item in layer}
+        ports = _ports(sizes, layers, segs, links, width_of, 4, True, wide)
         x_of: dict[str, int] = {}
         widths = []
         for layer in layers:
@@ -400,11 +474,13 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
             runs = {i: (min(g[0], g[1]), max(g[0], g[1])) for i, g in geo.items() if g[0] != g[1]}
             geos.append(geo)
             tracks_of.append(_assign_tracks(runs, {i: (g[0], g[1]) for i, g in geo.items()}))
-        labels, upper_rows, lower_rows, need = _place_labels(links, chains, geos, tracks_of, gap)
-        if not need:
+        labels, upper_rows, lower_rows, need, wider = _place_labels(links, chains, geos, tracks_of, gap)
+        wider = {face: sp for face, sp in wider.items() if sp > wide.get(face, 0)}
+        if not need and not wider:
             break
         for item, more in need.items():
             extra[item] = sep(item, next_of[item]) + more
+        wide.update(wider)
 
     # Rows: a gap holds the label rows beside lines leaving the box above,
     # the jog tracks, then the label rows beside lines entering the box below.
@@ -474,14 +550,14 @@ def _layout_tb(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
         w, h = sizes[node]
         far = max(_loop_room(links[i]) for i in idxs)
         for j, i in enumerate(idxs):
-            routes[i] = _side_loop(links[i], x, y, w, h, far + 2 * j, j)
+            routes[i] = _side_loop(links[i], x, y, w, far, j)
         canvas_w = max(canvas_w, x + w + extra[node] + MARGIN)
 
     for r in routes:
         if r is None:
             continue
         canvas_w = max(canvas_w, max(c for _, c in r.points) + 1 + MARGIN)
-    return Layout(positions, dict(sizes), canvas_w, canvas_h, routes)
+    return Layout(positions, sizes, canvas_w, canvas_h, routes)
 
 
 def _place_labels(links, chains, geos, tracks_of, gap):
@@ -495,15 +571,17 @@ def _place_labels(links, chains, geos, tracks_of, gap):
     added while the gap stays as tall as ``gap`` asks; past that a label
     first tries the gap's first or last row, beside the cardinalities.
     When nothing fits, the label goes beside the entering line anyway,
-    and if a neighbouring box's line is in the way that box is asked to
-    move over. Returns ({link: (where, boundary, row, col)}, upper row
-    counts, lower row counts, {item: extra columns needed to its right}).
+    and the line in the way is asked to move: a neighbouring box moves
+    over, or the line's own box spreads its ends apart. Returns ({link:
+    (where, boundary, row, col)}, upper row counts, lower row counts,
+    {item: extra columns needed to its right}, {(item, face): spacing}).
     """
     upper: list[list[list[tuple[int, int]]]] = [[] for _ in geos]
     lower: list[list[list[tuple[int, int]]]] = [[] for _ in geos]
     edge_rows: dict[tuple[str, int], list[tuple[int, int]]] = {}
     placed: dict[int, tuple[str, int, int, int]] = {}
     need: dict[str, int] = {}
+    wider: dict[tuple[str, str], int] = {}
     chain_of = {ch.link: ch for ch in chains}
 
     def card(k: int, j: int, at: int) -> str:
@@ -559,15 +637,18 @@ def _place_labels(links, chains, geos, tracks_of, gap):
                 or in_edge_row(i, "start", first, w) or in_edge_row(i, "end", last, w)
                 or in_row(i, "lower", last, w, True) or in_row(i, "upper", first, w, True))
         if spot is None:
-            xb, owner = geos[last][i][1], geos[last][i][3]
+            _, xb, top, owner = geos[last][i]
             blocking = [(g[1], g[3]) for j, g in geos[last].items() if j != i and xb < g[1] <= xb + w + 2]
             if blocking:
                 c, o = min(blocking)
                 if o != owner:
                     need[owner] = max(need.get(owner, 0), xb + w + 3 - c)
+                else:
+                    for face in ((owner, "prev"), (top, "next")):
+                        wider[face] = max(wider.get(face, 0), w + 3)
             spot = ("lower", last, _fit_row(lower[last], xb + 2, xb + w + 1, True), xb + 2)
         placed[i] = spot
-    return placed, [len(r) for r in upper], [len(r) for r in lower], need
+    return placed, [len(r) for r in upper], [len(r) for r in lower], need, wider
 
 
 def _free_span_on_run(i, tracks, geo, w) -> int | None:
@@ -607,24 +688,35 @@ def _fit_row(rows: list[list[tuple[int, int]]], start: int, end: int, grow: bool
     return len(rows) - 1
 
 
-def _side_loop(link: Link, x: int, y: int, w: int, h: int, reach: int, j: int) -> Route:
-    """A loop out of a box's top-right corner and back into its right side."""
+def _side_loop(link: Link, x: int, y: int, w: int, reach: int, j: int) -> Route:
+    """The j-th loop on a box's right side, out on row 2j and back on the
+    row below; the first leaves from the top-right corner."""
     right = x + w - 1
     corner = right + reach
-    back = y + 1 + j if j < h - 2 else y + 1
-    pts = [(y, right), (y, corner), (back, corner), (back, right + 1)]
-    a = End(y, right + 1, "left")
+    out, back = y + 2 * j, y + 2 * j + 1
+    pts = [(out, right if j == 0 else right + 1), (out, corner), (back, corner), (back, right + 1)]
+    a = End(out, right + 1, "left")
     b = End(back, right + 1, "left")
     label_at = (back, corner + 2) if link.label else None
-    return Route(pts, a, b, label_at, (y, right + 2), (back, right + 2))
+    return Route(pts, a, b, label_at, (out, right + 2), (back, right + 2))
 
 
-def _under_loop(link: Link, x: int, y: int, w: int, h: int, j: int) -> Route:
+def _under_spans(links: list[Link], idxs: list[int]) -> list[tuple[int, int]]:
+    """(left, right) columns, from a box's left border, of each loop under
+    it: side by side, each label after its loop and before the next."""
+    spans = []
+    left = 2
+    for i in idxs:
+        right = left + _loop_room(links[i])
+        spans.append((left, right))
+        left = right + 2 + (display_width(links[i].label) + 1 if links[i].label else 0)
+    return spans
+
+
+def _under_loop(link: Link, x: int, y: int, h: int, span: tuple[int, int]) -> Route:
     """A loop out of a box's bottom border and back into it."""
     bottom = y + h - 1
-    room = _loop_room(link)
-    left = x + 2 + j * (room + 1)
-    right = min(left + room, x + w - 3)
+    left, right = x + span[0], x + span[1]
     low = bottom + 2
     pts = [(bottom + 1, left), (low, left), (low, right), (bottom + 1, right)]
     a = End(bottom + 1, left, "up")
@@ -640,21 +732,14 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
     names = list(sizes)
     layers, segs, chains = _build(names, links)
 
-    # Ends on a side face are a row apart, with a blank row between them;
-    # boxes grow to fit them.
-    face_count: dict[tuple[str, str], int] = {}
-    for boundary in segs:
-        for u, l, _ in boundary:
-            face_count[(u, "next")] = face_count.get((u, "next"), 0) + 1
-            face_count[(l, "prev")] = face_count.get((l, "prev"), 0) + 1
-    sizes = dict(sizes)
-    for (item, _), n in face_count.items():
-        if item in sizes:
-            w, h = sizes[item]
-            sizes[item] = (w, max(h, 2 * n + 1))
-    height_of = {item: (sizes[item][1] if item in sizes else 1) for layer in layers for item in layer}
-    ports = _ports(layers, segs, links, height_of, 2, False)
+    sizes = _fit_ends(sizes, segs, links, 1)
     loops = _self_loops(set(names), links)
+    spans = {node: _under_spans(links, idxs) for node, idxs in loops.items()}
+    for node, node_spans in spans.items():
+        w, h = sizes[node]
+        sizes[node] = (max(w, node_spans[-1][1] + 3), h)
+    height_of = {item: (sizes[item][1] if item in sizes else 1) for layer in layers for item in layer}
+    ports = _ports(sizes, layers, segs, links, height_of, 2, False)
     chain_of = {ch.link: ch for ch in chains}
 
     # Rows: boxes stacked in each column, columns centred vertically.
@@ -702,11 +787,22 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
             if l in sizes:
                 body = display_width(link.label) + 2 if link.label and chain_of[i].items[-1] == l else 0
                 tail = max(tail, body + display_width(near_l) + 3)
-        tracks = _assign_tracks(runs)
+        tracks = _assign_tracks(runs, geo)
         n_tracks = max(tracks.values(), default=-1) + 1
         plans.append((geo, tracks, lead, n_tracks, tail))
 
     layer_w = [max((sizes[it][0] for it in layer if it in sizes), default=1) for layer in layers]
+    # A loop label can run past its column; the gap's jogs start beyond it.
+    for k, plan in enumerate(plans):
+        over = 0
+        for item in layers[k]:
+            for i, (_, right) in zip(loops.get(item, ()), spans.get(item, ())):
+                if links[i].label:
+                    end = (layer_w[k] - sizes[item][0]) // 2 + right + 1 + display_width(links[i].label)
+                    over = max(over, end - (layer_w[k] - 1))
+        if over:
+            geo, tracks, lead, n_tracks, tail = plan
+            plans[k] = (geo, tracks, max(lead, over + 1), n_tracks, tail)
     lefts: list[int] = []
     x = MARGIN
     for k in range(len(layers)):
@@ -762,8 +858,8 @@ def _layout_lr(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int) -
     for node, idxs in loops.items():
         x, y = positions[node]
         w, h = sizes[node]
-        for j, i in enumerate(idxs):
-            routes[i] = _under_loop(links[i], x, y, w, h, j)
+        for i, span in zip(idxs, spans[node]):
+            routes[i] = _under_loop(links[i], x, y, h, span)
             if links[i].label:
                 canvas_w = max(canvas_w, routes[i].label_at[1] + display_width(links[i].label) + MARGIN)
         canvas_h = max(canvas_h, y + h + 2 + MARGIN)
@@ -776,8 +872,8 @@ def layout(sizes: dict[str, tuple[int, int]], links: list[Link], gap: int, direc
     """Place boxes of the given sizes and route the links between them.
 
     ``direction`` is TB, BT, LR or RL; BT and RL are TB and LR mirrored.
-    In LR boxes can come back taller than asked, to fit the lines on their
-    sides; draw them at ``Layout.sizes``.
+    Boxes can come back wider (TB) or taller (LR) than asked, to fit the
+    lines on their faces; draw them at ``Layout.sizes``.
     """
     if not sizes:
         return Layout({}, {}, 1, 1, [None] * len(links))
@@ -882,22 +978,25 @@ def draw_route(canvas, route: Route, h_char: str, v_char: str, corner_char: str 
         if (r0 == r1 == r2) or (c0 == c1 == c2):
             continue
         bends.add(j)
+    put = canvas.put
     for j in range(len(pts) - 1):
         (r1, c1), (r2, c2) = pts[j], pts[j + 1]
         if (r1, c1) == (r2, c2):
             continue
-        if c1 == c2:
-            step = 1 if r2 > r1 else -1
-            for r in range(r1, r2 + step, step):
-                if (r, c1) == pts[j] and j in bends or (r, c1) == pts[j + 1] and j + 1 in bends:
-                    continue
-                canvas.put(r, c1, v_char, style=style)
+        # Bends are drawn last, as corners.
+        vertical = c1 == c2
+        start, stop = (r1, r2) if vertical else (c1, c2)
+        step = 1 if stop > start else -1
+        if j in bends:
+            start += step
+        if j + 1 not in bends:
+            stop += step
+        if vertical:
+            for r in range(start, stop, step):
+                put(r, c1, v_char, style=style)
         else:
-            step = 1 if c2 > c1 else -1
-            for c in range(c1, c2 + step, step):
-                if (r1, c) == pts[j] and j in bends or (r1, c) == pts[j + 1] and j + 1 in bends:
-                    continue
-                canvas.put(r1, c, h_char, style=style)
+            for c in range(start, stop, step):
+                put(r1, c, h_char, style=style)
     for j in bends:
         (r0, c0), (r1, c1), (r2, c2) = pts[j - 1], pts[j], pts[j + 1]
         d = 0

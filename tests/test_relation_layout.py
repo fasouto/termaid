@@ -6,6 +6,7 @@ import re
 import pytest
 
 from termaid import render
+from termaid.renderer.relation_layout import Link, layout
 
 _LINE_CHARS = set("│─┼┌┐└┘├┤┬┴▲▼►◄△▽◁▷◆◇┄┆")
 
@@ -228,3 +229,127 @@ class TestAscii:
         out = render("classDiagram\n  A --> B\n  A --> C", use_ascii=True)
         assert "|-" not in out and "-|" not in out
         assert out.count("v") == 2
+
+    @pytest.mark.parametrize("direction, marker", [("LR", "<|"), ("RL", "|>")])
+    def test_cardinality_leaves_the_two_cell_inheritance_marker_whole(self, direction, marker):
+        out = render(f'classDiagram\n  direction {direction}\n  A "1" <|-- "many" B', use_ascii=True)
+        assert marker in out, out
+        assert "1" in out and "many" in out
+
+
+def _box_span(out: str, name: str) -> tuple[int, int, int]:
+    """(bottom border row, left column, right column) of the box whose title is ``name``."""
+    grid = out.split("\n")
+    r = next(i for i, row in enumerate(grid) if re.search(rf"│\s*{name}\s*│", row))
+    left = grid[r].rindex("│", 0, grid[r].index(name))
+    right = grid[r].index("│", grid[r].index(name))
+    bottom = r
+    while grid[bottom][left] != "└":
+        bottom += 1
+    return bottom, left, right
+
+
+class TestManyLinksOnOneFace:
+    @pytest.mark.parametrize("kind", ["class", "er"])
+    def test_every_line_leaves_from_under_the_box(self, kind):
+        if kind == "class":
+            src = "classDiagram\n" + "".join(f"  A --> B{i}\n" for i in range(10))
+        else:
+            src = "erDiagram\n" + "".join(f"  A ||--o{{ B{i} : r\n" for i in range(10))
+        out = render(src)
+        bottom, left, right = _box_span(out, "A")
+        below = out.split("\n")[bottom + 1]
+        assert below.count("│") == 10
+        assert all(left < c < right for c, ch in enumerate(below) if ch == "│"), below
+        assert all(left <= c <= right for c, ch in enumerate(below) if ch != " "), below
+
+    def test_ends_spaced_for_wide_cards_stay_off_the_corner(self):
+        out = render("classDiagram\n" + "".join(f'  A "12345" --> B{i}\n' for i in range(3)))
+        bottom, left, right = _box_span(out, "A")
+        below = out.split("\n")[bottom + 1]
+        assert below.count("│") == 3
+        assert all(left < c < right for c, ch in enumerate(below) if ch == "│"), out
+
+
+class TestSeveralSelfLoops:
+    def test_class_loops_return_on_their_own_rows_with_whole_labels(self):
+        out = render("classDiagram\n  A --> A : parent\n  A --> A : child")
+        assert "parent" in out and "child" in out
+        rows = [i for i, row in enumerate(out.split("\n")) if "◄" in row]
+        assert len(rows) == 2 and len(set(rows)) == 2
+
+    def test_er_loops_keep_their_labels_whole(self):
+        out = render("erDiagram\n  A ||--o{ A : parent\n  A ||--o{ A : child")
+        assert "parent" in out and "child" in out
+        assert out.count("0..*") == 2
+
+    def test_lr_loops_all_leave_from_under_the_box(self):
+        out = render("classDiagram\n  direction LR\n" + "  A --> A\n" * 4)
+        bottom, left, right = _box_span(out, "A")
+        grid = out.split("\n")
+        assert out.count("▲") == 4
+        assert grid[bottom].count("┬") == 4
+        assert all(left < c < right for c, ch in enumerate(grid[bottom + 1]) if ch != " ")
+
+    def test_lr_loop_labels_stay_whole(self):
+        out = render('classDiagram\n  direction LR\n  A "1" --> "*" A : self\n  A --> A : again')
+        assert "self" in out and "again" in out
+
+
+def _shared_runs(links: list[Link], direction: str) -> list[tuple[int, int, int, int]]:
+    """Cells where lines of two different links run the same way, so they
+    read as one line; a plain crossing does not count."""
+    lay = layout({n: (16, 3) for link in links for n in (link.a, link.b)}, links, 4, direction)
+    seen: dict[tuple[int, int, str], int] = {}
+    shared = []
+    for i, route in enumerate(lay.routes):
+        pts = route.points
+        for (r1, c1), (r2, c2) in zip(pts, pts[1:]):
+            way = "v" if c1 == c2 else "h"
+            cells = ([(r, c1) for r in range(min(r1, r2), max(r1, r2) + 1)] if way == "v"
+                     else [(r1, c) for c in range(min(c1, c2), max(c1, c2) + 1)])
+            for r, c in cells:
+                if seen.setdefault((r, c, way), i) != i:
+                    shared.append((seen[(r, c, way)], i, r, c))
+    return shared
+
+
+class TestLinesKeepApart:
+    @pytest.mark.parametrize("direction", ["LR", "RL"])
+    def test_lr_lines_into_one_box_do_not_share_a_run(self, direction):
+        pairs = [("A", "B"), ("A", "C"), ("A", "D"), ("B", "D"), ("C", "D")]
+        assert _shared_runs([Link(a, b) for a, b in pairs], direction) == []
+
+    def test_lr_er_fan_out_does_not_share_a_run(self):
+        links = [Link("A", f"B{i}", True, "r", "1", "0..*") for i in range(6)]
+        assert _shared_runs(links, "LR") == []
+
+
+class TestParallelLinkLabels:
+    @pytest.mark.parametrize("src", [
+        "classDiagram\n  A --> B : owns\n  A --> B : uses\n  A --> B : makes",
+        "classDiagram\n  A-->B:one\n  A-->B:two\n  B-->A:back\n  A-->B:four",
+        "erDiagram\n  A ||--o{ B : owns\n  A ||--o{ B : uses\n  A ||--o{ B : makes",
+    ])
+    def test_no_label_is_written_over_a_line(self, src):
+        grid = render(src).split("\n")
+
+        def cell(r, c):
+            return grid[r][c] if 0 <= r < len(grid) and c < len(grid[r]) else " "
+
+        for label in re.findall(r":\s*(\w+)", src):
+            spots = [(r, m) for r, row in enumerate(grid) for m in re.finditer(rf"\b{label}\b", row)]
+            assert spots, label
+            for r, m in spots:
+                covered = [c for c in range(m.start(), m.end())
+                           if cell(r - 1, c) in "│▲▼" and cell(r + 1, c) in "│▲▼"]
+                assert covered == [], "\n".join(grid)
+
+
+class TestLrLoopLabelRoom:
+    def test_long_loop_label_stays_clear_of_the_next_column(self):
+        out = render(
+            "classDiagram\n  direction LR\n  A --> A : a rather long self label\n"
+            "  A --> B\n  A --> C\n  A --> D\n  X --> C"
+        )
+        assert "a rather long self label " in out + " ", out

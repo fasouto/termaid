@@ -67,11 +67,11 @@ def _compute_box_size(entity: Entity, padding_x: int = _PAD) -> tuple[int, int]:
 
 def _draw_entity_box(
     canvas: Canvas, x: int, y: int, entity: Entity, cs: CharSet,
-    padding_x: int = _PAD, height: int = 0,
+    padding_x: int = _PAD, size: tuple[int, int] = (0, 0),
 ) -> tuple[int, int]:
-    """Draw an entity box, at least ``height`` rows tall, and return (width, height)."""
-    width, natural = _compute_box_size(entity, padding_x=padding_x)
-    height = max(height, natural)
+    """Draw an entity box, at least ``size`` big, and return (width, height)."""
+    natural = _compute_box_size(entity, padding_x=padding_x)
+    width, height = max(size[0], natural[0]), max(size[1], natural[1])
     style = "node"
 
     # Top border
@@ -148,7 +148,7 @@ def render_er_diagram(diagram: ERDiagram, *, use_ascii: bool = False, padding_x:
 
     for name, (x, y) in lay.positions.items():
         _draw_entity_box(canvas, x, y, diagram.entities[name], cs, padding_x=padding_x,
-                         height=lay.sizes[name][1])
+                         size=lay.sizes[name])
     # A self-relationship's line comes back into the side of its box.
     for rel, route in zip(diagram.relationships, lay.routes):
         if route is not None and rel.entity1 == rel.entity2:
