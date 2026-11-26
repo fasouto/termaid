@@ -84,6 +84,21 @@ class TestLongestPath:
         layout = compute_layout(parse_flowchart("graph TD\n" + "".join(edges)))
         assert len(layout.layer_coords) == 3
 
+    @pytest.mark.parametrize("joined", [False, True], ids=["apart", "one-flow"])
+    def test_many_if_else_merges_keep_longest_path_layers(self, joined):
+        """Each merge stretches one edge, and the dense-graph fallback
+        summed those over the whole drawing, so a few more merges turned
+        every B --> C back into an edge running down the side."""
+        count = 20 if joined else 9
+        src = "flowchart LR\n"
+        for i in range(count):
+            src += f"  A{i} --> B{i} --> C{i}\n  A{i} --> C{i}\n"
+            if joined and i:
+                src += f"  C{i - 1} --> A{i}\n"
+        for i in range(count):
+            b, c = self._boxes(src, f"B{i}", f"C{i}")
+            assert c[2] > b[3], f"C{i} is not right of B{i}"
+
     def test_edges_fanning_out_of_a_subgraph_turn_above_their_arrowheads(self):
         from termaid import render
         from tests.conftest import find_box
