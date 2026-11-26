@@ -11,6 +11,7 @@ ride on its own jog gets a label row (TB) or sits on the line into its box
 """
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 
 from ..utils import display_width
@@ -133,11 +134,26 @@ def _layering(names: list[str], links: list[Link]) -> tuple[dict[str, int], list
 # ── ordering ──────────────────────────────────────────────────────
 
 def _crossings(segs: list[tuple[str, str, int]], pos: dict[str, int]) -> int:
+    """Pairs of segments that cross: one starts left of the other and ends right of it.
+
+    Counted as inversions with a Fenwick tree, in O(n log n).
+    """
+    pairs = sorted((pos[u], pos[l]) for u, l, _ in segs)
+    size = max((l for _, l in pairs), default=0) + 1
+    tree = [0] * (size + 1)
     count = 0
-    for j, (u1, l1, _) in enumerate(segs):
-        for u2, l2, _ in segs[j + 1:]:
-            if (pos[u1] - pos[u2]) * (pos[l1] - pos[l2]) < 0:
-                count += 1
+    for seen, (_, l) in enumerate(pairs):
+        # Earlier segments start left of this one or level with it; those
+        # level with it end left of it too, so every one ending right crosses.
+        at, not_right = l + 1, 0
+        while at > 0:
+            not_right += tree[at]
+            at -= at & -at
+        count += seen - not_right
+        at = l + 1
+        while at <= size:
+            tree[at] += 1
+            at += at & -at
     return count
 
 
@@ -323,25 +339,32 @@ def _assign_tracks(
 
     ``intervals`` maps a key to the inclusive (low, high) span of a run;
     runs on one track are at least one blank cell apart so their corners do
-    not touch. ``ends`` gives each line's (entry, exit) position across the
-    gap, straight lines included: a line entering inside another's run
-    must take an earlier track and one leaving inside it a later track, or
-    it would cut through that run. A line entering where another's run
-    leaves must take an earlier track too, or the two would share the
-    row (column) between their tracks. Returns {key: track_index}.
+    not touch. ``ends`` gives each run's (entry, exit) position across the
+    gap: a run entering inside another must take an earlier track and one
+    leaving inside it a later track, or it would cut through that run. A
+    run entering where another leaves must take an earlier track too, or
+    the two would share the row (column) between their tracks. Returns
+    {key: track_index}.
     """
     keys = sorted(intervals, key=lambda k: intervals[k])
     after: dict[int, set[int]] = {k: set() for k in keys}
     if ends:
+        by_entry = sorted((ends[j][0], j) for j in keys)
+        by_leave = sorted((ends[j][1], j) for j in keys)
+        entries = [e for e, _ in by_entry]
+        leaves = [e for e, _ in by_leave]
         for i in keys:
             low, high = intervals[i]
-            for j in keys:
-                if j == i:
-                    continue
-                entry, leave = ends[j]
-                if entry == ends[i][1] or low < entry < high and not low < leave < high:
+            exit_i = ends[i][1]
+            lo, hi = bisect_left(entries, exit_i), bisect_right(entries, exit_i)
+            for _, j in by_entry[lo:hi]:
+                if j != i:
                     after[i].add(j)
-                elif low < leave < high and not low < entry < high:
+            for _, j in by_entry[bisect_right(entries, low):bisect_left(entries, high)]:
+                if j != i and not low < ends[j][1] < high:
+                    after[i].add(j)
+            for _, j in by_leave[bisect_right(leaves, low):bisect_left(leaves, high)]:
+                if j != i and not low < ends[j][0] < high and ends[j][0] != exit_i:
                     after[j].add(i)
     # Visit runs in an order that respects the constraints where it can.
     order: list[int] = []
@@ -953,22 +976,25 @@ def draw_route(canvas, route: Route, h_char: str, v_char: str, corner_char: str 
         if (r0 == r1 == r2) or (c0 == c1 == c2):
             continue
         bends.add(j)
+    put = canvas.put
     for j in range(len(pts) - 1):
         (r1, c1), (r2, c2) = pts[j], pts[j + 1]
         if (r1, c1) == (r2, c2):
             continue
-        if c1 == c2:
-            step = 1 if r2 > r1 else -1
-            for r in range(r1, r2 + step, step):
-                if (r, c1) == pts[j] and j in bends or (r, c1) == pts[j + 1] and j + 1 in bends:
-                    continue
-                canvas.put(r, c1, v_char, style=style)
+        # Bends are drawn last, as corners.
+        vertical = c1 == c2
+        start, stop = (r1, r2) if vertical else (c1, c2)
+        step = 1 if stop > start else -1
+        if j in bends:
+            start += step
+        if j + 1 not in bends:
+            stop += step
+        if vertical:
+            for r in range(start, stop, step):
+                put(r, c1, v_char, style=style)
         else:
-            step = 1 if c2 > c1 else -1
-            for c in range(c1, c2 + step, step):
-                if (r1, c) == pts[j] and j in bends or (r1, c) == pts[j + 1] and j + 1 in bends:
-                    continue
-                canvas.put(r1, c, h_char, style=style)
+            for c in range(start, stop, step):
+                put(r1, c, h_char, style=style)
     for j in bends:
         (r0, c0), (r1, c1), (r2, c2) = pts[j - 1], pts[j], pts[j + 1]
         d = 0
