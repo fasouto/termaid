@@ -310,3 +310,24 @@ class TestLinesKeepApart:
     def test_lr_er_fan_out_does_not_share_a_run(self):
         links = [Link("A", f"B{i}", True, "r", "1", "0..*") for i in range(6)]
         assert _shared_runs(links, "LR") == []
+
+
+class TestParallelLinkLabels:
+    @pytest.mark.parametrize("src", [
+        "classDiagram\n  A --> B : owns\n  A --> B : uses\n  A --> B : makes",
+        "classDiagram\n  A-->B:one\n  A-->B:two\n  B-->A:back\n  A-->B:four",
+        "erDiagram\n  A ||--o{ B : owns\n  A ||--o{ B : uses\n  A ||--o{ B : makes",
+    ])
+    def test_no_label_is_written_over_a_line(self, src):
+        grid = render(src).split("\n")
+
+        def cell(r, c):
+            return grid[r][c] if 0 <= r < len(grid) and c < len(grid[r]) else " "
+
+        for label in re.findall(r":\s*(\w+)", src):
+            spots = [(r, m) for r, row in enumerate(grid) for m in re.finditer(rf"\b{label}\b", row)]
+            assert spots, label
+            for r, m in spots:
+                covered = [c for c in range(m.start(), m.end())
+                           if cell(r - 1, c) in "│▲▼" and cell(r + 1, c) in "│▲▼"]
+                assert covered == [], "\n".join(grid)
