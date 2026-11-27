@@ -9,7 +9,7 @@ import json
 import re
 
 from ..model.gitgraph import Branch, Commit, GitGraph
-from ..utils import DIRECTIVE
+from ..utils import CONTROL_CHARS, DIRECTIVE
 
 
 def parse_git_graph(text: str) -> GitGraph:
@@ -18,7 +18,7 @@ def parse_git_graph(text: str) -> GitGraph:
     return parser.parse()
 
 
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_CONTROL_CHARS = re.compile(rf"[\t\n\r]|{CONTROL_CHARS.pattern}")
 _DIRECTIVE = re.compile(DIRECTIVE)
 
 

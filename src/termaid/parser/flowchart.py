@@ -13,7 +13,7 @@ from dataclasses import dataclass, replace
 
 from ..graph.model import ArrowType, Direction, Edge, EdgeStyle, Graph, LabelSegment, Node, Subgraph
 from ..graph.shapes import NodeShape
-from ..utils import line_breaks
+from ..utils import CONTROL_CHARS, line_breaks
 
 
 # A link without text, read the way Mermaid's lexer reads one: solid
@@ -269,9 +269,13 @@ def _decode_entities(text: str) -> str:
         else:
             # html.unescape would read "&notathing;" as "&not" plus "athing;".
             decoded = html.entities.html5.get(f"{code};", m.group(0))
-        # A control character would reach the terminal. HTML shows the whitespace ones as a space.
-        if len(decoded) == 1 and (ord(decoded) < 0x20 or 0x7F <= ord(decoded) <= 0x9F):
-            return " " if decoded.isspace() else ""
+        # A control or invisible format character would reach the terminal or
+        # misalign boxes. HTML shows the whitespace ones as a space.
+        if CONTROL_CHARS.search(decoded) or any(c in "\t\n\r" for c in decoded):
+            return "".join(
+                " " if c.isspace() else "" if (c in "\t\n\r" or CONTROL_CHARS.match(c)) else c
+                for c in decoded
+            )
         return decoded
     return _ENTITY_CODE.sub(decode, text)
 
