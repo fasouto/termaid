@@ -10,12 +10,10 @@ from typing import Iterable, Iterator
 DIRECTIVE = r"%%\{(?s:(?:(?!%%\{).)*?)\}%%"
 
 # C0 and C1 control characters (except tab and newline), mid-text BOM,
-# zero-width/invisible format characters, line/paragraph separators, and
-# bidirectional marks/overrides/isolates.
+# line/paragraph separators, and bidirectional embeddings/overrides/isolates.
 CONTROL_CHARS = re.compile(
     r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f"
-    r"\u034f\u061c\u180e"
-    r"\u200b-\u200f\u2028-\u202e\u2060-\u206f"
+    r"\u061c\u2028-\u202e\u2066-\u2069"
     r"\ufeff]"
 )
 

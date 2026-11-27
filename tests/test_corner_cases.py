@@ -910,15 +910,10 @@ class TestControlCharacters:
         "ch",
         [
             "\u061c",
-            "\u200b",
-            "\u200c",
-            "\u200d",
-            "\u200e",
-            "\u200f",
             "\u2028",
+            "\u2029",
             "\u202a",
             "\u202e",
-            "\u2060",
             "\u2066",
             "\u2069",
             "\ufeff",
@@ -929,7 +924,7 @@ class TestControlCharacters:
         assert parse(f"flowchart LR\n  A[{ch}ab{ch}cd{ch}] --> B").nodes["A"].label == "abcd"
 
     def test_bidi_and_zero_width_removed_across_diagram_types(self):
-        dirty_chars = "\u202e\u200b\ufeff\u2066\u2069"
+        dirty_chars = "\u202e\ufeff\u2066\u2069"
         templates = [
             "sequenceDiagram\n  A->>B: {0}hello",
             "classDiagram\n  class A {{\n    +{0}foo()\n  }}",
@@ -943,22 +938,41 @@ class TestControlCharacters:
             assert out == render(template.format(""))
 
     def test_mid_text_feff_and_bidi_in_frontmatter_and_styled_output(self):
-        source = "---\ntitle: He\ufeffll\u202eo\u200b\n---\nflowchart LR\n  A[a\ufeffb\u200bc\u202ed] --> B"
+        source = "---\ntitle: He\ufeffll\u202eo\n---\nflowchart LR\n  A[a\ufeffbc\u202ed] --> B"
         clean = "---\ntitle: Hello\n---\nflowchart LR\n  A[abcd] --> B"
         assert render(source) == render(clean)
         doc = render_styled(source)
         text = "".join(chunk["text"] for line in doc["lines"] for chunk in line)
-        assert all(c not in text for c in "\ufeff\u202e\u200b")
+        assert all(c not in text for c in "\ufeff\u202e")
 
     @pytest.mark.parametrize(
         "entity",
-        ["#8238;", "#8203;", "#65279;", "#rlm;", "#lrm;", "#ZeroWidthSpace;"],
+        ["#8238;", "#65279;"],
     )
     def test_entity_decoded_bidi_and_zero_width_are_stripped(self, entity):
         assert render(f"flowchart LR\n  A[ab{entity}cd] --> B") == render("flowchart LR\n  A[abcd] --> B")
 
+    def test_persian_zwnj_and_zwj_emoji_are_preserved(self):
+        persian_word = "می\u200cخواهم"
+        family_emoji = "👨\u200d👩\u200d👧"
+        source = f"flowchart LR\n  A[{persian_word}] --> B[{family_emoji}]"
+        graph = parse(source)
+        assert graph.nodes["A"].label == persian_word
+        assert graph.nodes["B"].label == family_emoji
+        out = render(source)
+        assert persian_word in out
+        assert family_emoji in out
+
+    def test_bidi_marks_lrm_rlm_are_preserved(self):
+        text_with_lrm_rlm = "hello\u200e \u200fworld"
+        source = f"flowchart LR\n  A[{text_with_lrm_rlm}] --> B"
+        graph = parse(source)
+        assert graph.nodes["A"].label == text_with_lrm_rlm
+        out = render(source)
+        assert text_with_lrm_rlm in out
+
     def test_gitgraph_init_strips_json_escaped_bidi_and_zero_width(self):
-        source = '%%{init: {"gitGraph": {"mainBranchName": "\\u202ema\\u200bin\\ufeff"}}}%%\ngitGraph\n  commit id: "a"'
+        source = '%%{init: {"gitGraph": {"mainBranchName": "\\u202ema\\ufeffin"}}}%%\ngitGraph\n  commit id: "a"'
         clean = '%%{init: {"gitGraph": {"mainBranchName": "main"}}}%%\ngitGraph\n  commit id: "a"'
         assert render(source) == render(clean)
 
